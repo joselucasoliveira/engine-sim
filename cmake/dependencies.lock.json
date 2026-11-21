@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "git": {
+    "csv-io": {
+      "url": "https://github.com/ange-yaghi/csv-io",
+      "revision": "2112c55e1e831c8f7a1b91de23722b7926ad3d00"
+    },
+    "delta-studio": {
+      "url": "https://github.com/ange-yaghi/delta-studio",
+      "revision": "b7d0a046733b924d12706baf1e5e59ba427aa7b1"
+    },
+    "direct-to-video": {
+      "url": "https://github.com/ange-yaghi/direct-to-video",
+      "revision": "19f939c88d740d9e42755d6191daff5719be198f"
+    },
+    "piranha": {
+      "url": "https://github.com/ange-yaghi/piranha.git",
+      "revision": "004fa15305655918319e825da760dc5e9fe67f60",
+      "prior_revision": "432f0b122bb1663b686c553c7e7269300afac3bc"
+    },
+    "simple-2d-constraint-solver": {
+      "url": "https://github.com/ange-yaghi/simple-2d-constraint-solver",
+      "revision": "e009f4ff1c9c4c5874e865e893cdb62e208fb2b3"
+    }
+  },
+  "archives": {
+    "googletest": {
+      "url": "https://codeload.github.com/google/googletest/zip/609281088cfefc76f9d0ce82e1ff6c30cc3591e5",
+      "filename": "googletest-609281088cfefc76f9d0ce82e1ff6c30cc3591e5.zip",
+      "sha256": "5cf189eb6847b4f8fc603a3ffff3b0771c08eec7dd4bd961bfd45477dd13eb73",
+      "bytes": 1099557,
+      "root": "googletest-609281088cfefc76f9d0ce82e1ff6c30cc3591e5"
+    },
+    "boost": {
+      "url": "https://archives.boost.io/release/1.78.0/source/boost_1_78_0.zip",
+      "filename": "boost_1_78_0.zip",
+      "sha256": "f22143b5528e081123c3c5ed437e92f648fe69748e95fa6e2bd41484e2986cc3",
+      "revision": "b9ab49fc70ee1ef59aaab7f59d2bc6e9971ebb46",
+      "root": "boost_1_78_0"
+    },
+    "sdl2": {
+      "url": "https://github.com/libsdl-org/SDL/releases/download/release-2.30.12/SDL2-devel-2.30.12-VC.zip",
+      "bytes": 6178898,
+      "sha256": "1ca980f9964fb44cf94be235c9818fa1dc8e3f76b08096d751b2d689e5e37d02",
+      "filename": "SDL2-devel-2.30.12-VC.zip",
+      "root": "SDL2-2.30.12"
+    },
+    "sdl2-image": {
+      "url": "https://github.com/libsdl-org/SDL_image/releases/download/release-2.8.4/SDL2_image-devel-2.8.4-VC.zip",
+      "bytes": 4221076,
+      "sha256": "ae2a3e85bee51086184d3f72a47086c61f2acec86984b33f8bb28dab23e5a0d0",
+      "filename": "SDL2_image-devel-2.8.4-VC.zip",
+      "root": "SDL2_image-2.8.4"
+    },
+    "winflexbison": {
+      "url": "https://github.com/lexxmark/winflexbison/releases/download/v2.5.25/win_flex_bison-2.5.25.zip",
+      "bytes": 1083989,
+      "sha256": "8d324b62be33604b2c45ad1dd34ab93d722534448f55a16ca7292de32b6ac135",
+      "filename": "win_flex_bison-2.5.25.zip",
+      "root": "."
+    },
+    "dxsdk": {
+      "url": "https://api.nuget.org/v3-flatcontainer/microsoft.dxsdk.d3dx/9.29.952.8/microsoft.dxsdk.d3dx.9.29.952.8.nupkg",
+      "bytes": 9833468,
+      "sha256": "ead0906ae8a26c18a7525da7490127a2110f7c58f18293738283e30e97c6ea4b",
+      "filename": "microsoft.dxsdk.d3dx.9.29.952.8.nupkg",
+      "root": "."
+    },
+    "sdl3": {
+      "url": "https://codeload.github.com/libsdl-org/SDL/tar.gz/f6864924f76e1a0b4abaefc76ae2ed22b1a8916e",
+      "bytes": 16111076,
+      "sha256": "0bc678138c04ed2619a4e20528990c5949d6bf8424b76a4e5174c8ea588eabea",
+      "filename": "SDL-f6864924f76e1a0b4abaefc76ae2ed22b1a8916e.tar.gz",
+      "root": "SDL-f6864924f76e1a0b4abaefc76ae2ed22b1a8916e"
+    }
+  }
+}

@@ -1,0 +1,129 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 25,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "external",
+      "hidden": true,
+      "binaryDir": "$env{ES_OUT}/${presetName}",
+      "condition": {
+        "type": "notEquals",
+        "lhs": "$env{ES_OUT}",
+        "rhs": ""
+      },
+      "cacheVariables": {
+        "ENGINE_SIM_PRESET_ROOT": "$env{ES_OUT}",
+        "ENGINE_SIM_DEPS_FILE": "$env{ES_OUT}/deps.cmake",
+        "CMAKE_RUNTIME_OUTPUT_DIRECTORY": "$env{ES_OUT}/${presetName}/bin",
+        "DTV": false,
+        "DISCORD_ENABLED": false
+      }
+    },
+    {
+      "name": "core",
+      "inherits": "external",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "BUILD_TESTING": true,
+        "PIRANHA_ENABLED": false,
+        "ENGINE_SIM_BUILD_DESKTOP": false
+      }
+    },
+    {
+      "name": "core-release",
+      "inherits": "external",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_TESTING": true,
+        "PIRANHA_ENABLED": false,
+        "ENGINE_SIM_BUILD_DESKTOP": false
+      }
+    },
+    {
+      "name": "desktop",
+      "inherits": "external",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_TESTING": true,
+        "PIRANHA_ENABLED": true,
+        "ENGINE_SIM_BUILD_DESKTOP": true
+      },
+      "condition": {
+        "type": "allOf",
+        "conditions": [
+          {
+            "type": "equals",
+            "lhs": "${hostSystemName}",
+            "rhs": "Windows"
+          },
+          {
+            "type": "notEquals",
+            "lhs": "$env{ES_OUT}",
+            "rhs": ""
+          }
+        ]
+      },
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64"
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "core",
+      "configurePreset": "core",
+      "configuration": "Debug"
+    },
+    {
+      "name": "core-release",
+      "configurePreset": "core-release",
+      "configuration": "Release"
+    },
+    {
+      "name": "desktop",
+      "configurePreset": "desktop",
+      "configuration": "Release"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "core",
+      "configurePreset": "core",
+      "configuration": "Debug",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error",
+        "timeout": 90
+      }
+    },
+    {
+      "name": "core-release",
+      "configurePreset": "core-release",
+      "configuration": "Release",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error",
+        "timeout": 90
+      }
+    },
+    {
+      "name": "desktop",
+      "configurePreset": "desktop",
+      "configuration": "Release",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error",
+        "timeout": 90
+      }
+    }
+  ]
+}
