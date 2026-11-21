@@ -53,13 +53,13 @@ void InfoCluster::render() {
         Bounds::bl,
         Bounds::bl);
     drawAlignedText(
-        "YOUTUBE/ANGETHEGREAT",
+        "Original simulator by Ange Yaghi",
         titleSplit.get(titleBounds, 0, 1).inset(10.0f).move({ 0.0f, 5.0f }),
-        24.0f,
+        16.0f,
         Bounds::tl,
         Bounds::tl);
     drawAlignedText(
-        "BUILD: v" + EngineSimApplication::getBuildVersion() + " // " __DATE__,
+        "Independent fork",
         titleSplit.get(titleBounds, 0, 2).inset(10.0f).move({ 0.0f, 10.0f }),
         16.0f,
         Bounds::tl,

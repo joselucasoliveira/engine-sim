@@ -20,8 +20,8 @@
 #include <stdlib.h>
 #include <sstream>
 
-#if ATG_ENGINE_SIM_DISCORD_ENABLED
-#include "../discord/Discord.h"
+#ifdef ATG_ENGINE_SIM_DISCORD_ENABLED
+#include "../dependencies/discord/Discord.h"
 #endif
 
 std::string EngineSimApplication::s_buildVersion = "0.1.12a";
@@ -108,7 +108,7 @@ void EngineSimApplication::initialize(void *instance, ysContextObject::DeviceAPI
     m_engine.GetConsole()->SetDefaultFontDirectory(enginePath + "/fonts/");
 
     const std::string shaderPath = enginePath + "/shaders/";
-    const std::string winTitle = "Engine Sim | AngeTheGreat | v" + s_buildVersion;
+    const std::string winTitle = "Engine Simulator (independent fork)";
     dbasic::DeltaEngine::GameEngineSettings settings;
     settings.API = api;
     settings.DepthBuffer = false;
@@ -187,7 +187,7 @@ void EngineSimApplication::initialize() {
     // Create a global instance of discord-rpc
     CDiscord::CreateInstance();
 
-    // Enable it, this needs to be set via a config file of some sort. 
+    // The optional provider initializes only with an application ID supplied by the operator.
     GetDiscordManager()->SetUseDiscord(true);
     DiscordRichPresence passMe = { 0 };
 
@@ -195,7 +195,7 @@ void EngineSimApplication::initialize() {
         ? m_iceEngine->getName()
         : "Broken Engine";
 
-    GetDiscordManager()->SetStatus(passMe, engineName, s_buildVersion);
+    GetDiscordManager()->SetStatus(passMe, engineName, "Independent fork");
 #endif /* ATG_ENGINE_SIM_DISCORD_ENABLED */
 }
 

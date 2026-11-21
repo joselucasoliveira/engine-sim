@@ -1,18 +1,18 @@
 ﻿#include "Discord.h"
-#include <stdio.h>
+#include <cstdint>
+#include <cstdlib>
+#include <cstring>
 #include <time.h>
 
 
-const char* DISCORD_APPLICATION_ID = "1008609936256811038"; // https://discordapp.com/developers/applications
-
 CDiscord* CDiscord::m_pInstance = NULL;
-static int64_t StartTime;
+static std::int64_t StartTime;
 
 
 CDiscord::CDiscord()
 {
 	m_state = "Doing Things";
-	m_bEnableDiscord = true;
+	m_bEnableDiscord = false;
 	m_bConnected = false;
 }
 
@@ -35,9 +35,11 @@ void CDiscord::DestroyInstance()
 	if (!m_pInstance)
 		return;
 
-	Discord_Shutdown(); // shut down discord
+	if (m_pInstance->m_bEnableDiscord)
+		Discord_Shutdown();
 
 	delete m_pInstance;
+	m_pInstance = nullptr;
 }
 
 void CDiscord::handleDiscordReady(const DiscordUser * connectedUser)
@@ -58,8 +60,15 @@ void CDiscord::handleDiscordError(int errcode, const char* message)
 
 void CDiscord::InitDiscord()
 {
-	DiscordEventHandlers handlers;
-	memset(&handlers, 0, sizeof(handlers));
+	const char* applicationId = std::getenv("ENGINE_SIM_DISCORD_APPLICATION_ID");
+	if (applicationId == nullptr || *applicationId == '\0' ||
+		applicationId[std::strspn(applicationId, "0123456789")] != '\0')
+	{
+		m_bEnableDiscord = false;
+		return;
+	}
+
+	DiscordEventHandlers handlers{};
 
 	handlers.ready = CDiscord::handleDiscordReady;
 	handlers.disconnected = CDiscord::handleDiscordDisconnected;
@@ -67,7 +76,7 @@ void CDiscord::InitDiscord()
 	handlers.joinGame = NULL;
 	handlers.spectateGame = NULL;
 	handlers.joinRequest = NULL;
-	Discord_Initialize(DISCORD_APPLICATION_ID, &handlers, 1, NULL);
+	Discord_Initialize(applicationId, &handlers, 0, nullptr);
 }
 
 void CDiscord::UpdatePresence()
@@ -83,10 +92,6 @@ void CDiscord::UpdatePresence()
 
 		discordPresence.details = m_state.c_str();
 
-		discordPresence.largeImageKey = "atgenginesim";
-		discordPresence.largeImageText = "Engine Simulator";
-		
-
 		discordPresence.startTimestamp = StartTime;
 
 		discordPresence.instance = 0;
@@ -96,7 +101,8 @@ void CDiscord::UpdatePresence()
 
 void CDiscord::ClearPresence()
 {
-	Discord_ClearPresence();
+	if (m_bEnableDiscord)
+		Discord_ClearPresence();
 }
 
 
@@ -113,11 +119,16 @@ void CDiscord::UpdateDiscordConnection()
 
 void CDiscord::SetUseDiscord(bool bFlag)
 {
-	m_bEnableDiscord = bFlag;
+	if (bFlag == m_bEnableDiscord)
+		return;
 
+	m_bEnableDiscord = bFlag;
 	if (bFlag)
-	{
 		InitDiscord();
+	else
+	{
+		Discord_Shutdown();
+		m_bConnected = false;
 	}
 }
 
@@ -129,12 +140,17 @@ void CDiscord::SetConnected(bool bFlag)
 
 void CDiscord::SetStatus(DiscordRichPresence presence, std::string engineName = "", std::string buildVersion = "")
 {
+	if (!m_bEnableDiscord)
+		return;
+
 	std::string engineString = "Engine: " + engineName;
 	std::string stateString = "Build: " + buildVersion;
 	presence.state = stateString.c_str();
 	presence.details = engineString.c_str();
-	presence.largeImageKey = "atgenginesim";
-	presence.largeImageText = "Engine Simulator";
+	presence.largeImageKey = nullptr;
+	presence.largeImageText = nullptr;
+	presence.smallImageKey = nullptr;
+	presence.smallImageText = nullptr;
 	StartTime = time(NULL);
 	presence.instance = 1;
 	presence.startTimestamp = StartTime;

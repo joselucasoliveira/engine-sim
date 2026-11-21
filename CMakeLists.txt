@@ -1,8 +1,14 @@
 cmake_minimum_required(VERSION 3.10)
 
+project(engine-sim)
+
 option(DTV "Enable video output" OFF)
 option(PIRANHA_ENABLED "Enable scripting input" ON)
-option(DISCORD_ENABLED "Enable Discord Rich Presence" ON)
+option(DISCORD_ENABLED "Enable Discord Rich Presence (Windows x64)" OFF)
+
+if (DISCORD_ENABLED AND (NOT WIN32 OR NOT MSVC OR NOT CMAKE_SIZEOF_VOID_P EQUAL 8))
+    message(FATAL_ERROR "Discord Rich Presence requires a Windows x64 MSVC-compatible build")
+endif ()
 
 if (DTV)
     add_compile_definitions(ATG_ENGINE_SIM_VIDEO_CAPTURE)
@@ -19,8 +25,6 @@ endif (DISCORD_ENABLED)
 # Enable group projects in folders
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 set_property(GLOBAL PROPERTY PREDEFINED_TARGETS_FOLDER "cmake")
-
-project(engine-sim)
 
 set(CMAKE_CXX_STANDARD 17)
 
