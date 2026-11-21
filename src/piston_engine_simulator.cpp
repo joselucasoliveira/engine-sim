@@ -27,13 +27,7 @@ PistonEngineSimulator::PistonEngineSimulator() {
 }
 
 PistonEngineSimulator::~PistonEngineSimulator() {
-    assert(m_crankConstraints == nullptr);
-    assert(m_cylinderWallConstraints == nullptr);
-    assert(m_linkConstraints == nullptr);
-    assert(m_crankshaftFrictionConstraints == nullptr);
-    assert(m_exhaustFlowStagingBuffer == nullptr);
-    assert(m_delayFilters == nullptr);
-    assert(m_system == nullptr);
+    destroy();
 }
 
 void PistonEngineSimulator::loadSimulation(Engine *engine, Vehicle *vehicle, Transmission *transmission) {
@@ -339,11 +333,13 @@ void PistonEngineSimulator::endFrame() {
     const double frameTimestep = simulationSteps() * getTimestep();
     const int cylinderCount = m_engine->getCylinderCount();
     for (int i = 0; i < m_engine->getIntakeCount(); ++i) {
-        m_engine->getIntake(i)->m_flowRate /= frameTimestep;
+        auto &flow = m_engine->getIntake(i)->m_flowRate;
+        flow = frameTimestep > 0 ? flow / frameTimestep : 0;
     }
 }
 
 void PistonEngineSimulator::destroy() {
+    endAudioRenderingThread();
     if (m_system != nullptr) m_system->reset();
 
     if (m_crankConstraints != nullptr) delete[] m_crankConstraints;
@@ -351,7 +347,7 @@ void PistonEngineSimulator::destroy() {
     if (m_linkConstraints != nullptr) delete[] m_linkConstraints;
     if (m_crankshaftFrictionConstraints != nullptr) delete[] m_crankshaftFrictionConstraints;
     if (m_exhaustFlowStagingBuffer != nullptr) delete[] m_exhaustFlowStagingBuffer;
-    if (m_system != nullptr) delete m_system;
+    delete[] m_crankshaftLinks;
     if (m_delayFilters != nullptr) delete[] m_delayFilters;
 
     m_crankConstraints = nullptr;
@@ -359,7 +355,8 @@ void PistonEngineSimulator::destroy() {
     m_linkConstraints = nullptr;
     m_crankshaftFrictionConstraints = nullptr;
     m_exhaustFlowStagingBuffer = nullptr;
-    m_system = nullptr;
+    m_crankshaftLinks = nullptr;
+    Simulator::destroy();
 
     m_vehicle = nullptr;
     m_transmission = nullptr;
@@ -375,8 +372,6 @@ void PistonEngineSimulator::writeToSynthesizer() {
 
     const double attenuation = std::min(std::abs(filteredEngineSpeed()), 40.0) / 40.0;
     const double attenuation_3 = attenuation * attenuation * attenuation;
-
-    static double lastValveLift[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
 
     const double timestep = getTimestep();
     const int cylinderCount = m_engine->getCylinderCount();
@@ -396,8 +391,6 @@ void PistonEngineSimulator::writeToSynthesizer() {
                 1.0 * (chamber->m_exhaustRunnerAndPrimary.pressure() - units::pressure(1.0, units::atm))
                 + 0.1 * chamber->m_exhaustRunnerAndPrimary.dynamicPressure(1.0, 0.0)
                 + 0.1 * chamber->m_exhaustRunnerAndPrimary.dynamicPressure(-1.0, 0.0));
-
-        lastValveLift[i] = head->exhaustValveLift(piston->getCylinderIndex());
 
         const double delayedExhaustPulse =
             m_delayFilters[i].fast_f(exhaustFlow);

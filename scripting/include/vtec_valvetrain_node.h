@@ -17,13 +17,13 @@ namespace es_script {
         virtual Valvetrain *generate(
             EngineContext *context,
             Crankshaft *crank) override {
-            VtecValvetrain *valvetrain = new VtecValvetrain;
+            VtecValvetrain *valvetrain = context->getEngine()->createResource<VtecValvetrain>();
 
             Camshaft
-                *intakeCam = new Camshaft(),
-                *exhaustCam = new Camshaft(),
-                *vtecIntakeCam = new Camshaft(),
-                *vtecExhaustCam = new Camshaft();
+                *intakeCam = context->getEngine()->createResource<Camshaft>(),
+                *exhaustCam = context->getEngine()->createResource<Camshaft>(),
+                *vtecIntakeCam = context->getEngine()->createResource<Camshaft>(),
+                *vtecExhaustCam = context->getEngine()->createResource<Camshaft>();
 
             m_intakeCamshaft->generate(intakeCam, crank, context);
             m_exhaustCamshaft->generate(exhaustCam, crank, context);

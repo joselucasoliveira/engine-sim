@@ -18,11 +18,11 @@ namespace es_script {
             EngineContext *context,
             Crankshaft *crank) override
         {
-            StandardValvetrain *valvetrain = new StandardValvetrain;
+            StandardValvetrain *valvetrain = context->getEngine()->createResource<StandardValvetrain>();
 
             Camshaft
-                *intakeCam = new Camshaft(),
-                *exhaustCam = new Camshaft();
+                *intakeCam = context->getEngine()->createResource<Camshaft>(),
+                *exhaustCam = context->getEngine()->createResource<Camshaft>();
 
             m_intakeCamshaft->generate(intakeCam, crank, context);
             m_exhaustCamshaft->generate(exhaustCam, crank, context);

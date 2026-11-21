@@ -12,11 +12,11 @@ ConvolutionFilter::ConvolutionFilter() {
 }
 
 ConvolutionFilter::~ConvolutionFilter() {
-    assert(m_shiftRegister == nullptr);
-    assert(m_impulseResponse == nullptr);
+    destroy();
 }
 
 void ConvolutionFilter::initialize(int samples) {
+    destroy();
     m_sampleCount = samples;
     m_shiftOffset = 0;
     m_shiftRegister = new float[samples];
@@ -32,6 +32,8 @@ void ConvolutionFilter::destroy() {
 
     m_shiftRegister = nullptr;
     m_impulseResponse = nullptr;
+    m_sampleCount = 0;
+    m_shiftOffset = 0;
 }
 
 float ConvolutionFilter::f(float sample) {

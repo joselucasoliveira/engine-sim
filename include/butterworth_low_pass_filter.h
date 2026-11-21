@@ -15,6 +15,10 @@ public:
         m_y.initialize(4);
         m_x.initialize(4);
 
+        resetHistory();
+    }
+
+    void resetHistory() {
         for (int i = 0; i < 4; ++i) {
             m_y.write(0);
             m_x.write(0);

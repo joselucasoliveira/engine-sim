@@ -1,5 +1,43 @@
 #include "../include/simulator.h"
 
+namespace {
+class OwnedOptimizedSystem : public atg_scs::OptimizedNsvRigidBodySystem {
+public:
+    OwnedOptimizedSystem() { initialize(&m_solver); }
+private:
+    atg_scs::GaussSeidelSleSolver m_solver;
+};
+
+class OwnedGenericSystem : public atg_scs::GenericRigidBodySystem {
+public:
+    OwnedGenericSystem() { initialize(&m_solver, &m_integrator); }
+    ~OwnedGenericSystem() override {
+        m_iv.J_sparse.destroy();
+        m_iv.J_dot_sparse.destroy();
+        m_iv.sreg0.destroy();
+        m_iv.J_T.destroy();
+        m_iv.M.destroy();
+        m_iv.M_inv.destroy();
+        m_iv.C.destroy();
+        m_iv.ks.destroy();
+        m_iv.kd.destroy();
+        m_iv.q_dot.destroy();
+        m_iv.reg0.destroy();
+        m_iv.reg1.destroy();
+        m_iv.reg2.destroy();
+        m_iv.right.destroy();
+        m_iv.F_ext.destroy();
+        m_iv.F_C.destroy();
+        m_iv.R.destroy();
+        m_iv.lambda.destroy();
+    }
+private:
+    atg_scs::GaussianEliminationSleSolver m_solver;
+    atg_scs::NsvOdeSolver m_integrator;
+};
+}
+
+
 Simulator::Simulator() {
     m_engine = nullptr;
     m_vehicle = nullptr;
@@ -21,25 +59,19 @@ Simulator::Simulator() {
 }
 
 Simulator::~Simulator() {
-    assert(m_system == nullptr);
-    assert(m_dynoTorqueSamples == nullptr);
+    destroy();
 }
 
 void Simulator::initialize(const Parameters &params) {
+    destroy();
+    m_lastDynoTorqueSample = 0;
+    m_filteredEngineSpeed = 0;
+    m_physicsProcessingTime = 0;
     if (params.systemType == SystemType::NsvOptimized) {
-        atg_scs::OptimizedNsvRigidBodySystem *system =
-            new atg_scs::OptimizedNsvRigidBodySystem;
-        system->initialize(
-            new atg_scs::GaussSeidelSleSolver);
-        m_system = system;
+        m_system = new OwnedOptimizedSystem;
     }
     else {
-        atg_scs::GenericRigidBodySystem *system =
-            new atg_scs::GenericRigidBodySystem;
-        system->initialize(
-            new atg_scs::GaussianEliminationSleSolver,
-            new atg_scs::NsvOdeSolver);
-        m_system = system;
+        m_system = new OwnedGenericSystem;
     }
 
     m_dynoTorqueSamples = new double[DynoTorqueSamples];
@@ -180,6 +212,15 @@ void Simulator::endFrame() {
 
 void Simulator::destroy() {
     m_synthesizer.destroy();
+    if (m_system != nullptr) m_system->reset();
+    delete m_system;
+    m_system = nullptr;
+    delete[] m_dynoTorqueSamples;
+    m_dynoTorqueSamples = nullptr;
+    m_engine = nullptr;
+    m_vehicle = nullptr;
+    m_transmission = nullptr;
+    m_steps = m_currentIteration = 0;
 }
 
 void Simulator::startAudioRenderingThread() {

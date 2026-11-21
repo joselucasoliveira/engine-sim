@@ -15,7 +15,9 @@
 #include "units.h"
 #include "throttle.h"
 
+#include <memory>
 #include <string>
+#include <vector>
 
 class Simulator;
 class Vehicle;
@@ -49,6 +51,14 @@ class Engine : public Part {
     public:
         Engine();
         virtual ~Engine();
+
+        // Script nodes retain non-owning references. Their generated resources live with this engine.
+        template <typename T>
+        T *createResource() {
+            auto resource = std::make_shared<T>();
+            m_resources.push_back(resource);
+            return resource.get();
+        }
 
         void initialize(const Parameters &params);
         virtual void destroy();
@@ -110,6 +120,7 @@ class Engine : public Part {
         virtual Simulator *createSimulator(Vehicle *vehicle, Transmission *transmission);
 
     protected:
+        std::vector<std::shared_ptr<void>> m_resources;
         std::string m_name;
 
         Crankshaft *m_crankshafts;

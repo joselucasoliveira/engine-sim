@@ -421,6 +421,19 @@ void EngineSimApplication::run() {
 }
 
 void EngineSimApplication::destroy() {
+    if (m_simulator != nullptr) {
+        m_simulator->endAudioRenderingThread();
+        m_simulator->releaseSimulation();
+        delete m_simulator;
+        m_simulator = nullptr;
+    }
+    destroyObjects();
+    delete m_transmission;
+    m_transmission = nullptr;
+    delete m_vehicle;
+    m_vehicle = nullptr;
+    delete m_iceEngine;
+    m_iceEngine = nullptr;
     m_shaderSet.Destroy();
 
     m_engine.GetDevice()->DestroyGPUBuffer(m_geometryVertexBuffer);
@@ -429,7 +442,6 @@ void EngineSimApplication::destroy() {
     m_assetManager.Destroy();
     m_engine.Destroy();
 
-    m_simulator->destroy();
     m_audioBuffer.destroy();
 }
 

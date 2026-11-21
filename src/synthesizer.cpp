@@ -14,6 +14,7 @@ Synthesizer::Synthesizer() {
     m_inputBufferSize = 0;
     m_inputWriteOffset = 0.0;
     m_inputSamplesRead = 0;
+    m_latency = 0;
 
     m_audioBufferSize = 0;
 
@@ -28,12 +29,11 @@ Synthesizer::Synthesizer() {
 }
 
 Synthesizer::~Synthesizer() {
-    assert(m_inputChannels == nullptr);
-    assert(m_thread == nullptr);
-    assert(m_filters == nullptr);
+    destroy();
 }
 
 void Synthesizer::initialize(const Parameters &p) {
+    destroy();
     m_inputChannelCount = p.inputChannelCount;
     m_inputBufferSize = p.inputBufferSize;
     m_inputWriteOffset = p.inputBufferSize;
@@ -45,7 +45,12 @@ void Synthesizer::initialize(const Parameters &p) {
     m_inputSamplesRead = 0;
 
     m_inputWriteOffset = 0;
+    m_lastInputSampleOffset = 0;
+    m_latency = 0;
+    m_run = true;
     m_processed = true;
+    m_levelingFilter = LevelingFilter();
+    m_antialiasing.resetHistory();
 
     m_audioBuffer.initialize(p.audioBufferSize);
     m_inputChannels = new InputChannel[p.inputChannelCount];
@@ -104,14 +109,18 @@ void Synthesizer::initializeImpulseResponse(
 }
 
 void Synthesizer::startAudioRenderingThread() {
+    if (m_thread != nullptr) return;
     m_run = true;
     m_thread = new std::thread(&Synthesizer::audioRenderingThread, this);
 }
 
 void Synthesizer::endAudioRenderingThread() {
     if (m_thread != nullptr) {
-        m_run = false;
-        endInputBlock();
+        {
+            std::lock_guard<std::mutex> lock(m_lock0);
+            m_run = false;
+        }
+        m_cv0.notify_all();
 
         m_thread->join();
         delete m_thread;
@@ -121,11 +130,15 @@ void Synthesizer::endAudioRenderingThread() {
 }
 
 void Synthesizer::destroy() {
+    endAudioRenderingThread();
     m_audioBuffer.destroy();
 
     for (int i = 0; i < m_inputChannelCount; ++i) {
-        m_inputChannels[i].data.destroy();
-        m_filters[i].convolution.destroy();
+        if (m_inputChannels != nullptr) {
+            m_inputChannels[i].data.destroy();
+            delete[] m_inputChannels[i].transferBuffer;
+        }
+        if (m_filters != nullptr) m_filters[i].convolution.destroy();
     }
 
     delete[] m_inputChannels;
@@ -135,6 +148,9 @@ void Synthesizer::destroy() {
     m_filters = nullptr;
 
     m_inputChannelCount = 0;
+    m_latency = 0;
+    m_inputSamplesRead = 0;
+    m_nonFiniteCaptureCount = nullptr;
 }
 
 int Synthesizer::readAudioOutput(int samples, int16_t *buffer) {

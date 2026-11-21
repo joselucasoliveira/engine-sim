@@ -33,7 +33,7 @@ namespace es_script {
                 return existingFunction;
             }
             else {
-                Function *function = new Function;
+                Function *function = context->getEngine()->createResource<Function>();
                 function->initialize((int)m_samples.size(), m_filterRadius);
 
                 for (const Sample &sample : m_samples) {

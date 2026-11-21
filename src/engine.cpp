@@ -34,6 +34,7 @@ Engine::Engine() {
 
     m_throttle = nullptr;
     m_throttleValue = 0.0;
+    m_displacement = 0.0;
 
     m_initialSimulationFrequency = 10000.0;
     m_initialHighFrequencyGain = 0.01;
@@ -42,17 +43,11 @@ Engine::Engine() {
 }
 
 Engine::~Engine() {
-    assert(m_crankshafts == nullptr);
-    assert(m_cylinderBanks == nullptr);
-    assert(m_pistons == nullptr);
-    assert(m_connectingRods == nullptr);
-    assert(m_heads == nullptr);
-    assert(m_exhaustSystems == nullptr);
-    assert(m_intakes == nullptr);
-    assert(m_combustionChambers == nullptr);
+    destroy();
 }
 
 void Engine::initialize(const Parameters &params) {
+    destroy();
     m_crankshaftCount = params.crankshaftCount;
     m_cylinderCount = params.cylinderCount;
     m_cylinderBankCount = params.cylinderBanks;
@@ -91,23 +86,26 @@ void Engine::initialize(const Parameters &params) {
 
 void Engine::destroy() {
     for (int i = 0; i < m_crankshaftCount; ++i) {
-        m_crankshafts[i].destroy();
+        if (m_crankshafts != nullptr) m_crankshafts[i].destroy();
     }
 
     for (int i = 0; i < m_cylinderCount; ++i) {
-        m_pistons[i].destroy();
-        m_connectingRods[i].destroy();
-        m_combustionChambers[i].destroy();
+        if (m_pistons != nullptr) m_pistons[i].destroy();
+        if (m_connectingRods != nullptr) m_connectingRods[i].destroy();
+        if (m_combustionChambers != nullptr) m_combustionChambers[i].destroy();
     }
 
     for (int i = 0; i < m_exhaustSystemCount; ++i) {
-        m_exhaustSystems[i].destroy();
+        if (m_exhaustSystems != nullptr) m_exhaustSystems[i].destroy();
     }
 
     for (int i = 0; i < m_intakeCount; ++i) {
-        m_intakes[i].destroy();
+        if (m_intakes != nullptr) m_intakes[i].destroy();
     }
 
+    for (int i = 0; i < m_cylinderBankCount; ++i) {
+        if (m_heads != nullptr) m_heads[i].destroy();
+    }
     m_ignitionModule.destroy();
 
     if (m_throttle != nullptr) delete m_throttle;
@@ -129,6 +127,9 @@ void Engine::destroy() {
     m_intakes = nullptr;
     m_combustionChambers = nullptr;
     m_throttle = nullptr;
+    m_crankshaftCount = m_cylinderBankCount = m_cylinderCount = 0;
+    m_exhaustSystemCount = m_intakeCount = 0;
+    while (!m_resources.empty()) m_resources.pop_back();
 }
 
 Crankshaft *Engine::getOutputCrankshaft() const {
@@ -236,8 +237,8 @@ void Engine::calculateDisplacement() {
     // numerical approximation.
     constexpr int Resolution = 1000;
 
-    double *min_s = new double[m_cylinderCount];
-    double *max_s = new double[m_cylinderCount];
+    std::vector<double> min_s(m_cylinderCount);
+    std::vector<double> max_s(m_cylinderCount);
 
     for (int i = 0; i < m_cylinderCount; ++i) {
         min_s[i] = DBL_MAX;

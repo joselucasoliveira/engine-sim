@@ -17,7 +17,7 @@ Camshaft::Camshaft() {
 }
 
 Camshaft::~Camshaft() {
-    assert(m_lobeAngles == nullptr);
+    destroy();
 }
 
 void Camshaft::initialize(const Parameters &params) {

@@ -32,7 +32,7 @@ namespace es_script {
                     path = parentPath.append(path);
                 }
 
-                ImpulseResponse *impulseResponse = new ImpulseResponse;
+                ImpulseResponse *impulseResponse = context->getEngine()->createResource<ImpulseResponse>();
                 impulseResponse->initialize(
                     path.toString(),
                     m_volume);

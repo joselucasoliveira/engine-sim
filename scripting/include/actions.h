@@ -32,9 +32,9 @@ namespace es_script {
         virtual void _evaluate() {
             EngineNode *engineNode = getObject<EngineNode>(m_engineInput);
 
-            Engine *engine = new Engine;
-            engineNode->buildEngine(engine);
-            Compiler::output()->engine = engine;
+            auto engine = std::make_unique<Engine>();
+            engineNode->buildEngine(engine.get());
+            Compiler::output()->engine = engine.release();
         }
 
     protected:

@@ -25,8 +25,7 @@ Function::Function() {
 }
 
 Function::~Function() {
-    assert(m_x == nullptr);
-    assert(m_y == nullptr);
+    destroy();
 }
 
 void Function::initialize(int size, double filterRadius, GaussianFilter *filter) {

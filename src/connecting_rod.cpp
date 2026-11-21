@@ -18,10 +18,17 @@ ConnectingRod::ConnectingRod() {
 }
 
 ConnectingRod::~ConnectingRod() {
-    /* void */
+    destroy();
+}
+
+void ConnectingRod::destroy() {
+    delete[] m_rodJournalAngles;
+    m_rodJournalAngles = nullptr;
+    m_rodJournalCount = 0;
 }
 
 void ConnectingRod::initialize(const Parameters &params) {
+    destroy();
     m_centerOfMass = params.centerOfMass;
     m_length = params.length;
     m_m = params.mass;

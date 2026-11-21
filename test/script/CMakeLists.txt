@@ -24,3 +24,11 @@ gtest_discover_tests(engine-sim-script-test
         LABELS script
         ENVIRONMENT "ENGINE_SIM_TEST_RESOURCES=${PROJECT_SOURCE_DIR}\;ENGINE_SIM_TEST_SCRIPTS=${fixtures}"
 )
+
+add_executable(engine-sim-lifecycle-test lifecycle_tests.cpp)
+target_link_libraries(engine-sim-lifecycle-test PRIVATE engine-sim-script-interpreter gtest_main)
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/lifecycle-working")
+gtest_discover_tests(engine-sim-lifecycle-test
+    WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/lifecycle-working"
+    DISCOVERY_TIMEOUT 30
+    PROPERTIES LABELS lifecycle TIMEOUT 600 ENVIRONMENT "ENGINE_SIM_TEST_RESOURCES=${PROJECT_SOURCE_DIR}")

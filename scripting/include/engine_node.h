@@ -107,7 +107,7 @@ namespace es_script {
 
             m_ignitionModule->generate(engine, &context);
             
-            Function *meanPistonSpeedToTurbulence = new Function;
+            Function *meanPistonSpeedToTurbulence = engine->createResource<Function>();
             meanPistonSpeedToTurbulence->initialize(30, 1);
             for (int i = 0; i < 30; ++i) {
                 const double s = (double)i;
