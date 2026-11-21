@@ -18,7 +18,7 @@ void UiButton::update(float dt) {
 }
 
 void UiButton::render() {
-    ysVector color = m_app->getBackgroundColor();
+    desktop::Vector color = m_app->getBackgroundColor();
     if (isMouseHeld()) {
         color = mix(m_app->getBackgroundColor(), m_app->getForegroundColor(), 0.02f);
     }

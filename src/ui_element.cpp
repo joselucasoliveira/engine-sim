@@ -169,12 +169,12 @@ Bounds UiElement::unitsToPixels(const Bounds &b) const {
 
 void UiElement::resetShader() {
     m_app->getShaders()->ResetBaseColor();
-    m_app->getShaders()->SetObjectTransform(ysMath::LoadIdentity());
+    m_app->getShaders()->SetObjectTransform(desktop::math::LoadIdentity());
 }
 
 void UiElement::drawModel(
-    dbasic::ModelAsset *model,
-    const ysVector &color,
+    desktop::Model *model,
+    const desktop::Vector &color,
     const Point &p,
     const Point &s)
 {
@@ -184,9 +184,9 @@ void UiElement::drawModel(
     const Point s_render = pixelsToUnits(s);
 
     m_app->getShaders()->SetObjectTransform(
-        ysMath::MatMult(
-            ysMath::TranslationTransform(ysMath::LoadVector(p_render.x, p_render.y, 0.0)),
-            ysMath::ScaleTransform(ysMath::LoadVector(s_render.x, s_render.y, 0.0))
+        desktop::math::MatMult(
+            desktop::math::TranslationTransform(desktop::math::LoadVector(p_render.x, p_render.y, 0.0)),
+            desktop::math::ScaleTransform(desktop::math::LoadVector(s_render.x, s_render.y, 0.0))
         )
     );
 
@@ -197,8 +197,8 @@ void UiElement::drawModel(
 void UiElement::drawFrame(
         const Bounds &bounds,
         float thickness,
-        const ysVector &frameColor,
-        const ysVector &fillColor,
+        const desktop::Vector &frameColor,
+        const desktop::Vector &fillColor,
         bool fill)
 {
     GeometryGenerator *generator = m_app->getGeometryGenerator();
@@ -239,7 +239,7 @@ void UiElement::drawFrame(
     m_app->drawGenerated(frame, 0x11, m_app->getShaders()->GetUiFlags());
 }
 
-void UiElement::drawBox(const Bounds &bounds, const ysVector &fillColor) {
+void UiElement::drawBox(const Bounds &bounds, const desktop::Vector &fillColor) {
     GeometryGenerator *generator = m_app->getGeometryGenerator();
     const Bounds worldBounds = getRenderBounds(bounds);
 

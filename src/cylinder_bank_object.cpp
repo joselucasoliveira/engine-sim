@@ -70,9 +70,9 @@ void CylinderBankObject::render(const ViewParameters *view) {
 
     resetShader();
 
-    const ysVector col = ysMath::Add(
-        ysMath::Mul(m_app->getForegroundColor(), ysMath::LoadScalar(0.01f)),
-        ysMath::Mul(m_app->getBackgroundColor(), ysMath::LoadScalar(0.99f))
+    const desktop::Vector col = desktop::math::Add(
+        desktop::math::Mul(m_app->getForegroundColor(), desktop::math::LoadScalar(0.01f)),
+        desktop::math::Mul(m_app->getBackgroundColor(), desktop::math::LoadScalar(0.99f))
     );
 
     m_app->getShaders()->SetBaseColor(m_app->getPink());

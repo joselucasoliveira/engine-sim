@@ -54,6 +54,7 @@ endif ()
 
 if (BUILD_TESTING)
     include(CTest)
+    include(GoogleTest)
     if (NOT EXISTS "${ENGINE_SIM_GOOGLETEST_SOURCE}/CMakeLists.txt")
         message(FATAL_ERROR "GoogleTest is unavailable. Run tools/bootstrap.py with --tests.")
     endif ()
@@ -232,11 +233,17 @@ if (DISCORD_ENABLED)
     set_property(TARGET discord PROPERTY FOLDER "discord")
 endif ()
 
-if (ENGINE_SIM_BUILD_DESKTOP)
-    add_executable(engine-sim-app WIN32
-        src/app.manifest
-        # Source files
-        src/main.cpp
+if (BUILD_TESTING OR ENGINE_SIM_BUILD_DESKTOP)
+    add_library(engine-sim-host STATIC src/desktop_math.cpp src/desktop_host.cpp)
+    target_include_directories(engine-sim-host PUBLIC include)
+    target_compile_features(engine-sim-host PUBLIC cxx_std_17)
+    if (NOT MSVC)
+        target_compile_options(engine-sim-host PRIVATE -ffp-contract=off)
+    endif ()
+endif ()
+
+if (PIRANHA_ENABLED AND (BUILD_TESTING OR ENGINE_SIM_BUILD_DESKTOP))
+    add_library(engine-sim-frontend STATIC
         src/engine_sim_application.cpp
         src/geometry_generator.cpp
         src/simulation_object.cpp
@@ -268,44 +275,17 @@ if (ENGINE_SIM_BUILD_DESKTOP)
         src/load_simulation_cluster.cpp
         src/mixer_cluster.cpp
         src/info_cluster.cpp
-
-        # Include files
-        include/delta.h
-        include/dtv.h
-        include/engine_sim_application.h
-        include/geometry_generator.h
-        include/simulation_object.h
-        include/piston_object.h
-        include/connecting_rod_object.h
-        include/ui_element.h
-        include/ui_manager.h
-        include/cylinder_pressure_gauge.h
-        include/ui_math.h
-        include/units.h
-        include/crankshaft_object.h
-        include/cylinder_bank_object.h
-        include/cylinder_head_object.h
-        include/ui_button.h
-        include/ui_utilities.h
-        include/combustion_chamber_object.h
-        include/oscilloscope.h
-        include/shaders.h
-        include/engine_view.h
-        include/right_gauge_cluster.h
-        include/cylinder_temperature_gauge.h
-        include/labeled_gauge.h
-        include/throttle_display.h
-        include/afr_cluster.h
-        include/fuel_cluster.h
-        include/oscilloscope_cluster.h
-        include/performance_cluster.h
-        include/firing_order_display.h
-        include/load_simulation_cluster.h
-        include/mixer_cluster.h
-        include/info_cluster.h
     )
+    target_link_libraries(engine-sim-frontend PUBLIC engine-sim-script-interpreter engine-sim-host)
+    if (NOT MSVC)
+        target_compile_options(engine-sim-frontend PRIVATE -ffp-contract=off)
+    endif ()
+endif ()
 
-    target_link_libraries(engine-sim-app PRIVATE engine-sim delta-basic)
+if (ENGINE_SIM_BUILD_DESKTOP)
+    add_executable(engine-sim-app WIN32 src/main.cpp src/app.manifest src/windows_host.cpp)
+
+    target_link_libraries(engine-sim-app PRIVATE engine-sim-frontend delta-basic)
 
     set(windows_runtime
         "${ENGINE_SIM_D3DX10_DLL}" "${ENGINE_SIM_D3DX11_DLL}" "${ENGINE_SIM_D3DCOMPILER_DLL}"
@@ -322,9 +302,8 @@ if (ENGINE_SIM_BUILD_DESKTOP)
     )
 
     if (DTV)
-        target_link_libraries(engine-sim-app
-            PRIVATE direct-to-video)
-        target_compile_definitions(engine-sim-app PRIVATE ATG_ENGINE_SIM_VIDEO_CAPTURE)
+        target_link_libraries(engine-sim-frontend PUBLIC direct-to-video)
+        target_compile_definitions(engine-sim-frontend PUBLIC ATG_ENGINE_SIM_VIDEO_CAPTURE)
     endif (DTV)
 
     if (PIRANHA_ENABLED)
@@ -336,14 +315,29 @@ if (ENGINE_SIM_BUILD_DESKTOP)
         add_library(discord-rpc STATIC IMPORTED)
         set_property(TARGET discord-rpc PROPERTY IMPORTED_LOCATION
             "${PROJECT_SOURCE_DIR}/dependencies/discord/lib/discord-rpc.lib")
-        target_link_libraries(engine-sim-app PRIVATE discord discord-rpc)
-        target_compile_definitions(engine-sim-app PRIVATE ATG_ENGINE_SIM_DISCORD_ENABLED)
+        target_link_libraries(engine-sim-frontend PUBLIC discord discord-rpc)
+        target_compile_definitions(engine-sim-frontend PUBLIC ATG_ENGINE_SIM_DISCORD_ENABLED)
     endif ()
 
     target_include_directories(engine-sim-app PRIVATE dependencies/submodules)
 endif ()
 
 if (BUILD_TESTING)
+    add_executable(engine-sim-host-test test/host_contract_tests.cpp)
+    target_link_libraries(engine-sim-host-test PRIVATE gtest_main engine-sim-host)
+    gtest_discover_tests(engine-sim-host-test DISCOVERY_TIMEOUT 30
+        PROPERTIES LABELS host-contract TIMEOUT 30)
+    if (TARGET engine-sim-frontend)
+        add_executable(engine-sim-host-application-test test/host_application_tests.cpp)
+        target_link_libraries(engine-sim-host-application-test PRIVATE gtest_main engine-sim-frontend)
+        if (WIN32)
+            target_sources(engine-sim-host-application-test PRIVATE src/app.manifest)
+        endif ()
+        file(MAKE_DIRECTORY "${PROJECT_BINARY_DIR}/host-working")
+        gtest_discover_tests(engine-sim-host-application-test DISCOVERY_TIMEOUT 30
+            WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/host-working"
+            PROPERTIES LABELS host-contract TIMEOUT 180 ENVIRONMENT "ENGINE_SIM_TEST_RESOURCES=${PROJECT_SOURCE_DIR}")
+    endif ()
     add_executable(engine-sim-test
         # Source files
         test/gas_system_tests.cpp
@@ -353,7 +347,6 @@ if (BUILD_TESTING)
 
     target_link_libraries(engine-sim-test PRIVATE gtest_main engine-sim)
 
-    include(GoogleTest)
     gtest_discover_tests(engine-sim-test DISCOVERY_TIMEOUT 30)
     add_executable(engine-sim-threaded-test test/threaded_synthesizer_tests.cpp)
     target_link_libraries(engine-sim-threaded-test PRIVATE gtest_main engine-sim)
@@ -390,7 +383,7 @@ if (ENGINE_SIM_BUILD_CAPTURE)
     add_subdirectory(tools/capture)
 endif ()
 
-foreach(target IN ITEMS engine-sim engine-sim-script-interpreter engine-sim-app engine-sim-test
+foreach(target IN ITEMS engine-sim engine-sim-host engine-sim-host-test engine-sim-host-application-test engine-sim-frontend engine-sim-script-interpreter engine-sim-app engine-sim-test
         engine-sim-threaded-test engine-sim-script-test engine-sim-lifecycle-test
         engine-sim-displacement-test engine-sim-load-test engine-sim-wave-test engine-sim-resource-test engine-sim-capture)
     engine_sim_diagnose("${target}" TRUE)
@@ -403,10 +396,14 @@ if (PIRANHA_ENABLED AND CMAKE_EXPORT_COMPILE_COMMANDS AND NOT MSVC)
     find_package(Python3 3.9 COMPONENTS Interpreter REQUIRED)
     find_program(ENGINE_SIM_ANALYZER NAMES clang++-19 clang++-18 clang++)
     if (ENGINE_SIM_ANALYZER)
+        set(engine_sim_analysis_frontend)
+        if (TARGET engine-sim-frontend)
+            set(engine_sim_analysis_frontend --frontend)
+        endif ()
         add_custom_target(engine-sim-analysis
             COMMAND "${Python3_EXECUTABLE}" -B "${PROJECT_SOURCE_DIR}/cmake/run_analysis.py"
                 --database "${PROJECT_BINARY_DIR}/compile_commands.json"
-                --out "${PROJECT_BINARY_DIR}/analysis" --compiler "${ENGINE_SIM_ANALYZER}"
+                --out "${PROJECT_BINARY_DIR}/analysis" --compiler "${ENGINE_SIM_ANALYZER}" ${engine_sim_analysis_frontend}
             VERBATIM)
     endif ()
 endif ()

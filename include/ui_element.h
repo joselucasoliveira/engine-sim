@@ -3,7 +3,7 @@
 
 #include "ui_math.h"
 
-#include "delta.h"
+#include "desktop_host.h"
 
 #include <vector>
 #include <memory>
@@ -85,19 +85,19 @@ class UiElement {
         void resetShader();
 
         void drawModel(
-                dbasic::ModelAsset *model,
-                const ysVector &color,
+                desktop::Model *model,
+                const desktop::Vector &color,
                 const Point &p,
                 const Point &scale = { 1.0f, 1.0f });
         void drawFrame(
                 const Bounds &bounds,
                 float thickness,
-                const ysVector &frameColor,
-                const ysVector &fillColor,
+                const desktop::Vector &frameColor,
+                const desktop::Vector &fillColor,
                 bool fill = true);
         void drawBox(
                 const Bounds &bounds,
-                const ysVector &fillColor);
+                const desktop::Vector &fillColor);
         void drawText(
                 const std::string &s,
                 const Bounds &bounds,

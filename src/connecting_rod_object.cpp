@@ -62,11 +62,11 @@ void ConnectingRodObject::render(const ViewParameters *view) {
     const int layer = m_connectingRod->getLayer();
     if (layer > view->Layer1 || layer < view->Layer0) return;
 
-    const ysVector grey0 = mix(m_app->getBackgroundColor(), m_app->getForegroundColor(), 0.9333f);
-    const ysVector grey1 = mix(m_app->getBackgroundColor(), m_app->getForegroundColor(), 0.8667f);
-    const ysVector grey2 = mix(m_app->getBackgroundColor(), m_app->getForegroundColor(), 0.05f);
+    const desktop::Vector grey0 = mix(m_app->getBackgroundColor(), m_app->getForegroundColor(), 0.9333f);
+    const desktop::Vector grey1 = mix(m_app->getBackgroundColor(), m_app->getForegroundColor(), 0.8667f);
+    const desktop::Vector grey2 = mix(m_app->getBackgroundColor(), m_app->getForegroundColor(), 0.05f);
 
-    ysVector color =
+    desktop::Vector color =
         (m_connectingRod->getPiston()->getCylinderBank()->getIndex() % 2 == 0)
         ? grey0
         : grey1;
@@ -90,7 +90,7 @@ void ConnectingRodObject::render(const ViewParameters *view) {
     m_app->drawGenerated(m_connectingRodBody, 0x32 - layer);
 
     if (m_connectingRod->getRodJournalCount() > 0) {
-        const ysVector shadow =
+        const desktop::Vector shadow =
             tintByLayer(grey2, layer - view->Layer0);
 
         m_app->getShaders()->SetBaseColor(shadow);

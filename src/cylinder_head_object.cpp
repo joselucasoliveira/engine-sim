@@ -35,21 +35,21 @@ void CylinderHeadObject::render(const ViewParameters *view) {
     double x, y;
     bank->getPositionAboveDeck(chamberHeight, &x, &y);
 
-    const ysMatrix scale = ysMath::ScaleTransform(ysMath::LoadScalar((float)s));
-    const ysMatrix rotation = ysMath::RotationTransform(
-            ysMath::Constants::ZAxis, (float)theta);
-    const ysMatrix translation = ysMath::TranslationTransform(
-            ysMath::LoadVector((float)x, (float)y));
-    const ysMatrix T_headObject = ysMath::MatMult(translation, rotation);
-    const ysMatrix T_head = ysMath::MatMult(
+    const desktop::Matrix scale = desktop::math::ScaleTransform(desktop::math::LoadScalar((float)s));
+    const desktop::Matrix rotation = desktop::math::RotationTransform(
+            desktop::math::Constants::ZAxis, (float)theta);
+    const desktop::Matrix translation = desktop::math::TranslationTransform(
+            desktop::math::LoadVector((float)x, (float)y));
+    const desktop::Matrix T_headObject = desktop::math::MatMult(translation, rotation);
+    const desktop::Matrix T_head = desktop::math::MatMult(
             T_headObject,
             scale);
 
-    const ysVector col = m_app->getPink();  ysMath::Add(
-        ysMath::Mul(m_app->getForegroundColor(), ysMath::LoadScalar(0.01f)),
-        ysMath::Mul(m_app->getBackgroundColor(), ysMath::LoadScalar(0.99f))
+    const desktop::Vector col = m_app->getPink();  desktop::math::Add(
+        desktop::math::Mul(m_app->getForegroundColor(), desktop::math::LoadScalar(0.01f)),
+        desktop::math::Mul(m_app->getBackgroundColor(), desktop::math::LoadScalar(0.99f))
     );
-    const ysVector moving = m_app->getForegroundColor();
+    const desktop::Vector moving = m_app->getForegroundColor();
 
     GeometryGenerator::GeometryIndices
         valveShadow,
@@ -136,10 +136,10 @@ void CylinderHeadObject::render(const ViewParameters *view) {
     const int layer = frontmostPiston->getCylinderIndex();
 
     const float intakeLift = (float)m_head->intakeValveLift(layer);
-    const ysMatrix T_intakeValve = ysMath::MatMult(
+    const desktop::Matrix T_intakeValve = desktop::math::MatMult(
             T_head,
-            ysMath::TranslationTransform(
-                ysMath::LoadVector(
+            desktop::math::TranslationTransform(
+                desktop::math::LoadVector(
                     (float)intakeValvePosition,
                     (float)(-intakeLift / s),
                     0.0f,
@@ -159,10 +159,10 @@ void CylinderHeadObject::render(const ViewParameters *view) {
     m_app->drawGenerated(valveRollerPin, 0x33);
 
     const double exhaustLift = (float)m_head->exhaustValveLift(layer);
-    const ysMatrix T_exhaustValve = ysMath::MatMult(
+    const desktop::Matrix T_exhaustValve = desktop::math::MatMult(
         T_head,
-        ysMath::TranslationTransform(
-            ysMath::LoadVector(
+        desktop::math::TranslationTransform(
+            desktop::math::LoadVector(
                 (float)(-intakeValvePosition),
                 (float)(-exhaustLift / s),
                 0.0f,
@@ -188,17 +188,17 @@ void CylinderHeadObject::render(const ViewParameters *view) {
     generateCamshaft(intakeCam, m_app->pixelsToUnits(5.0) / 2, rollerRadius, &intakeShadow);
     generateCamshaft(exhaustCam, 0.0, rollerRadius, &exhaust);
 
-    ysMatrix T_exhaustCam = ysMath::MatMult(
+    desktop::Matrix T_exhaustCam = desktop::math::MatMult(
         T_headObject,
-        ysMath::TranslationTransform(ysMath::LoadVector(
+        desktop::math::TranslationTransform(desktop::math::LoadVector(
             (float)(-intakeValvePosition * s),
             m_app->pixelsToUnits(5.0f) / 2 + (float)(1.99 * s + exhaustCam->getBaseRadius() + rollerRadius),
             0.0f,
             0.0f)));
-    T_exhaustCam = ysMath::MatMult(
+    T_exhaustCam = desktop::math::MatMult(
         T_exhaustCam,
-        ysMath::RotationTransform(
-            ysMath::Constants::ZAxis,
+        desktop::math::RotationTransform(
+            desktop::math::Constants::ZAxis,
             (float)(
                 exhaustCam->getAngle()
                 + exhaustCam->getLobeCenterline(layer))));
@@ -209,17 +209,17 @@ void CylinderHeadObject::render(const ViewParameters *view) {
     m_app->getShaders()->SetBaseColor(m_app->getBackgroundColor());
     m_app->drawGenerated(camCenter);
 
-    ysMatrix T_intakeCam = ysMath::MatMult(
+    desktop::Matrix T_intakeCam = desktop::math::MatMult(
         T_headObject,
-        ysMath::TranslationTransform(ysMath::LoadVector(
+        desktop::math::TranslationTransform(desktop::math::LoadVector(
             (float)(intakeValvePosition * s),
             rollerRadius + m_app->pixelsToUnits(5.0f) / 2 + (float)(1.99 * s + intakeCam->getBaseRadius()),
             0.0f,
             0.0f)));
-    T_intakeCam = ysMath::MatMult(
+    T_intakeCam = desktop::math::MatMult(
         T_intakeCam,
-        ysMath::RotationTransform(
-            ysMath::Constants::ZAxis,
+        desktop::math::RotationTransform(
+            desktop::math::Constants::ZAxis,
             (float)(
                 intakeCam->getAngle()
                 + intakeCam->getLobeCenterline(layer))));

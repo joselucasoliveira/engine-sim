@@ -49,9 +49,9 @@ void CombustionChamberObject::render(const ViewParameters *view) {
     if (m_chamber->getPiston() == frontmostPiston) {
         if (m_chamber->m_lit) {
             m_app->getShaders()->SetBaseColor(
-                ysMath::Mul(
+                desktop::math::Mul(
                     m_app->getOrange(),
-                    ysMath::LoadVector(1.0f, 1.0f, 1.0f, 0.6f)));
+                    desktop::math::LoadVector(1.0f, 1.0f, 1.0f, 0.6f)));
             m_app->drawGenerated(m_indices, 0x35);
         }
     }

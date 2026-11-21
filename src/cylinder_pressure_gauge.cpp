@@ -81,8 +81,8 @@ void CylinderPressureGauge::render() {
         m_gauges[i]->m_needleWidth = 2.0;
         m_gauges[i]->m_gamma = 0.5f;
         m_gauges[i]->setBandCount(2);
-        m_gauges[i]->setBand({ ysMath::Constants::One, 400, 1000, 3.0f }, 0);
-        m_gauges[i]->setBand({ ysColor::srgbiToLinear(0x77CEE0), 0.0f, 14.6959f, 3.0f, 0.0f }, 1);
+        m_gauges[i]->setBand({ desktop::math::Constants::One, 400, 1000, 3.0f }, 0);
+        m_gauges[i]->setBand({ desktop::color::srgbiToLinear(0x77CEE0), 0.0f, 14.6959f, 3.0f, 0.0f }, 1);
     }
 
     UiElement::render();

@@ -1,7 +1,7 @@
 #ifndef ATG_ENGINE_SIM_GEOMETRY_GENERATOR_H
 #define ATG_ENGINE_SIM_GEOMETRY_GENERATOR_H
 
-#include "delta.h"
+#include "desktop_host.h"
 
 #include "../include/function.h"
 
@@ -14,26 +14,26 @@ public:
         int BaseVertex = -1;
         int FaceCount = -1;
 
-        dbasic::Vertex *VertexData = nullptr;
+        desktop::Vertex *VertexData = nullptr;
     };
 
     struct LineRingParameters {
-        ysVector normal;
-        ysVector center;
+        desktop::Vector normal;
+        desktop::Vector center;
         float radius;
         float patternHeight;
         float maxEdgeLength;
         float startAngle = 0.0f;
-        float endAngle = ysMath::Constants::TWO_PI;
+        float endAngle = desktop::math::Constants::TWO_PI;
         float taperTail = 0.0f;
         float textureOffset = 0.0f;
         float textureWidthHeightRatio = 1.0f;
     };
 
     struct LineParameters {
-        ysVector start;
-        ysVector end;
-        ysVector normal = ysMath::Constants::ZAxis;
+        desktop::Vector start;
+        desktop::Vector end;
+        desktop::Vector normal = desktop::math::Constants::ZAxis;
         float patternHeight;
         float taperTail;
         float textureOffset = 0.0f;
@@ -48,7 +48,7 @@ public:
 
     struct Ring2dParameters {
         float center_x = 0.0f, center_y = 0.0f;
-        float startAngle = 0.0f, endAngle = ysMath::Constants::TWO_PI;
+        float startAngle = 0.0f, endAngle = desktop::math::Constants::TWO_PI;
         float innerRadius = 0.5f, outerRadius = 1.0f;
         float maxEdgeLength = 2.0f;
 
@@ -61,7 +61,7 @@ public:
         float center_x = 0.0f, center_y = 0.0f;
         float radius = 1.0f;
         float maxEdgeLength = 0.1f;
-        float smallestAngle = ysMath::Constants::PI * 0.95f;
+        float smallestAngle = desktop::math::Constants::PI * 0.95f;
     };
 
     struct Cam2dParameters {
@@ -70,7 +70,7 @@ public:
         float rollerRadius = 1.0f;
         Function *lift = nullptr;
         float maxEdgeLength = 0.1f;
-        float smallestAngle = ysMath::Constants::PI * 0.95f;
+        float smallestAngle = desktop::math::Constants::PI * 0.95f;
     };
 
     struct Rhombus2dParameters {
@@ -122,7 +122,7 @@ public:
     void initialize(int vertexBufferSize, int indexBufferSize);
     void destroy();
 
-    const dbasic::Vertex *getVertexData() const { return m_vertexData; }
+    const desktop::Vertex *getVertexData() const { return m_vertexData; }
     const unsigned short *getIndexData() const { return m_indexData; }
 
     int getCurrentVertexCount() const { return m_state.vertexPointer; }
@@ -131,16 +131,16 @@ public:
     void reset();
 
     bool generateFilledCircle(
-        const ysVector &normal,
-        const ysVector &center,
+        const desktop::Vector &normal,
+        const desktop::Vector &center,
         float radius,
         float maxEdgeLength
     );
 
     bool generateFilledFanPolygon(
-        const ysVector &normal,
-        const ysVector &up,
-        const ysVector &center,
+        const desktop::Vector &normal,
+        const desktop::Vector &up,
+        const desktop::Vector &center,
         float radius,
         float rotation,
         int segmentCount
@@ -191,16 +191,16 @@ public:
 protected:
     void startSubshape();
 
-    dbasic::Vertex *writeVertex();
+    desktop::Vertex *writeVertex();
     void writeFace(unsigned short i0, unsigned short i1, unsigned short i2);
 
     bool checkCapacity(int vertexCount, int indexCount);
 
 protected:
-    static ysVector findOrthogonal(const ysVector &v);
+    static desktop::Vector findOrthogonal(const desktop::Vector &v);
 
 protected:
-    dbasic::Vertex *m_vertexData;
+    desktop::Vertex *m_vertexData;
     unsigned short *m_indexData;
 
     int m_vertexBufferSize;

@@ -1,4 +1,5 @@
 #include "../include/firing_order_display.h"
+#include <map>
 
 #include "../include/units.h"
 #include "../include/gauge.h"
@@ -73,10 +74,10 @@ void FiringOrderDisplay::render() {
 
     GeometryGenerator *generator = m_app->getGeometryGenerator();
 
-    const ysVector background = m_app->getBackgroundColor();
-    const ysVector hot = mix(background, m_app->getForegroundColor(), 1.0f);
-    const ysVector fixed = mix(background, m_app->getForegroundColor(), 0.02f);
-    const ysVector cold = mix(background, m_app->getForegroundColor(), 0.001f);
+    const desktop::Vector background = m_app->getBackgroundColor();
+    const desktop::Vector hot = mix(background, m_app->getForegroundColor(), 1.0f);
+    const desktop::Vector fixed = mix(background, m_app->getForegroundColor(), 0.02f);
+    const desktop::Vector cold = mix(background, m_app->getForegroundColor(), 0.001f);
 
     std::vector<CylinderBank *> orderedBanks;
     std::map<CylinderBank *, int> bankToIndex;

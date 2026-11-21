@@ -1,6 +1,7 @@
 #include "../include/engine_sim_application.h"
 
 #include <iostream>
+#include <windows.h>
 
 int WINAPI WinMain(
     _In_ HINSTANCE hInstance,
@@ -21,7 +22,7 @@ int WINAPI WinMain(
             return 0;
         }
         const auto resources = engine_sim::parseResourceOptions(arguments);
-        application.initialize((void *)&hInstance, ysContextObject::DeviceAPI::DirectX11, resources);
+        application.initialize(desktop::makeWindowsHost((void *)&hInstance), resources);
         application.run();
     }
     catch (const std::exception &error) {

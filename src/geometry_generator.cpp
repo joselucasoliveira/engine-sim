@@ -21,7 +21,7 @@ GeometryGenerator::~GeometryGenerator() {
 void GeometryGenerator::initialize(int vertexBufferSize, int indexBufferSize) {
     if (vertexBufferSize <= 0 || indexBufferSize <= 0) throw std::invalid_argument("Geometry capacity must be positive");
     destroy();
-    m_vertexData = new dbasic::Vertex[vertexBufferSize];
+    m_vertexData = new desktop::Vertex[vertexBufferSize];
     m_indexData = new unsigned short[indexBufferSize];
 
     m_vertexBufferSize = vertexBufferSize;
@@ -44,18 +44,18 @@ void GeometryGenerator::reset() {
 }
 
 bool GeometryGenerator::generateFilledCircle(
-    const ysVector &normal,
-    const ysVector &center,
+    const desktop::Vector &normal,
+    const desktop::Vector &center,
     float radius,
     float maxEdgeLength)
 {
     // edge_length = (sin(theta) * radius) * 2
     // theta = arcsin(edge_length / (2 * radius))
 
-    const float angle = std::asinf(maxEdgeLength / (2 * radius));
-    const float steps = ysMath::Constants::TWO_PI / angle;
+    const float angle = ::asinf(maxEdgeLength / (2 * radius));
+    const float steps = desktop::math::Constants::TWO_PI / angle;
 
-    int wholeSteps = (int)std::ceilf(steps);
+    int wholeSteps = (int)::ceilf(steps);
     wholeSteps = (wholeSteps < 3)
         ? 3
         : wholeSteps;
@@ -70,9 +70,9 @@ bool GeometryGenerator::generateFilledCircle(
 }
 
 bool GeometryGenerator::generateFilledFanPolygon(
-    const ysVector &normal,
-    const ysVector &up,
-    const ysVector &center,
+    const desktop::Vector &normal,
+    const desktop::Vector &up,
+    const desktop::Vector &center,
     float radius,
     float rotation,
     int segmentCount)
@@ -90,33 +90,33 @@ bool GeometryGenerator::generateFilledFanPolygon(
     }
 
     // Generate center vertex
-    dbasic::Vertex *centerVertex = writeVertex();
-    centerVertex->Normal = ysMath::GetVector4(normal);
-    centerVertex->Pos = ysMath::GetVector4(center);
-    centerVertex->TexCoord = ysVector2(0.5f, 0.5f);
+    desktop::Vertex *centerVertex = writeVertex();
+    centerVertex->Normal = desktop::math::GetVector4(normal);
+    centerVertex->Pos = desktop::math::GetVector4(center);
+    centerVertex->TexCoord = desktop::Vector2(0.5f, 0.5f);
 
-    const float angleStep = ysMath::Constants::TWO_PI / segmentCount;
+    const float angleStep = desktop::math::Constants::TWO_PI / segmentCount;
 
-    const ysVector right = ysMath::Cross(up, normal);
-    ysMatrix T = ysMath::LoadMatrix(
+    const desktop::Vector right = desktop::math::Cross(up, normal);
+    desktop::Matrix T = desktop::math::LoadMatrix(
         right,
         up,
         normal,
-        ysMath::ExtendVector(center)
+        desktop::math::ExtendVector(center)
     );
-    T = ysMath::Transpose(T);
+    T = desktop::math::Transpose(T);
 
     for (int i = 0; i < segmentCount; ++i) {
         const float angle0 = angleStep * i + rotation;
-        const float x0 = std::cosf(angle0);
-        const float y0 = std::sinf(angle0);
+        const float x0 = ::cosf(angle0);
+        const float y0 = ::sinf(angle0);
 
-        const ysVector pos = ysMath::LoadVector(x0 * radius, y0 * radius, 0.0f, 1.0f);
+        const desktop::Vector pos = desktop::math::LoadVector(x0 * radius, y0 * radius, 0.0f, 1.0f);
 
-        dbasic::Vertex *newVertex = writeVertex();
+        desktop::Vertex *newVertex = writeVertex();
         newVertex->Normal = normal;
-        newVertex->Pos = ysMath::MatMult(T, pos);
-        newVertex->TexCoord = ysVector2(0.5f * x0 + 0.5f, 0.5f * y0 + 0.5f);
+        newVertex->Pos = desktop::math::MatMult(T, pos);
+        newVertex->TexCoord = desktop::Vector2(0.5f * x0 + 0.5f, 0.5f * y0 + 0.5f);
     }
 
     for (int i = 0; i < segmentCount; ++i) {
@@ -139,10 +139,10 @@ bool GeometryGenerator::generateLineRing(
 
     const float maxOuterRadius = params.radius + (params.patternHeight / 2);
 
-    const float angle = std::asinf(params.maxEdgeLength / (2 * maxOuterRadius));
+    const float angle = ::asinf(params.maxEdgeLength / (2 * maxOuterRadius));
     const float steps = (actualEndAngle - actualStartAngle) / angle;
 
-    int segmentCount = (int)std::ceilf(steps);
+    int segmentCount = (int)::ceilf(steps);
     segmentCount = (segmentCount < 3)
         ? 3
         : segmentCount;
@@ -151,7 +151,7 @@ bool GeometryGenerator::generateLineRing(
     const int faceCount = segmentCount * 2;
     const int indexCount = faceCount * 3;
 
-    const ysVector up = findOrthogonal(params.normal);
+    const desktop::Vector up = findOrthogonal(params.normal);
 
     if (vertexCount + m_state.vertexPointer > m_vertexBufferSize ||
         indexCount + m_state.indexPointer > m_indexBufferSize)
@@ -162,19 +162,19 @@ bool GeometryGenerator::generateLineRing(
     // Generate center vertex
     const float angleStep = (actualEndAngle - actualStartAngle) / segmentCount;
 
-    const ysVector right = ysMath::Cross(up, params.normal);
-    ysMatrix T = ysMath::LoadMatrix(
+    const desktop::Vector right = desktop::math::Cross(up, params.normal);
+    desktop::Matrix T = desktop::math::LoadMatrix(
         right,
         up,
         params.normal,
-        ysMath::ExtendVector(params.center)
+        desktop::math::ExtendVector(params.center)
     );
-    T = ysMath::Transpose(T);
+    T = desktop::math::Transpose(T);
 
     for (int i = 0; i <= segmentCount; ++i) {
         float angle0 = angleStep * i + actualStartAngle;
-        const float x0 = std::cosf(angle0);
-        const float y0 = std::sinf(angle0);
+        const float x0 = ::cosf(angle0);
+        const float y0 = ::sinf(angle0);
 
         if (angle0 >= actualEndAngle) angle0 = actualEndAngle;
         else if (angle0 <= actualStartAngle) angle0 = actualStartAngle;
@@ -192,24 +192,24 @@ bool GeometryGenerator::generateLineRing(
         const float innerRadius = params.radius - (params.patternHeight / 2) * taper;
         const float outerRadius = params.radius + (params.patternHeight / 2) * taper;
 
-        const ysVector outerPos =
-            ysMath::LoadVector(x0 * outerRadius, y0 * outerRadius, 0.0f, 1.0f);
-        const ysVector innerPos =
-            ysMath::LoadVector(x0 * innerRadius, y0 * innerRadius, 0.0f, 1.0f);
+        const desktop::Vector outerPos =
+            desktop::math::LoadVector(x0 * outerRadius, y0 * outerRadius, 0.0f, 1.0f);
+        const desktop::Vector innerPos =
+            desktop::math::LoadVector(x0 * innerRadius, y0 * innerRadius, 0.0f, 1.0f);
 
         const float s =
             params.textureOffset +
             angle0 * params.radius / (params.patternHeight * params.textureWidthHeightRatio);
 
-        dbasic::Vertex *outerVertex = writeVertex();
+        desktop::Vertex *outerVertex = writeVertex();
         outerVertex->Normal = params.normal;
-        outerVertex->Pos = ysMath::MatMult(T, outerPos);
-        outerVertex->TexCoord = ysVector2(s, 1.0f);
+        outerVertex->Pos = desktop::math::MatMult(T, outerPos);
+        outerVertex->TexCoord = desktop::Vector2(s, 1.0f);
 
-        dbasic::Vertex *innerVertex = writeVertex();
+        desktop::Vertex *innerVertex = writeVertex();
         innerVertex->Normal = params.normal;
-        innerVertex->Pos = ysMath::MatMult(T, innerPos);
-        innerVertex->TexCoord = ysVector2(s, 0.0f);
+        innerVertex->Pos = desktop::math::MatMult(T, innerPos);
+        innerVertex->TexCoord = desktop::Vector2(s, 0.0f);
     }
 
 #define OUTER(i) (((i)) * 2)
@@ -244,52 +244,52 @@ bool GeometryGenerator::generateLine(
 {
     startSubshape();
 
-    const ysVector tangent = ysMath::Normalize(ysMath::Sub(params.end, params.start));
-    const ysVector right = ysMath::Cross(params.normal, tangent);
+    const desktop::Vector tangent = desktop::math::Normalize(desktop::math::Sub(params.end, params.start));
+    const desktop::Vector right = desktop::math::Cross(params.normal, tangent);
 
     const float length =
-        ysMath::GetScalar(ysMath::Magnitude(ysMath::Sub(params.end, params.start)));
+        desktop::math::GetScalar(desktop::math::Magnitude(desktop::math::Sub(params.end, params.start)));
 
-    ysMatrix T0 = ysMath::LoadMatrix(
+    desktop::Matrix T0 = desktop::math::LoadMatrix(
         right,
         tangent,
         params.normal,
-        ysMath::ExtendVector(params.start)
+        desktop::math::ExtendVector(params.start)
     );
-    T0 = ysMath::Transpose(T0);
+    T0 = desktop::math::Transpose(T0);
 
-    ysMatrix T1 = ysMath::LoadMatrix(
+    desktop::Matrix T1 = desktop::math::LoadMatrix(
         right,
         tangent,
         params.normal,
-        ysMath::ExtendVector(params.end)
+        desktop::math::ExtendVector(params.end)
     );
-    T1 = ysMath::Transpose(T1);
+    T1 = desktop::math::Transpose(T1);
 
-    const ysVector v0 = { params.patternHeight / 2.0f, 0.0f, 0.0f, 1.0f };
-    const ysVector v1 = { -params.patternHeight / 2.0f, 0.0f, 0.0f, 1.0f };
+    const desktop::Vector v0 = { params.patternHeight / 2.0f, 0.0f, 0.0f, 1.0f };
+    const desktop::Vector v1 = { -params.patternHeight / 2.0f, 0.0f, 0.0f, 1.0f };
 
     const float ds = 1 / (params.patternHeight * params.textureWidthHeightRatio);
 
-    dbasic::Vertex *vertex = writeVertex();
+    desktop::Vertex *vertex = writeVertex();
     vertex->Normal = params.normal;
-    vertex->Pos = ysMath::MatMult(T0, v0);
-    vertex->TexCoord = ysVector2(0.0f, 1.0f);
+    vertex->Pos = desktop::math::MatMult(T0, v0);
+    vertex->TexCoord = desktop::Vector2(0.0f, 1.0f);
 
     vertex = writeVertex();
     vertex->Normal = params.normal;
-    vertex->Pos = ysMath::MatMult(T0, v1);
-    vertex->TexCoord = ysVector2(0.0f, 0.0f);
+    vertex->Pos = desktop::math::MatMult(T0, v1);
+    vertex->TexCoord = desktop::Vector2(0.0f, 0.0f);
 
     vertex = writeVertex();
     vertex->Normal = params.normal;
-    vertex->Pos = ysMath::MatMult(T1, v0);
-    vertex->TexCoord = ysVector2(ds * length + params.textureOffset, 1.0f);
+    vertex->Pos = desktop::math::MatMult(T1, v0);
+    vertex->TexCoord = desktop::Vector2(ds * length + params.textureOffset, 1.0f);
 
     vertex = writeVertex();
     vertex->Normal = params.normal;
-    vertex->Pos = ysMath::MatMult(T1, v1);
-    vertex->TexCoord = ysVector2(ds * length + params.textureOffset, 0.0f);
+    vertex->Pos = desktop::math::MatMult(T1, v1);
+    vertex->TexCoord = desktop::Vector2(ds * length + params.textureOffset, 0.0f);
 
     writeFace(0, 1, 2);
     writeFace(1, 3, 2);
@@ -302,48 +302,48 @@ bool GeometryGenerator::generateLine(
 
             vertex = writeVertex();
             vertex->Normal = params.normal;
-            vertex->Pos = ysMath::MatMult(
+            vertex->Pos = desktop::math::MatMult(
                     T0,
-                    ysMath::LoadVector(
+                    desktop::math::LoadVector(
                         scale * params.patternHeight / 2.0f,
                         -step * (i + 1),
                         0.0f,
                         1.0f));
-            vertex->TexCoord = ysVector2(-ds * step * (i + 1) + params.textureOffset, 1.0f);
+            vertex->TexCoord = desktop::Vector2(-ds * step * (i + 1) + params.textureOffset, 1.0f);
 
             vertex = writeVertex();
             vertex->Normal = params.normal;
-            vertex->Pos = ysMath::MatMult(
+            vertex->Pos = desktop::math::MatMult(
                     T0,
-                    ysMath::LoadVector(
+                    desktop::math::LoadVector(
                         -scale * params.patternHeight / 2.0f,
                         -step * (i + 1),
                         0.0f,
                         1.0f));
-            vertex->TexCoord = ysVector2(-ds * step * (i + 1) + params.textureOffset, 0.0f);
+            vertex->TexCoord = desktop::Vector2(-ds * step * (i + 1) + params.textureOffset, 0.0f);
 
             vertex = writeVertex();
             vertex->Normal = params.normal;
-            vertex->Pos = ysMath::MatMult(
+            vertex->Pos = desktop::math::MatMult(
                     T1,
-                    ysMath::LoadVector(
+                    desktop::math::LoadVector(
                         scale * params.patternHeight / 2.0f,
                         step * (i + 1),
                         0.0f,
                         1.0f));
-            vertex->TexCoord = ysVector2(
+            vertex->TexCoord = desktop::Vector2(
                     ds * (length + step * (i + 1)) + params.textureOffset,
                     1.0f);
 
             vertex = writeVertex();
             vertex->Normal = params.normal;
-            vertex->Pos = ysMath::MatMult(
-                    T1, ysMath::LoadVector(
+            vertex->Pos = desktop::math::MatMult(
+                    T1, desktop::math::LoadVector(
                         -scale * params.patternHeight / 2.0f,
                         step * (i + 1),
                         0.0f,
                         1.0f));
-            vertex->TexCoord = ysVector2(
+            vertex->TexCoord = desktop::Vector2(
                     ds * (length + step * (i + 1)) + params.textureOffset, 0.0f);
 
             writeFace((i + 1) * 4, (i + 1) * 4 + 1, i * 4);
@@ -366,6 +366,9 @@ bool GeometryGenerator::generateLine2d(
     const float dy = params.y1 - params.y0;
     const float length = std::sqrt(dx * dx + dy * dy);
 
+    // An unlit flame has coincident endpoints and contributes no triangles.
+    if (length == 0.0f) return true;
+
     const float dir_x = dx / length;
     const float dir_y = dy / length;
 
@@ -379,35 +382,35 @@ bool GeometryGenerator::generateLine2d(
         return false;
     }
 
-    dbasic::Vertex *vertex;
+    desktop::Vertex *vertex;
 
     vertex = writeVertex();
-    vertex->Normal = ysMath::Constants::ZAxis;
-    vertex->Pos = ysMath::LoadVector(
+    vertex->Normal = desktop::math::Constants::ZAxis;
+    vertex->Pos = desktop::math::LoadVector(
             params.x0 + perp_x * params.lineWidth / 2,
             params.y0 + perp_y * params.lineWidth / 2);
-    vertex->TexCoord = ysVector2(0.0f, 0.0f);
+    vertex->TexCoord = desktop::Vector2(0.0f, 0.0f);
 
     vertex = writeVertex();
-    vertex->Normal = ysMath::Constants::ZAxis;
-    vertex->Pos = ysMath::LoadVector(
+    vertex->Normal = desktop::math::Constants::ZAxis;
+    vertex->Pos = desktop::math::LoadVector(
         params.x0 - perp_x * params.lineWidth / 2,
         params.y0 - perp_y * params.lineWidth / 2);
-    vertex->TexCoord = ysVector2(0.0f, 0.0f);
+    vertex->TexCoord = desktop::Vector2(0.0f, 0.0f);
 
     vertex = writeVertex();
-    vertex->Normal = ysMath::Constants::ZAxis;
-    vertex->Pos = ysMath::LoadVector(
+    vertex->Normal = desktop::math::Constants::ZAxis;
+    vertex->Pos = desktop::math::LoadVector(
         params.x1 + perp_x * params.lineWidth / 2,
         params.y1 + perp_y * params.lineWidth / 2);
-    vertex->TexCoord = ysVector2(0.0f, 0.0f);
+    vertex->TexCoord = desktop::Vector2(0.0f, 0.0f);
 
     vertex = writeVertex();
-    vertex->Normal = ysMath::Constants::ZAxis;
-    vertex->Pos = ysMath::LoadVector(
+    vertex->Normal = desktop::math::Constants::ZAxis;
+    vertex->Pos = desktop::math::LoadVector(
             params.x1 - perp_x * params.lineWidth / 2,
             params.y1 - perp_y * params.lineWidth / 2);
-    vertex->TexCoord = ysVector2(0.0f, 0.0f);
+    vertex->TexCoord = desktop::Vector2(0.0f, 0.0f);
 
     writeFace(0, 1, 2);
     writeFace(1, 3, 2);
@@ -487,10 +490,10 @@ bool GeometryGenerator::generateRing2d(const Ring2dParameters &params) {
 
     startSubshape();
 
-    const float angle = std::asinf(params.maxEdgeLength / (2 * params.outerRadius));
+    const float angle = ::asinf(params.maxEdgeLength / (2 * params.outerRadius));
     const float steps = (params.endAngle - params.startAngle) / angle;
 
-    int segmentCount = (int)std::ceilf(steps);
+    int segmentCount = (int)::ceilf(steps);
     segmentCount = (segmentCount < 3)
         ? 3
         : segmentCount;
@@ -522,8 +525,8 @@ bool GeometryGenerator::generateRing2d(const Ring2dParameters &params) {
     const float fullWidth = params.outerRadius - params.innerRadius;
     for (int i = 0; i <= segmentCount; ++i) {
         float angle0 = angleStep * i + params.startAngle;
-        const float x0 = std::cosf(angle0);
-        const float y0 = std::sinf(angle0);
+        const float x0 = ::cosf(angle0);
+        const float y0 = ::sinf(angle0);
 
         const float s = (params.drawArrow)
             ? (angle0 - arrowStart) / (arrowEnd - arrowStart)
@@ -533,27 +536,24 @@ bool GeometryGenerator::generateRing2d(const Ring2dParameters &params) {
         const float innerRadius = midRadius - width / 2;
         const float outerRadius = midRadius + width / 2;
 
-        if (angle0 >= params.endAngle) angle0 = params.endAngle;
-        else if (angle0 <= params.startAngle) angle0 = params.startAngle;
-
-        const ysVector outerPos =
-            ysMath::LoadVector(
+        const desktop::Vector outerPos =
+            desktop::math::LoadVector(
                     x0 * outerRadius + params.center_x,
                     y0 * outerRadius + params.center_y, 0.0f, 1.0f);
-        const ysVector innerPos =
-            ysMath::LoadVector(
+        const desktop::Vector innerPos =
+            desktop::math::LoadVector(
                     x0 * innerRadius + params.center_x,
                     y0 * innerRadius + params.center_y, 0.0f, 1.0f);
 
-        dbasic::Vertex *outerVertex = writeVertex();
-        outerVertex->Normal = ysMath::Constants::ZAxis;
+        desktop::Vertex *outerVertex = writeVertex();
+        outerVertex->Normal = desktop::math::Constants::ZAxis;
         outerVertex->Pos = outerPos;
-        outerVertex->TexCoord = ysVector2(0.0f, 0.0f);
+        outerVertex->TexCoord = desktop::Vector2(0.0f, 0.0f);
 
-        dbasic::Vertex *innerVertex = writeVertex();
-        innerVertex->Normal = ysMath::Constants::ZAxis;
+        desktop::Vertex *innerVertex = writeVertex();
+        innerVertex->Normal = desktop::math::Constants::ZAxis;
         innerVertex->Pos = innerPos;
-        innerVertex->TexCoord = ysVector2(0.0f, 0.0f);
+        innerVertex->TexCoord = desktop::Vector2(0.0f, 0.0f);
     }
 
 #define OUTER(i) (((i)) * 2)
@@ -574,12 +574,12 @@ bool GeometryGenerator::generateCircle2d(const Circle2dParameters &params) {
 
     startSubshape();
 
-    float angle = std::asinf(params.maxEdgeLength / (2 * params.radius)) * 2;
-    angle = std::fminf(angle, ysMath::Constants::PI - params.smallestAngle);
+    float angle = ::asinf(params.maxEdgeLength / (2 * params.radius)) * 2;
+    angle = std::fminf(angle, desktop::math::Constants::PI - params.smallestAngle);
 
-    const float steps = ysMath::Constants::TWO_PI / angle;
+    const float steps = desktop::math::Constants::TWO_PI / angle;
 
-    int segmentCount = (int)std::ceilf(steps);
+    int segmentCount = (int)::ceilf(steps);
     segmentCount = (segmentCount < 3)
         ? 3
         : segmentCount;
@@ -593,22 +593,22 @@ bool GeometryGenerator::generateCircle2d(const Circle2dParameters &params) {
     }
 
     // Generate center vertex
-    dbasic::Vertex *centerVertex = writeVertex();
-    centerVertex->Normal = ysMath::Constants::ZAxis;
-    centerVertex->Pos = ysMath::LoadVector(params.center_x, params.center_y);
-    centerVertex->TexCoord = ysVector2(0.5f, 0.5f);
+    desktop::Vertex *centerVertex = writeVertex();
+    centerVertex->Normal = desktop::math::Constants::ZAxis;
+    centerVertex->Pos = desktop::math::LoadVector(params.center_x, params.center_y);
+    centerVertex->TexCoord = desktop::Vector2(0.5f, 0.5f);
 
-    const float angleStep = ysMath::Constants::TWO_PI / segmentCount;
+    const float angleStep = desktop::math::Constants::TWO_PI / segmentCount;
 
     for (int i = 0; i < segmentCount; ++i) {
         const float angle0 = angleStep * i;
-        const float x = std::cosf(angle0);
-        const float y = std::sinf(angle0);
+        const float x = ::cosf(angle0);
+        const float y = ::sinf(angle0);
 
         const float pos_x = params.center_x + x * params.radius;
         const float pos_y = params.center_y + y * params.radius;
 
-        dbasic::Vertex *newVertex = writeVertex();
+        desktop::Vertex *newVertex = writeVertex();
         newVertex->Normal.Set(0, 0, 1, 0);
         newVertex->Pos.Set(pos_x, pos_y, 0.0f, 1.0f);
         newVertex->TexCoord.x = 0.5f * x + 0.5f;
@@ -629,12 +629,12 @@ bool GeometryGenerator::generateCam(const Cam2dParameters &params) {
 
     startSubshape();
 
-    float angle = std::asinf(params.maxEdgeLength / (2 * params.baseRadius)) * 2;
-    angle = std::fminf(angle, ysMath::Constants::PI - params.smallestAngle);
+    float angle = ::asinf(params.maxEdgeLength / (2 * params.baseRadius)) * 2;
+    angle = std::fminf(angle, desktop::math::Constants::PI - params.smallestAngle);
 
-    const float steps = ysMath::Constants::TWO_PI / angle;
+    const float steps = desktop::math::Constants::TWO_PI / angle;
 
-    int segmentCount = (int)std::ceilf(steps);
+    int segmentCount = (int)::ceilf(steps);
     segmentCount = (segmentCount < 3)
         ? 3
         : segmentCount;
@@ -648,12 +648,12 @@ bool GeometryGenerator::generateCam(const Cam2dParameters &params) {
     }
 
     // Generate center vertex
-    dbasic::Vertex *centerVertex = writeVertex();
-    centerVertex->Normal = ysMath::Constants::ZAxis;
-    centerVertex->Pos = ysMath::LoadVector(params.center_x, params.center_y);
-    centerVertex->TexCoord = ysVector2(0.5f, 0.5f);
+    desktop::Vertex *centerVertex = writeVertex();
+    centerVertex->Normal = desktop::math::Constants::ZAxis;
+    centerVertex->Pos = desktop::math::LoadVector(params.center_x, params.center_y);
+    centerVertex->TexCoord = desktop::Vector2(0.5f, 0.5f);
 
-    const float angleStep = ysMath::Constants::TWO_PI / segmentCount;
+    const float angleStep = desktop::math::Constants::TWO_PI / segmentCount;
     const float baseRollerPosition = params.baseRadius + params.rollerRadius;
 
     float lastRoller_x = 0;
@@ -664,12 +664,12 @@ bool GeometryGenerator::generateCam(const Cam2dParameters &params) {
 
     for (int i = 0; i < segmentCount; ++i) {
         const float angle0 = angleStep * i;
-        const float x = std::cosf(angle0 + ysMath::Constants::PI / 2);
-        const float y = std::sinf(angle0 + ysMath::Constants::PI / 2);
+        const float x = ::cosf(angle0 + desktop::math::Constants::PI / 2);
+        const float y = ::sinf(angle0 + desktop::math::Constants::PI / 2);
 
         const float lift = (params.lift == nullptr)
             ? 0.0f
-            : (float)params.lift->sampleTriangle((double)angle0 - ysMath::Constants::TWO_PI / 2);
+            : (float)params.lift->sampleTriangle((double)angle0 - desktop::math::Constants::TWO_PI / 2);
         const float rollerPosition = baseRollerPosition + lift;
 
         const float rollerPos_x = params.center_x + x * rollerPosition;
@@ -705,7 +705,7 @@ bool GeometryGenerator::generateCam(const Cam2dParameters &params) {
         const float prev_x = positions_x[prev_i], prev_y = positions_y[prev_i];
         const float next_x = positions_x[next_i], next_y = positions_y[next_i];
 
-        dbasic::Vertex *newVertex = writeVertex();
+        desktop::Vertex *newVertex = writeVertex();
         newVertex->Normal.Set(0, 0, 1, 0);
         newVertex->Pos.Set((prev_x + next_x) / 2, (prev_y + next_y) / 2, 0.0f, 1.0f);
         newVertex->TexCoord.x = 0.0f;
@@ -729,35 +729,35 @@ bool GeometryGenerator::generateRhombus(const Rhombus2dParameters &params) {
         return false;
     }
 
-    dbasic::Vertex *vertex;
+    desktop::Vertex *vertex;
 
     vertex = writeVertex();
-    vertex->Normal = ysMath::Constants::ZAxis;
-    vertex->Pos = ysMath::LoadVector(
+    vertex->Normal = desktop::math::Constants::ZAxis;
+    vertex->Pos = desktop::math::LoadVector(
             params.center_x + params.shear + params.width / 2,
             params.center_y + params.height / 2);
-    vertex->TexCoord = ysVector2(1.0f, 1.0f);
+    vertex->TexCoord = desktop::Vector2(1.0f, 1.0f);
 
     vertex = writeVertex();
-    vertex->Normal = ysMath::Constants::ZAxis;
-    vertex->Pos = ysMath::LoadVector(
+    vertex->Normal = desktop::math::Constants::ZAxis;
+    vertex->Pos = desktop::math::LoadVector(
             params.center_x + params.shear - params.width / 2,
             params.center_y + params.height / 2);
-    vertex->TexCoord = ysVector2(0.0f, 1.0f);
+    vertex->TexCoord = desktop::Vector2(0.0f, 1.0f);
 
     vertex = writeVertex();
-    vertex->Normal = ysMath::Constants::ZAxis;
-    vertex->Pos = ysMath::LoadVector(
+    vertex->Normal = desktop::math::Constants::ZAxis;
+    vertex->Pos = desktop::math::LoadVector(
         params.center_x - params.shear + params.width / 2,
         params.center_y - params.height / 2);
-    vertex->TexCoord = ysVector2(1.0f, 0.0f);
+    vertex->TexCoord = desktop::Vector2(1.0f, 0.0f);
 
     vertex = writeVertex();
-    vertex->Normal = ysMath::Constants::ZAxis;
-    vertex->Pos = ysMath::LoadVector(
+    vertex->Normal = desktop::math::Constants::ZAxis;
+    vertex->Pos = desktop::math::LoadVector(
             params.center_x - params.shear - params.width / 2,
             params.center_y - params.height / 2);
-    vertex->TexCoord = ysVector2(0.0f, 0.0f);
+    vertex->TexCoord = desktop::Vector2(0.0f, 0.0f);
 
     writeFace(0, 1, 2);
     writeFace(1, 3, 2);
@@ -772,31 +772,31 @@ bool GeometryGenerator::generateTrapezoid2d(const Trapezoid2dParameters &params)
         return false;
     }
 
-    dbasic::Vertex *vertex;
+    desktop::Vertex *vertex;
 
     vertex = writeVertex();
-    vertex->Normal = ysMath::Constants::ZAxis;
-    vertex->Pos = ysMath::LoadVector(
+    vertex->Normal = desktop::math::Constants::ZAxis;
+    vertex->Pos = desktop::math::LoadVector(
         params.center_x - params.base / 2, params.center_y - params.height / 2);
-    vertex->TexCoord = ysVector2(1.0f, 1.0f);
+    vertex->TexCoord = desktop::Vector2(1.0f, 1.0f);
 
     vertex = writeVertex();
-    vertex->Normal = ysMath::Constants::ZAxis;
-    vertex->Pos = ysMath::LoadVector(
+    vertex->Normal = desktop::math::Constants::ZAxis;
+    vertex->Pos = desktop::math::LoadVector(
         params.center_x + params.base / 2, params.center_y - params.height / 2);
-    vertex->TexCoord = ysVector2(0.0f, 1.0f);
+    vertex->TexCoord = desktop::Vector2(0.0f, 1.0f);
 
     vertex = writeVertex();
-    vertex->Normal = ysMath::Constants::ZAxis;
-    vertex->Pos = ysMath::LoadVector(
+    vertex->Normal = desktop::math::Constants::ZAxis;
+    vertex->Pos = desktop::math::LoadVector(
         params.center_x - params.top / 2, params.center_y + params.height / 2);
-    vertex->TexCoord = ysVector2(1.0f, 0.0f);
+    vertex->TexCoord = desktop::Vector2(1.0f, 0.0f);
 
     vertex = writeVertex();
-    vertex->Normal = ysMath::Constants::ZAxis;
-    vertex->Pos = ysMath::LoadVector(
+    vertex->Normal = desktop::math::Constants::ZAxis;
+    vertex->Pos = desktop::math::LoadVector(
         params.center_x + params.top / 2, params.center_y + params.height / 2);
-    vertex->TexCoord = ysVector2(1.0f, 0.0f);
+    vertex->TexCoord = desktop::Vector2(1.0f, 0.0f);
 
     writeFace(0, 1, 2);
     writeFace(1, 3, 2);
@@ -816,22 +816,22 @@ bool GeometryGenerator::generateIsoscelesTriangle(
         return false;
     }
 
-    dbasic::Vertex *vertex;
+    desktop::Vertex *vertex;
 
     vertex = writeVertex();
-    vertex->Normal = ysMath::Constants::ZAxis;
-    vertex->Pos = ysMath::LoadVector(x - width / 2, y);
-    vertex->TexCoord = ysVector2(1.0f, 1.0f);
+    vertex->Normal = desktop::math::Constants::ZAxis;
+    vertex->Pos = desktop::math::LoadVector(x - width / 2, y);
+    vertex->TexCoord = desktop::Vector2(1.0f, 1.0f);
 
     vertex = writeVertex();
-    vertex->Normal = ysMath::Constants::ZAxis;
-    vertex->Pos = ysMath::LoadVector(x + width / 2, y);
-    vertex->TexCoord = ysVector2(0.0f, 1.0f);
+    vertex->Normal = desktop::math::Constants::ZAxis;
+    vertex->Pos = desktop::math::LoadVector(x + width / 2, y);
+    vertex->TexCoord = desktop::Vector2(0.0f, 1.0f);
 
     vertex = writeVertex();
-    vertex->Normal = ysMath::Constants::ZAxis;
-    vertex->Pos = ysMath::LoadVector(x, y + height);
-    vertex->TexCoord = ysVector2(1.0f, 0.0f);
+    vertex->Normal = desktop::math::Constants::ZAxis;
+    vertex->Pos = desktop::math::LoadVector(x, y + height);
+    vertex->TexCoord = desktop::Vector2(1.0f, 0.0f);
 
     writeFace(0, 1, 2);
 
@@ -844,15 +844,16 @@ bool GeometryGenerator::startPath(PathParameters &params) {
     const int n = params.n0 + params.n1;
     if (n < 2) return true;
 
-    Point *p2 = (1 >= params.n0) ? params.p1 : params.p0;
-    const int i1 = (1 >= params.n0) ? 0 : 1;
-
-    const float dx = p2[i1].x - params.p0[0].x;
-    const float dy = p2[i1].y - params.p0[0].y;
-    const float length = std::sqrt(dx * dx + dy * dy);
-
-    const float dir_x = dx / length;
-    const float dir_y = dy / length;
+    float dx=0, dy=0, length=0;
+    for (int next=1; next<n; ++next) {
+        const Point *p2 = (next >= params.n0) ? params.p1 : params.p0;
+        const int index = (next >= params.n0) ? next-params.n0 : next;
+        dx=p2[index].x-params.p0[0].x; dy=p2[index].y-params.p0[0].y;
+        length=std::sqrt(dx*dx+dy*dy);
+        if (length!=0) break;
+    }
+    const float dir_x = length==0 ? 0 : dx/length;
+    const float dir_y = length==0 ? 0 : dy/length;
 
     const float perp_x = -dir_y;
     const float perp_y = dir_x;
@@ -861,21 +862,21 @@ bool GeometryGenerator::startPath(PathParameters &params) {
         return false;
     }
 
-    dbasic::Vertex *vertex;
+    desktop::Vertex *vertex;
 
     vertex = writeVertex();
-    vertex->Normal = ysMath::Constants::ZAxis;
-    vertex->Pos = ysMath::LoadVector(
+    vertex->Normal = desktop::math::Constants::ZAxis;
+    vertex->Pos = desktop::math::LoadVector(
         params.p0[0].x + perp_x * params.width / 2,
         params.p0[0].y + perp_y * params.width / 2);
-    vertex->TexCoord = ysVector2(0.0f, 0.0f);
+    vertex->TexCoord = desktop::Vector2(0.0f, 0.0f);
 
     vertex = writeVertex();
-    vertex->Normal = ysMath::Constants::ZAxis;
-    vertex->Pos = ysMath::LoadVector(
+    vertex->Normal = desktop::math::Constants::ZAxis;
+    vertex->Pos = desktop::math::LoadVector(
         params.p0[0].x - perp_x * params.width / 2,
         params.p0[0].y - perp_y * params.width / 2);
-    vertex->TexCoord = ysVector2(0.0f, 0.0f);
+    vertex->TexCoord = desktop::Vector2(0.0f, 0.0f);
 
     params.v0 = 0;
     params.v1 = 1;
@@ -896,20 +897,20 @@ bool GeometryGenerator::generatePathSegment(PathParameters &params, bool detache
     const int i0 = (params.i >= params.n0) ? (params.i - params.n0) : params.i;
 
     if (params.i == n - 1) {
-        dbasic::Vertex *vertex;
+        desktop::Vertex *vertex;
         vertex = writeVertex();
-        vertex->Normal = ysMath::Constants::ZAxis;
-        vertex->Pos = ysMath::LoadVector(
+        vertex->Normal = desktop::math::Constants::ZAxis;
+        vertex->Pos = desktop::math::LoadVector(
             p0[i0].x + params.perp_x * params.width / 2,
             p0[i0].y + params.perp_y * params.width / 2);
-        vertex->TexCoord = ysVector2(0.0f, 0.0f);
+        vertex->TexCoord = desktop::Vector2(0.0f, 0.0f);
 
         vertex = writeVertex();
-        vertex->Normal = ysMath::Constants::ZAxis;
-        vertex->Pos = ysMath::LoadVector(
+        vertex->Normal = desktop::math::Constants::ZAxis;
+        vertex->Pos = desktop::math::LoadVector(
             p0[i0].x - params.perp_x * params.width / 2,
             p0[i0].y - params.perp_y * params.width / 2);
-        vertex->TexCoord = ysVector2(0.0f, 0.0f);
+        vertex->TexCoord = desktop::Vector2(0.0f, 0.0f);
 
         if (!detached) {
             writeFace(params.v0, params.v1, params.v1 + 1);
@@ -926,8 +927,8 @@ bool GeometryGenerator::generatePathSegment(PathParameters &params, bool detache
     const float dy1 = p1[i1].y - p0[i0].y;
     const float length = std::sqrt(dx1 * dx1 + dy1 * dy1);
 
-    const float dir_x = dx1 / length;
-    const float dir_y = dy1 / length;
+    const float dir_x = length==0 ? params.pdir_x : dx1/length;
+    const float dir_y = length==0 ? params.pdir_y : dy1/length;
 
     float perp_x = -dir_y - params.pdir_y;
     float perp_y = dir_x + params.pdir_x;
@@ -941,21 +942,21 @@ bool GeometryGenerator::generatePathSegment(PathParameters &params, bool detache
         perp_y /= perp_l;
     }
 
-    dbasic::Vertex *vertex;
+    desktop::Vertex *vertex;
 
     vertex = writeVertex();
-    vertex->Normal = ysMath::Constants::ZAxis;
-    vertex->Pos = ysMath::LoadVector(
+    vertex->Normal = desktop::math::Constants::ZAxis;
+    vertex->Pos = desktop::math::LoadVector(
         p0[i0].x + perp_x * params.width / 2,
         p0[i0].y + perp_y * params.width / 2);
-    vertex->TexCoord = ysVector2(0.0f, 0.0f);
+    vertex->TexCoord = desktop::Vector2(0.0f, 0.0f);
 
     vertex = writeVertex();
-    vertex->Normal = ysMath::Constants::ZAxis;
-    vertex->Pos = ysMath::LoadVector(
+    vertex->Normal = desktop::math::Constants::ZAxis;
+    vertex->Pos = desktop::math::LoadVector(
         p0[i0].x - perp_x * params.width / 2,
         p0[i0].y - perp_y * params.width / 2);
-    vertex->TexCoord = ysVector2(0.0f, 0.0f);
+    vertex->TexCoord = desktop::Vector2(0.0f, 0.0f);
 
     if (!detached) {
         writeFace(params.v0, params.v1, params.v1 + 1);
@@ -972,7 +973,7 @@ bool GeometryGenerator::generatePathSegment(PathParameters &params, bool detache
     return true;
 }
 
-dbasic::Vertex *GeometryGenerator::writeVertex() {
+desktop::Vertex *GeometryGenerator::writeVertex() {
     return &m_vertexData[m_state.vertexPointer++];
 }
 
@@ -1007,12 +1008,12 @@ bool GeometryGenerator::checkCapacity(int vertexCount, int indexCount) {
         (indexCount + m_state.indexPointer) <= m_indexBufferSize;
 }
 
-ysVector GeometryGenerator::findOrthogonal(const ysVector &v) {
-    ysVector base = ysMath::Constants::XAxis;
-    const float s = ysMath::GetScalar(ysMath::Dot(v, base));
+desktop::Vector GeometryGenerator::findOrthogonal(const desktop::Vector &v) {
+    desktop::Vector base = desktop::math::Constants::XAxis;
+    const float s = desktop::math::GetScalar(desktop::math::Dot(v, base));
     if (abs(s) > 0.99f) {
-        base = ysMath::Constants::YAxis;
+        base = desktop::math::Constants::YAxis;
     }
 
-    return ysMath::Normalize(ysMath::Cross(v, base));
+    return desktop::math::Normalize(desktop::math::Cross(v, base));
 }

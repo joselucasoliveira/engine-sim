@@ -25,8 +25,10 @@
 #include "engine_session.h"
 #include "resource_paths.h"
 
-#include "delta.h"
+#include "desktop_host.h"
+#ifdef ATG_ENGINE_SIM_VIDEO_CAPTURE
 #include "dtv.h"
+#endif
 
 #include <vector>
 #include <memory>
@@ -49,7 +51,7 @@ class EngineSimApplication {
 
         static std::string getBuildVersion() { return s_buildVersion; }
 
-        void initialize(void *instance, ysContextObject::DeviceAPI api,
+        void initialize(std::unique_ptr<desktop::Host> host,
                         const engine_sim::ResourceOptions &resources = {});
         void run();
         void destroy();
@@ -65,34 +67,34 @@ class EngineSimApplication {
         void drawGenerated(
                 const GeometryGenerator::GeometryIndices &indices,
                 int layer,
-                dbasic::StageEnableFlags flags);
+                desktop::StageEnableFlags flags);
         void configure(const ApplicationSettings &settings);
         GeometryGenerator *getGeometryGenerator() { return &m_geometryGenerator; }
 
         Shaders *getShaders() { return &m_shaders; }
-        dbasic::TextRenderer *getTextRenderer() { return &m_textRenderer; }
+        desktop::TextRenderer *getTextRenderer() { return &m_textRenderer; }
 
         void createObjects(Engine *engine);
         void destroyObjects();
-        dbasic::DeltaEngine *getEngine() { return &m_engine; }
+        desktop::Host *getEngine() { return m_host.get(); }
 
         float pixelsToUnits(float pixels) const;
         float unitsToPixels(float units) const;
 
-        ysVector getBackgroundColor() const { return m_background; }
-        ysVector getForegroundColor() const { return m_foreground; }
-        ysVector getHightlight1Color() const { return m_highlight1; }
-        ysVector getPink() const { return m_pink; }
-        ysVector getGreen() const { return m_green; }
-        ysVector getYellow() const { return m_yellow; }
-        ysVector getRed() const { return m_red; }
-        ysVector getOrange() const { return m_orange; }
-        ysVector getBlue() const { return m_blue; }
+        desktop::Vector getBackgroundColor() const { return m_background; }
+        desktop::Vector getForegroundColor() const { return m_foreground; }
+        desktop::Vector getHightlight1Color() const { return m_highlight1; }
+        desktop::Vector getPink() const { return m_pink; }
+        desktop::Vector getGreen() const { return m_green; }
+        desktop::Vector getYellow() const { return m_yellow; }
+        desktop::Vector getRed() const { return m_red; }
+        desktop::Vector getOrange() const { return m_orange; }
+        desktop::Vector getBlue() const { return m_blue; }
 
         const SimulationObject::ViewParameters &getViewParameters() const;
         void setViewLayer(int view) { m_viewParameters.Layer0 = view; }
 
-        dbasic::AssetManager *getAssetManager() { return &m_assetManager; }
+        desktop::Host *getAssetManager() { return m_host.get(); }
 
         int getScreenWidth() const { return m_screenWidth; }
         int getScreenHeight() const { return m_screenHeight; }
@@ -128,21 +130,16 @@ class EngineSimApplication {
         int m_screenHeight;
         
         ApplicationSettings m_applicationSettings;
-        dbasic::ShaderSet m_shaderSet;
         Shaders m_shaders;
 
-        dbasic::DeltaEngine m_engine;
-        dbasic::AssetManager m_assetManager;
+        std::unique_ptr<desktop::Host> m_host;
 
         std::string m_assetPath;
         engine_sim::ResourcePaths m_resources;
 
-        ysRenderTarget *m_mainRenderTarget;
-        ysGPUBuffer *m_geometryVertexBuffer;
-        ysGPUBuffer *m_geometryIndexBuffer;
 
         GeometryGenerator m_geometryGenerator;
-        dbasic::TextRenderer m_textRenderer;
+        desktop::TextRenderer m_textRenderer;
 
         std::vector<SimulationObject *> m_objects;
         Engine *m_iceEngine;
@@ -165,8 +162,6 @@ class EngineSimApplication {
         SimulationObject::ViewParameters m_viewParameters;
 
         bool m_windowCreated = false;
-        bool m_shaderSetReady = false;
-        bool m_assetsReady = false;
         bool m_destroyed = false;
         std::string m_loadError;
 
@@ -185,22 +180,20 @@ class EngineSimApplication {
         int m_screenResolutionIndex;
         bool m_recording;
 
-        ysVector m_background;
-        ysVector m_foreground;
-        ysVector m_shadow;
-        ysVector m_highlight1;
-        ysVector m_highlight2;
+        desktop::Vector m_background;
+        desktop::Vector m_foreground;
+        desktop::Vector m_shadow;
+        desktop::Vector m_highlight1;
+        desktop::Vector m_highlight2;
 
-        ysVector m_pink;
-        ysVector m_orange;
-        ysVector m_yellow;
-        ysVector m_red;
-        ysVector m_green;
-        ysVector m_blue;
+        desktop::Vector m_pink;
+        desktop::Vector m_orange;
+        desktop::Vector m_yellow;
+        desktop::Vector m_red;
+        desktop::Vector m_green;
+        desktop::Vector m_blue;
 
-        ysAudioBuffer *m_outputAudioBuffer;
         AudioBuffer m_audioBuffer;
-        ysAudioSource *m_audioSource;
 
         int m_oscillatorSampleOffset;
         int m_screen;

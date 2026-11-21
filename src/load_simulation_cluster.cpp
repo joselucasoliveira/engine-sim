@@ -1,4 +1,5 @@
 #include "../include/load_simulation_cluster.h"
+#include <climits>
 
 #include "../include/engine_sim_application.h"
 #include "../include/ui_utilities.h"
@@ -130,7 +131,7 @@ void LoadSimulationCluster::update(float dt) {
         m_systemStatusLights[i] = (1 - alpha) * m_systemStatusLights[i] + alpha * next;
     }
 
-    if (m_app->getEngine()->ProcessKeyDown(ysKey::Code::I)) {
+    if (m_app->getEngine()->ProcessKeyDown(desktop::Key::I)) {
         std::stringstream ss;
         ss << std::setprecision(0) << std::fixed;
         if (m_powerUnits == "hp") {

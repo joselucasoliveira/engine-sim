@@ -67,9 +67,9 @@ void CylinderTemperatureGauge::render() {
 
     GeometryGenerator *generator = m_app->getGeometryGenerator();
 
-    const ysVector background = m_app->getBackgroundColor();
-    const ysVector hot = mix(background, m_app->getRed(), 0.1f);
-    const ysVector cold = mix(background, m_app->getBlue(), 0.001f);
+    const desktop::Vector background = m_app->getBackgroundColor();
+    const desktop::Vector hot = mix(background, m_app->getRed(), 0.1f);
+    const desktop::Vector cold = mix(background, m_app->getBlue(), 0.001f);
 
     for (int i = 0; i < m_engine->getCylinderCount(); ++i) {
         Piston *piston = m_engine->getPiston(i);

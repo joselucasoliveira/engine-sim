@@ -42,7 +42,7 @@ class Oscilloscope : public UiElement {
         bool m_drawReverse;
         bool m_drawZero;
 
-        ysVector i_color;
+        desktop::Vector i_color;
 
     protected:
         DataPoint *m_points;

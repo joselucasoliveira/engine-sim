@@ -54,7 +54,7 @@ Piston *SimulationObject::getForemostPiston(CylinderBank *bank, int layer) {
 
 void SimulationObject::resetShader() {
     m_app->getShaders()->ResetBaseColor();
-    m_app->getShaders()->SetObjectTransform(ysMath::LoadIdentity());
+    m_app->getShaders()->SetObjectTransform(desktop::math::LoadIdentity());
 }
 
 void SimulationObject::setTransform(
@@ -68,23 +68,23 @@ void SimulationObject::setTransform(
     double p_x, p_y;
     rigidBody->localToWorld(lx, ly, &p_x, &p_y);
 
-    const ysMatrix rot = ysMath::RotationTransform(
-            ysMath::Constants::ZAxis,
+    const desktop::Matrix rot = desktop::math::RotationTransform(
+            desktop::math::Constants::ZAxis,
             (float)rigidBody->theta + angle);
-    const ysMatrix trans = ysMath::TranslationTransform(
-            ysMath::LoadVector((float)p_x, (float)p_y, z));
-    const ysMatrix scaleTransform = ysMath::ScaleTransform(ysMath::LoadScalar(scale));
+    const desktop::Matrix trans = desktop::math::TranslationTransform(
+            desktop::math::LoadVector((float)p_x, (float)p_y, z));
+    const desktop::Matrix scaleTransform = desktop::math::ScaleTransform(desktop::math::LoadScalar(scale));
 
     m_app->getShaders()->SetObjectTransform(
-        ysMath::MatMult(ysMath::MatMult(trans, rot), scaleTransform));
+        desktop::math::MatMult(desktop::math::MatMult(trans, rot), scaleTransform));
 }
 
-ysVector SimulationObject::tintByLayer(const ysVector &col, int layers) const {
-    ysVector result = col;
+desktop::Vector SimulationObject::tintByLayer(const desktop::Vector &col, int layers) const {
+    desktop::Vector result = col;
     for (int i = 0; i < layers; ++i) {
-        result = ysMath::Add(
-            ysMath::Mul(result, ysMath::LoadScalar(0.3f)),
-            ysMath::Mul(m_app->getBackgroundColor(), ysMath::LoadScalar(0.7f))
+        result = desktop::math::Add(
+            desktop::math::Mul(result, desktop::math::LoadScalar(0.3f)),
+            desktop::math::Mul(m_app->getBackgroundColor(), desktop::math::LoadScalar(0.7f))
         );
     }
 

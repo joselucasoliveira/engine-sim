@@ -8,7 +8,7 @@
 class Gauge : public UiElement {
     public:
         struct Band {
-            ysVector color = ysMath::Constants::One;
+            desktop::Vector color = desktop::math::Constants::One;
             float start = 0.0;
             float end = 0.0;
             float width = 0.0;

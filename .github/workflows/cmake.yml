@@ -51,7 +51,8 @@ jobs:
           cases = list(ElementTree.parse(sys.argv[1]).getroot().iter("testcase"))
           names = {case.attrib["name"] for case in cases}
           expected = {"GasSystemTests": 19, "FunctionTests": 5, "SynthesizerTests": 7,
-                      "RingBuffer": 3, "Convolution": 2, "ThreadedSynthesis": 5, "WaveReader": 8, "Resources": 5, "SceneReader": 4}
+                      "RingBuffer": 3, "Convolution": 2, "ThreadedSynthesis": 5, "WaveReader": 8, "Resources": 5, "SceneReader": 4,
+                      "HostContract": 4}
           assert len(cases) == len(names) == sum(expected.values())
           for suite, count in expected.items():
               assert sum(name.startswith(suite + ".") for name in names) == count
@@ -141,7 +142,7 @@ jobs:
           from xml.etree import ElementTree
           cases = list(ElementTree.parse(sys.argv[1]).getroot().iter("testcase"))
           names = {case.attrib["name"] for case in cases}
-          assert len(cases) == len(names) == (83 if sys.argv[2] == "asan" else 7)
+          assert len(cases) == len(names) == (95 if sys.argv[2] == "asan" else 7)
           assert sum(name.startswith("ThreadedSynthesis.") for name in names) == 5
           assert {"Load.FailedCandidatePreservesRunningSession",
                   "Load.RepeatedReplacementRetainsSignalAndCleanup"} <= names
@@ -153,6 +154,8 @@ jobs:
               assert sum(name.startswith("Resources.") for name in names) == 5
               assert sum(name.startswith("SceneReader.") for name in names) == 4
               assert "StagedResources" in names
+              assert sum(name.startswith("HostContract.") for name in names) == 4
+              assert sum(name.startswith("HostApplication.") for name in names) == 8
           assert all(case.find("skipped") is None and case.find("failure") is None for case in cases)
           PY
             if test '${{ matrix.preset }}' = asan; then
@@ -240,7 +243,7 @@ jobs:
               Invoke-Checked 'ctest' @('--preset', $preset, '-C', $config, '--no-tests=error', '--output-on-failure', '--output-junit', $xml)
               [xml]$results = Get-Content $xml
               $cases = @($results.SelectNodes('//testcase'))
-              if ($cases.Count -ne 83 -or @($results.SelectNodes('//skipped | //failure')).Count -ne 0) { throw 'Missing or failed sanitizer tests' }
+              if ($cases.Count -ne 95 -or @($results.SelectNodes('//skipped | //failure')).Count -ne 0) { throw 'Missing or failed sanitizer tests' }
             }
           } finally {
             Stop-Transcript

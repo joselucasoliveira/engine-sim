@@ -39,7 +39,7 @@ void UiManager::update(float dt) {
         m_hover = newHover;
     }
 
-    if (m_app->getEngine()->ProcessMouseButtonDown(ysMouse::Button::Left)) {
+    if (m_app->getEngine()->ProcessMouseButtonDown(desktop::Button::Left)) {
         m_dragStart = m_hover;
         m_mouse_p0 = mousePos;
         if (m_dragStart != nullptr) {
@@ -47,7 +47,7 @@ void UiManager::update(float dt) {
             m_dragStart->onMouseDown(m_dragStart->worldToLocal(mousePos));
         }
     }
-    else if (m_app->getEngine()->ProcessMouseButtonUp(ysMouse::Button::Left)) {
+    else if (m_app->getEngine()->ProcessMouseButtonUp(desktop::Button::Left)) {
         UiElement *dragRelease = m_hover;
 
         if (m_dragStart != nullptr) m_dragStart->onMouseUp(mousePos);

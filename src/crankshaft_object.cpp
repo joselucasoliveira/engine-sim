@@ -19,16 +19,16 @@ void CrankshaftObject::generateGeometry() {
 void CrankshaftObject::render(const ViewParameters *view) {
     if (view->Sublayer != 2) return;
 
-    const ysVector grey0 = mix(m_app->getBackgroundColor(), m_app->getForegroundColor(), 0.7f);
-    const ysVector grey1 = mix(m_app->getBackgroundColor(), m_app->getForegroundColor(), 0.6f);
-    const ysVector grey2 = mix(m_app->getBackgroundColor(), m_app->getForegroundColor(), 0.2f);
+    const desktop::Vector grey0 = mix(m_app->getBackgroundColor(), m_app->getForegroundColor(), 0.7f);
+    const desktop::Vector grey1 = mix(m_app->getBackgroundColor(), m_app->getForegroundColor(), 0.6f);
+    const desktop::Vector grey2 = mix(m_app->getBackgroundColor(), m_app->getForegroundColor(), 0.2f);
 
     const int journalCount = m_crankshaft->getRodJournalCount();
     for (int i = 0; i < journalCount; ++i) {
         const int layer = i;
         if (layer > view->Layer1 || layer < view->Layer0) continue;
 
-        const ysVector col = tintByLayer(grey0, layer - view->Layer0);
+        const desktop::Vector col = tintByLayer(grey0, layer - view->Layer0);
 
         resetShader();
         setTransform(

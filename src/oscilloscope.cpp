@@ -20,7 +20,7 @@ Oscilloscope::Oscilloscope() {
     m_dynamicallyResizeX = false;
     m_dynamicallyResizeY = true;
 
-    i_color = ysMath::Constants::One;
+    i_color = desktop::math::Constants::One;
 }
 
 Oscilloscope::~Oscilloscope() {
@@ -150,8 +150,8 @@ Point Oscilloscope::dataPointToRenderPosition(
     const float width = bounds.width();
     const float height = bounds.height();
 
-    const float s_x = (float)((p.x - m_xMin) / (m_xMax - m_xMin));
-    const float s_y = (float)((p.y - m_yMin) / (m_yMax - m_yMin));
+    const float s_x = m_xMax==m_xMin ? 0.5f : (float)((p.x-m_xMin)/(m_xMax-m_xMin));
+    const float s_y = m_yMax==m_yMin ? 0.5f : (float)((p.y-m_yMin)/(m_yMax-m_yMin));
 
     const Point local = { s_x * width, s_y * height };
 

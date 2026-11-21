@@ -1,4 +1,5 @@
 #include "../include/right_gauge_cluster.h"
+#include <climits>
 
 #include "../include/units.h"
 #include "../include/gauge.h"
