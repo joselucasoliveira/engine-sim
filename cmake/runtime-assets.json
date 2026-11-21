@@ -657,7 +657,7 @@
       "source": "project",
       "path": "THIRD_PARTY_NOTICES.md",
       "destination": "licenses/THIRD_PARTY_NOTICES.md",
-      "sha256": "1d7f97a779b12251748b71e3322511daca594b83d3623b096e15edfb346683d0",
+      "sha256": "00d76357ea7e2e59acc627be23af921b8aee673642d20cc750475f87dad4c1c2",
       "license": "Project notices",
       "distribution": "permitted",
       "component": "base"
@@ -669,7 +669,10 @@
       "sha256": "5eef0f1c19cfaad07d84dd9ac129cd439a9057bfd4b8cb8e59b02a7fe1850349",
       "license": "Delta Studio MIT",
       "distribution": "permitted",
-      "component": "desktop"
+      "component": "desktop",
+      "platforms": [
+        "Windows"
+      ]
     },
     {
       "source": "delta",
@@ -678,7 +681,10 @@
       "sha256": "201df110e8dd8f19da40e5ad953b25bcac34dcb1bd14c7b8e02c9ce0b5ac0ca3",
       "license": "Original Silkscreen custom license; unmodified file",
       "distribution": "permitted",
-      "component": "desktop"
+      "component": "desktop",
+      "platforms": [
+        "Windows"
+      ]
     },
     {
       "source": "delta",
@@ -687,7 +693,10 @@
       "sha256": "80a34fc68913c469af72872ee0e4e0b3ef101597740677fdcdcdfcb3606f9bea",
       "license": "Original Silkscreen custom license; unmodified file",
       "distribution": "permitted",
-      "component": "desktop"
+      "component": "desktop",
+      "platforms": [
+        "Windows"
+      ]
     },
     {
       "source": "delta",
@@ -696,7 +705,10 @@
       "sha256": "80a34fc68913c469af72872ee0e4e0b3ef101597740677fdcdcdfcb3606f9bea",
       "license": "Original Silkscreen custom license",
       "distribution": "permitted",
-      "component": "desktop"
+      "component": "desktop",
+      "platforms": [
+        "Windows"
+      ]
     },
     {
       "source": "delta",
@@ -733,6 +745,158 @@
       "platforms": [
         "Windows"
       ]
+    },
+    {
+      "source": "project",
+      "path": "assets/shaders/sdl/engine_sim.vertex.spv",
+      "destination": "delta/shaders/sdl/engine_sim.vertex.spv",
+      "sha256": "858f892f8f675ed8085a2560d09ee5fc63aaa12412243194754ba4120b46a413",
+      "license": "MIT, Ange Yaghi; see the shader LICENSE.txt",
+      "distribution": "permitted",
+      "component": "desktop",
+      "platforms": [
+        "Linux",
+        "Darwin"
+      ]
+    },
+    {
+      "source": "project",
+      "path": "assets/shaders/sdl/engine_sim.hlsl",
+      "destination": "delta/shaders/sdl/engine_sim.hlsl",
+      "sha256": "3f749799fa4cc07de425a831cf7acb47d1cc7803514fc2837e5871e45a571a67",
+      "license": "MIT, Ange Yaghi; see the shader LICENSE.txt",
+      "distribution": "permitted",
+      "component": "desktop",
+      "platforms": [
+        "Linux",
+        "Darwin"
+      ]
+    },
+    {
+      "source": "project",
+      "path": "assets/shaders/sdl/manifest.json",
+      "destination": "delta/shaders/sdl/manifest.json",
+      "sha256": "4ce9cf156987f78ace768981141ed90dad236feb25723e130e15b482ec713f5e",
+      "license": "MIT, Ange Yaghi; see the shader LICENSE.txt",
+      "distribution": "permitted",
+      "component": "desktop",
+      "platforms": [
+        "Linux",
+        "Darwin"
+      ]
+    },
+    {
+      "source": "project",
+      "path": "assets/shaders/sdl/engine_sim.fragment.spv",
+      "destination": "delta/shaders/sdl/engine_sim.fragment.spv",
+      "sha256": "f7387ab891e641af8e8384740088e35dc8f1893ebce8999e9d358434ca24dbce",
+      "license": "MIT, Ange Yaghi; see the shader LICENSE.txt",
+      "distribution": "permitted",
+      "component": "desktop",
+      "platforms": [
+        "Linux",
+        "Darwin"
+      ]
+    },
+    {
+      "source": "project",
+      "path": "assets/shaders/sdl/LICENSE.txt",
+      "destination": "delta/shaders/sdl/LICENSE.txt",
+      "sha256": "8fead2f33d4124444a7dca7863e8116fbadae8703b2893003aa65e5b9c788977",
+      "license": "MIT, Ange Yaghi; see the shader LICENSE.txt",
+      "distribution": "permitted",
+      "component": "desktop",
+      "platforms": [
+        "Linux",
+        "Darwin"
+      ]
+    },
+    {
+      "source": "project",
+      "path": "assets/shaders/sdl/engine_sim.fragment.msl",
+      "destination": "delta/shaders/sdl/engine_sim.fragment.msl",
+      "sha256": "96de4069df624dc01e93113bbd75ed5da245819c2b36f17135d19cd51abf4679",
+      "license": "MIT, Ange Yaghi; see the shader LICENSE.txt",
+      "distribution": "permitted",
+      "component": "desktop",
+      "platforms": [
+        "Linux",
+        "Darwin"
+      ]
+    },
+    {
+      "source": "project",
+      "path": "assets/shaders/sdl/engine_sim.vertex.msl",
+      "destination": "delta/shaders/sdl/engine_sim.vertex.msl",
+      "sha256": "81583617d33a7c676c158f9adf87e84c5217cede129da1b13d4bb871fdd45966",
+      "license": "MIT, Ange Yaghi; see the shader LICENSE.txt",
+      "distribution": "permitted",
+      "component": "desktop",
+      "platforms": [
+        "Linux",
+        "Darwin"
+      ]
+    },
+    {
+      "source": "project",
+      "path": "assets/licenses/delta-studio.txt",
+      "destination": "licenses/delta-studio.txt",
+      "sha256": "5eef0f1c19cfaad07d84dd9ac129cd439a9057bfd4b8cb8e59b02a7fe1850349",
+      "license": "Delta Studio MIT",
+      "distribution": "permitted",
+      "component": "desktop",
+      "platforms": [
+        "Linux",
+        "Darwin"
+      ]
+    },
+    {
+      "source": "project",
+      "path": "assets/fonts/Silkscreen/slkscr.ttf",
+      "destination": "delta/fonts/Silkscreen/slkscr.ttf",
+      "sha256": "201df110e8dd8f19da40e5ad953b25bcac34dcb1bd14c7b8e02c9ce0b5ac0ca3",
+      "license": "Original Silkscreen custom license; unmodified file",
+      "distribution": "permitted",
+      "component": "desktop",
+      "platforms": [
+        "Linux",
+        "Darwin"
+      ]
+    },
+    {
+      "source": "project",
+      "path": "assets/fonts/Silkscreen/Kottke Silkscreen License.txt",
+      "destination": "delta/fonts/Silkscreen/Kottke Silkscreen License.txt",
+      "sha256": "80a34fc68913c469af72872ee0e4e0b3ef101597740677fdcdcdfcb3606f9bea",
+      "license": "Original Silkscreen custom license; unmodified file",
+      "distribution": "permitted",
+      "component": "desktop",
+      "platforms": [
+        "Linux",
+        "Darwin"
+      ]
+    },
+    {
+      "source": "project",
+      "path": "assets/fonts/Silkscreen/Kottke Silkscreen License.txt",
+      "destination": "licenses/Silkscreen.txt",
+      "sha256": "80a34fc68913c469af72872ee0e4e0b3ef101597740677fdcdcdfcb3606f9bea",
+      "license": "Original Silkscreen custom license",
+      "distribution": "permitted",
+      "component": "desktop",
+      "platforms": [
+        "Linux",
+        "Darwin"
+      ]
+    },
+    {
+      "source": "project",
+      "path": "assets/licenses/stb_truetype-MIT.txt",
+      "destination": "licenses/stb_truetype-MIT.txt",
+      "sha256": "b10585c53736871946f332cf905f2d50a57510af0922f5739fa4b25444aa690d",
+      "license": "MIT, Sean Barrett, copyright 2017",
+      "distribution": "permitted",
+      "component": "desktop"
     }
   ]
 }

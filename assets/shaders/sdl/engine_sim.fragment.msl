@@ -1,0 +1,11 @@
+// Adapted from Open Engine Simulator 1e226ee7 and Delta Studio b7d0a046, MIT; see LICENSE.txt.
+#include <metal_stdlib>
+using namespace metal;
+struct FragmentUniforms { float4 baseColor; uint glyph; uint padding0; uint padding1; uint padding2; };
+struct FragmentInput { float2 texcoord [[user(locn0)]]; };
+float srgb(float value) { return value < 0.0031308 ? value * 12.92 : 1.055 * pow(value, 1.0 / 2.4) - 0.055; }
+fragment float4 PSMain(FragmentInput input [[stage_in]], constant FragmentUniforms &u [[buffer(0)]],
+                      texture2d<float> atlas [[texture(0)]], sampler glyphSampler [[sampler(0)]]) {
+    if (u.glyph != 0) return float4(u.baseColor.rgb, u.baseColor.a * atlas.sample(glyphSampler, input.texcoord).r);
+    return float4(srgb(u.baseColor.r), srgb(u.baseColor.g), srgb(u.baseColor.b), u.baseColor.a);
+}

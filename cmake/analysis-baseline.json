@@ -7,5 +7,55 @@
     "review": "The legacy discarded random draw is deliberate compatibility behavior. Removing it shifts every following random sample and the frozen PCM. This finding is retained in raw analyzer reports; no analyzer checker is disabled.",
     "owner": "Synthesis signal compatibility",
     "removal_condition": "Remove this entry only when the discarded draw is explicitly preserved without the dead store, or a separately reviewed RNG policy change passes its new frozen signal gates. Any different source line, file, diagnostic or new finding fails analysis."
+  },
+  {
+    "file": "include/third_party/stb_truetype.h",
+    "check": "deadcode.DeadStores",
+    "description": "Value stored to 'classDefTable' is never read",
+    "source_line": "classDefTable = classDef1ValueArray + 2 * glyphCount;",
+    "source_sha256": "1864b14ba01d5af3d3d55792cce3d90dec5012fc63646dfd784e1c20eaa74116",
+    "review": "Unused local assignment inherited from stb_truetype 1.24. The vendored copy differs from the original Delta Studio and Open Engine Simulator copies only in one indentation correction. C/C++ tokens, license text, and all 96 original glyph metrics and coverage masks remain unchanged. No checker is disabled.",
+    "owner": "Upstream stb_truetype 1.24",
+    "removal_condition": "Review or remove this entry when the pinned header changes or upstream corrects the assignment. The complete source hash, file, checker, description and source line must all match."
+  },
+  {
+    "file": "include/third_party/stb_truetype.h",
+    "check": "deadcode.DeadStores",
+    "description": "Value stored to 'classDefTable' is never read",
+    "source_line": "classDefTable = classRangeRecords + 6 * classRangeCount;",
+    "source_sha256": "1864b14ba01d5af3d3d55792cce3d90dec5012fc63646dfd784e1c20eaa74116",
+    "review": "Unused local assignment inherited from stb_truetype 1.24. The vendored copy differs from the original Delta Studio and Open Engine Simulator copies only in one indentation correction. C/C++ tokens, license text, and all 96 original glyph metrics and coverage masks remain unchanged. No checker is disabled.",
+    "owner": "Upstream stb_truetype 1.24",
+    "removal_condition": "Review or remove this entry when the pinned header changes or upstream corrects the assignment. The complete source hash, file, checker, description and source line must all match."
+  },
+  {
+    "file": "include/third_party/stb_truetype.h",
+    "check": "deadcode.DeadStores",
+    "description": "Value stored to 'pairSetCount' during its initialization is never read",
+    "source_line": "stbtt_uint16 pairSetCount = ttUSHORT(table + 8);",
+    "source_sha256": "1864b14ba01d5af3d3d55792cce3d90dec5012fc63646dfd784e1c20eaa74116",
+    "review": "Unused local assignment inherited from stb_truetype 1.24. The vendored copy differs from the original Delta Studio and Open Engine Simulator copies only in one indentation correction. C/C++ tokens, license text, and all 96 original glyph metrics and coverage masks remain unchanged. No checker is disabled.",
+    "owner": "Upstream stb_truetype 1.24",
+    "removal_condition": "Review or remove this entry when the pinned header changes or upstream corrects the assignment. The complete source hash, file, checker, description and source line must all match."
+  },
+  {
+    "file": "include/third_party/stb_truetype.h",
+    "check": "deadcode.DeadStores",
+    "description": "Value stored to 'dx' is never read",
+    "source_line": "dx = -dx;",
+    "source_sha256": "1864b14ba01d5af3d3d55792cce3d90dec5012fc63646dfd784e1c20eaa74116",
+    "review": "Unused local assignment inherited from stb_truetype 1.24. The vendored copy differs from the original Delta Studio and Open Engine Simulator copies only in one indentation correction. C/C++ tokens, license text, and all 96 original glyph metrics and coverage masks remain unchanged. No checker is disabled.",
+    "owner": "Upstream stb_truetype 1.24",
+    "removal_condition": "Review or remove this entry when the pinned header changes or upstream corrects the assignment. The complete source hash, file, checker, description and source line must all match."
+  },
+  {
+    "file": "include/third_party/stb_truetype.h",
+    "check": "deadcode.DeadStores",
+    "description": "Although the value stored to 'xb' is used in the enclosing expression, the value is never actually read from 'xb'",
+    "source_line": "t = x0, x0 = xb, xb = t;",
+    "source_sha256": "1864b14ba01d5af3d3d55792cce3d90dec5012fc63646dfd784e1c20eaa74116",
+    "review": "Unused local assignment inherited from stb_truetype 1.24. The vendored copy differs from the original Delta Studio and Open Engine Simulator copies only in one indentation correction. C/C++ tokens, license text, and all 96 original glyph metrics and coverage masks remain unchanged. No checker is disabled.",
+    "owner": "Upstream stb_truetype 1.24",
+    "removal_condition": "Review or remove this entry when the pinned header changes or upstream corrects the assignment. The complete source hash, file, checker, description and source line must all match."
   }
 ]

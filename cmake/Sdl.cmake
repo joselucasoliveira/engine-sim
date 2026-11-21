@@ -36,12 +36,57 @@ endif ()
 add_library(engine-sim-sdl-window STATIC "${PROJECT_SOURCE_DIR}/src/sdl_window.cpp")
 target_link_libraries(engine-sim-sdl-window PUBLIC engine-sim-host PRIVATE SDL3::SDL3-static)
 target_compile_features(engine-sim-sdl-window PUBLIC cxx_std_17)
+file(READ "${PROJECT_SOURCE_DIR}/assets/shaders/sdl/manifest.json" engine_sim_shader_manifest)
+string(JSON engine_sim_shader_count LENGTH "${engine_sim_shader_manifest}" files)
+math(EXPR engine_sim_shader_last "${engine_sim_shader_count}-1")
+foreach(index RANGE 0 ${engine_sim_shader_last})
+    string(JSON name MEMBER "${engine_sim_shader_manifest}" files ${index})
+    string(JSON expected GET "${engine_sim_shader_manifest}" files "${name}")
+    file(SHA256 "${PROJECT_SOURCE_DIR}/assets/shaders/sdl/${name}" actual)
+    if (NOT actual STREQUAL expected)
+        message(FATAL_ERROR "Checked SDL shader differs: ${name}. Use tools/regenerate_shaders.py with an external output.")
+    endif ()
+endforeach ()
+add_library(engine-sim-sdl-renderer STATIC "${PROJECT_SOURCE_DIR}/src/sdl_renderer.cpp" "${PROJECT_SOURCE_DIR}/src/font_atlas.cpp")
+target_link_libraries(engine-sim-sdl-renderer PUBLIC engine-sim-host PRIVATE SDL3::SDL3-static)
+target_compile_features(engine-sim-sdl-renderer PUBLIC cxx_std_17)
 if (BUILD_TESTING)
     add_executable(engine-sim-sdl-window-test "${PROJECT_SOURCE_DIR}/test/sdl_window_tests.cpp")
     target_link_libraries(engine-sim-sdl-window-test PRIVATE engine-sim-sdl-window SDL3::SDL3-static gtest)
     # Listing tests must not initialize a display, including cross/disconnected discovery.
     gtest_discover_tests(engine-sim-sdl-window-test DISCOVERY_TIMEOUT 30
         PROPERTIES LABELS desktop-input TIMEOUT 45 RUN_SERIAL TRUE)
+    find_package(Python3 3.9 COMPONENTS Interpreter REQUIRED)
+    file(SHA256 "${PROJECT_SOURCE_DIR}/cmake/runtime-assets.json" engine_sim_render_resource_hash)
+    set(engine_sim_render_resources "${PROJECT_BINARY_DIR}/render-resources-${engine_sim_render_resource_hash}")
+    file(READ "${PROJECT_SOURCE_DIR}/cmake/runtime-assets.json" engine_sim_runtime_manifest)
+    string(JSON engine_sim_runtime_count LENGTH "${engine_sim_runtime_manifest}" files)
+    math(EXPR engine_sim_runtime_last "${engine_sim_runtime_count}-1")
+    set(engine_sim_render_inputs)
+    foreach(index RANGE 0 ${engine_sim_runtime_last})
+        string(JSON source GET "${engine_sim_runtime_manifest}" files ${index} source)
+        if (source STREQUAL "project")
+            string(JSON path GET "${engine_sim_runtime_manifest}" files ${index} path)
+            list(APPEND engine_sim_render_inputs "${PROJECT_SOURCE_DIR}/${path}")
+        endif ()
+    endforeach ()
+    add_custom_command(OUTPUT "${engine_sim_render_resources}/ready.txt"
+        COMMAND "${Python3_EXECUTABLE}" -B "${PROJECT_SOURCE_DIR}/tools/stage_resources.py"
+            --source "${PROJECT_SOURCE_DIR}" --manifest "${PROJECT_SOURCE_DIR}/cmake/runtime-assets.json"
+            --destination "${engine_sim_render_resources}" --desktop --platform "${CMAKE_SYSTEM_NAME}" --local-validation
+        COMMAND "${CMAKE_COMMAND}" -E touch "${engine_sim_render_resources}/ready.txt"
+        DEPENDS ${engine_sim_render_inputs} "${PROJECT_SOURCE_DIR}/cmake/runtime-assets.json"
+            "${PROJECT_SOURCE_DIR}/tools/stage_resources.py" VERBATIM)
+    add_custom_target(engine-sim-render-resources DEPENDS "${engine_sim_render_resources}/ready.txt")
+    add_executable(engine-sim-sdl-render-test "${PROJECT_SOURCE_DIR}/test/sdl_render_tests.cpp")
+    target_link_libraries(engine-sim-sdl-render-test PRIVATE engine-sim-sdl-renderer engine-sim-sdl-window
+        engine-sim-frontend SDL3::SDL3-static gtest)
+    add_dependencies(engine-sim-sdl-render-test engine-sim-render-resources)
+    file(MAKE_DIRECTORY "${PROJECT_BINARY_DIR}/render-working")
+    gtest_discover_tests(engine-sim-sdl-render-test DISCOVERY_TIMEOUT 30
+        WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/render-working"
+        PROPERTIES LABELS desktop-render TIMEOUT 180 RUN_SERIAL TRUE
+            ENVIRONMENT "ENGINE_SIM_RENDER_RESOURCES=${engine_sim_render_resources}")
 endif ()
 if (TARGET engine-sim-app)
     install(FILES "${ENGINE_SIM_SDL3_SOURCE}/LICENSE.txt"

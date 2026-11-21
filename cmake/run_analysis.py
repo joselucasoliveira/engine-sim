@@ -1,6 +1,7 @@
 """Analyze selected ownership and buffer sources using their actual compilation commands."""
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import plistlib
@@ -17,6 +18,7 @@ def main():
     parser.add_argument("--compiler", required=True)
     parser.add_argument("--frontend", action="store_true")
     parser.add_argument("--sdl-window", action="store_true")
+    parser.add_argument("--sdl-renderer", action="store_true")
     options = parser.parse_args()
     source = Path(__file__).resolve().parent.parent
     output = options.out.resolve()
@@ -31,6 +33,8 @@ def main():
                         "src/engine_sim_application.cpp", "src/geometry_generator.cpp", "src/oscilloscope.cpp"))
     if options.sdl_window:
         selected.add(source / "src/sdl_window.cpp")
+    if options.sdl_renderer:
+        selected.update(source / name for name in ("src/sdl_renderer.cpp", "src/font_atlas.cpp"))
     baseline = json.loads((source / "cmake/analysis-baseline.json").read_text())
     records = []
     for entry in json.loads(options.database.read_text()):
@@ -54,14 +58,23 @@ def main():
         log = run / (file.stem + ".log")
         with log.open("w") as stream:
             result = subprocess.run(args, cwd=entry["directory"], stdout=stream, stderr=subprocess.STDOUT, timeout=120)
-        diagnostics = plistlib.loads(report.read_bytes())["diagnostics"] if report.exists() else None
+        report_data = plistlib.loads(report.read_bytes()) if report.exists() else None
+        diagnostics = report_data["diagnostics"] if report_data is not None else None
         unexpected = []
         for diagnostic in diagnostics or []:
             location = diagnostic["location"]
-            fingerprint = {"file": str(file.relative_to(source)), "check": diagnostic["check_name"],
+            reported = Path(report_data["files"][location["file"]])
+            if not reported.is_absolute():
+                reported = Path(entry["directory"]) / reported
+            reported = reported.resolve()
+            lines = reported.read_text().splitlines()
+            line = location["line"] - 1
+            fingerprint = {"file": str(reported.relative_to(source)) if reported.is_relative_to(source) else str(reported), "check": diagnostic["check_name"],
                            "description": diagnostic["description"],
-                           "source_line": file.read_text().splitlines()[location["line"] - 1].strip()}
-            if not any(all(fingerprint[key] == known[key] for key in fingerprint) for known in baseline):
+                           "source_line": lines[line].strip() if 0 <= line < len(lines) else "<invalid analyzer source location>"}
+            if not any(all(fingerprint[key] == known[key] for key in fingerprint)
+                       and ("source_sha256" not in known or hashlib.sha256(reported.read_bytes()).hexdigest() == known["source_sha256"])
+                       for known in baseline):
                 unexpected.append(diagnostic)
         records.append({"file": str(file.relative_to(source)), "argv": args, "cwd": entry["directory"],
                         "exit": result.returncode, "diagnostics": diagnostics, "unexpected": unexpected, "log": str(log)})

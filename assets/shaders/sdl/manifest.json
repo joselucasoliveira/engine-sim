@@ -1,0 +1,60 @@
+{
+  "schema": 1,
+  "sources": [
+    {
+      "project": "Open Engine Simulator",
+      "revision": "1e226ee7bfbeb1d5012c7696aee82a57355df281",
+      "license": "MIT"
+    },
+    {
+      "project": "Delta Studio",
+      "revision": "b7d0a046733b924d12706baf1e5e59ba427aa7b1",
+      "license": "MIT"
+    }
+  ],
+  "compiler": {
+    "name": "glslang",
+    "version": "15.2.0",
+    "target": "Vulkan 1.0",
+    "entry_points": {
+      "vertex": "VSMain",
+      "fragment": "PSMain"
+    },
+    "flags": [
+      "-D",
+      "-V",
+      "--target-env",
+      "vulkan1.0",
+      "--hlsl-iomap"
+    ]
+  },
+  "uniforms": {
+    "vertex": {
+      "set": 1,
+      "binding": 0,
+      "bytes": 192
+    },
+    "fragment": {
+      "set": 3,
+      "binding": 0,
+      "bytes": 32
+    },
+    "glyph_sampler": {
+      "set": 2,
+      "binding": 0
+    }
+  },
+  "vertex_locations": {
+    "position": 0,
+    "texcoord": 2
+  },
+  "files": {
+    "LICENSE.txt": "8fead2f33d4124444a7dca7863e8116fbadae8703b2893003aa65e5b9c788977",
+    "engine_sim.fragment.msl": "96de4069df624dc01e93113bbd75ed5da245819c2b36f17135d19cd51abf4679",
+    "engine_sim.fragment.spv": "f7387ab891e641af8e8384740088e35dc8f1893ebce8999e9d358434ca24dbce",
+    "engine_sim.hlsl": "3f749799fa4cc07de425a831cf7acb47d1cc7803514fc2837e5871e45a571a67",
+    "engine_sim.vertex.msl": "81583617d33a7c676c158f9adf87e84c5217cede129da1b13d4bb871fdd45966",
+    "engine_sim.vertex.spv": "858f892f8f675ed8085a2560d09ee5fc63aaa12412243194754ba4120b46a413"
+  },
+  "license_notice": "LICENSE.txt"
+}
