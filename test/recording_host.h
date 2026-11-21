@@ -159,6 +159,7 @@ public:
         if (!opened) throw desktop::DesktopError("audio","not open");
         playing=value; recording->audioModes.push_back(value);
     }
+    void quiesceAudio() noexcept override { playing=false; }
     desktop::AudioOffset audioCursor() override { return cursor; }
     desktop::AudioSegments lockAudio(desktop::AudioOffset offset,desktop::AudioOffset count) override {
         if (!opened || offset>=ring.size() || count>ring.size()) throw desktop::DesktopError("audio","invalid span");

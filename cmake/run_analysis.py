@@ -19,6 +19,7 @@ def main():
     parser.add_argument("--frontend", action="store_true")
     parser.add_argument("--sdl-window", action="store_true")
     parser.add_argument("--sdl-renderer", action="store_true")
+    parser.add_argument("--sdl-audio", action="store_true")
     options = parser.parse_args()
     source = Path(__file__).resolve().parent.parent
     output = options.out.resolve()
@@ -35,6 +36,8 @@ def main():
         selected.add(source / "src/sdl_window.cpp")
     if options.sdl_renderer:
         selected.update(source / name for name in ("src/sdl_renderer.cpp", "src/font_atlas.cpp"))
+    if options.sdl_audio:
+        selected.add(source / "src/sdl_audio.cpp")
     baseline = json.loads((source / "cmake/analysis-baseline.json").read_text())
     records = []
     for entry in json.loads(options.database.read_text()):

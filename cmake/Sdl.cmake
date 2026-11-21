@@ -36,6 +36,9 @@ endif ()
 add_library(engine-sim-sdl-window STATIC "${PROJECT_SOURCE_DIR}/src/sdl_window.cpp")
 target_link_libraries(engine-sim-sdl-window PUBLIC engine-sim-host PRIVATE SDL3::SDL3-static)
 target_compile_features(engine-sim-sdl-window PUBLIC cxx_std_17)
+add_library(engine-sim-sdl-audio STATIC "${PROJECT_SOURCE_DIR}/src/sdl_audio.cpp")
+target_link_libraries(engine-sim-sdl-audio PUBLIC engine-sim-host PRIVATE SDL3::SDL3-static Threads::Threads)
+target_compile_features(engine-sim-sdl-audio PUBLIC cxx_std_17)
 file(READ "${PROJECT_SOURCE_DIR}/assets/shaders/sdl/manifest.json" engine_sim_shader_manifest)
 string(JSON engine_sim_shader_count LENGTH "${engine_sim_shader_manifest}" files)
 math(EXPR engine_sim_shader_last "${engine_sim_shader_count}-1")
@@ -51,6 +54,13 @@ add_library(engine-sim-sdl-renderer STATIC "${PROJECT_SOURCE_DIR}/src/sdl_render
 target_link_libraries(engine-sim-sdl-renderer PUBLIC engine-sim-host PRIVATE SDL3::SDL3-static)
 target_compile_features(engine-sim-sdl-renderer PUBLIC cxx_std_17)
 if (BUILD_TESTING)
+    add_executable(engine-sim-sdl-audio-test "${PROJECT_SOURCE_DIR}/test/sdl_audio_tests.cpp")
+    target_link_libraries(engine-sim-sdl-audio-test PRIVATE engine-sim-sdl-audio engine-sim-frontend SDL3::SDL3-static gtest)
+    file(MAKE_DIRECTORY "${PROJECT_BINARY_DIR}/audio-working")
+    gtest_discover_tests(engine-sim-sdl-audio-test DISCOVERY_TIMEOUT 30
+        WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/audio-working"
+        PROPERTIES LABELS desktop-audio TIMEOUT 180 RUN_SERIAL TRUE
+            ENVIRONMENT "ENGINE_SIM_TEST_RESOURCES=${PROJECT_SOURCE_DIR}")
     add_executable(engine-sim-sdl-window-test "${PROJECT_SOURCE_DIR}/test/sdl_window_tests.cpp")
     target_link_libraries(engine-sim-sdl-window-test PRIVATE engine-sim-sdl-window SDL3::SDL3-static gtest)
     # Listing tests must not initialize a display, including cross/disconnected discovery.

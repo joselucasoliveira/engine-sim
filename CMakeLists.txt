@@ -391,7 +391,7 @@ if (ENGINE_SIM_BUILD_CAPTURE)
     add_subdirectory(tools/capture)
 endif ()
 
-foreach(target IN ITEMS engine-sim engine-sim-sdl-renderer engine-sim-sdl-render-test engine-sim-sdl-window engine-sim-sdl-window-test engine-sim-host engine-sim-host-test engine-sim-host-application-test engine-sim-frontend engine-sim-script-interpreter engine-sim-app engine-sim-test
+foreach(target IN ITEMS engine-sim engine-sim-sdl-audio engine-sim-sdl-audio-test engine-sim-sdl-renderer engine-sim-sdl-render-test engine-sim-sdl-window engine-sim-sdl-window-test engine-sim-host engine-sim-host-test engine-sim-host-application-test engine-sim-frontend engine-sim-script-interpreter engine-sim-app engine-sim-test
         engine-sim-threaded-test engine-sim-script-test engine-sim-lifecycle-test
         engine-sim-displacement-test engine-sim-load-test engine-sim-wave-test engine-sim-resource-test engine-sim-capture)
     engine_sim_diagnose("${target}" TRUE)
@@ -413,6 +413,9 @@ if (PIRANHA_ENABLED AND CMAKE_EXPORT_COMPILE_COMMANDS AND NOT MSVC)
         endif ()
         if (TARGET engine-sim-sdl-renderer)
             list(APPEND engine_sim_analysis_frontend --sdl-renderer)
+        endif ()
+        if (TARGET engine-sim-sdl-audio)
+            list(APPEND engine_sim_analysis_frontend --sdl-audio)
         endif ()
         add_custom_target(engine-sim-analysis
             COMMAND "${Python3_EXECUTABLE}" -B "${PROJECT_SOURCE_DIR}/cmake/run_analysis.py"

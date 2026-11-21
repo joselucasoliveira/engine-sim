@@ -194,6 +194,7 @@ class EngineSimApplication {
         desktop::Vector m_blue;
 
         AudioBuffer m_audioBuffer;
+        std::array<std::int16_t, 44100> m_audioScratch{};
 
         int m_oscillatorSampleOffset;
         int m_screen;

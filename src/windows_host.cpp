@@ -341,6 +341,9 @@ public:
         if (!source) throw desktop::DesktopError("audio", "source is not open");
         checked(source->SetMode(playing?ysAudioSource::Mode::Loop:ysAudioSource::Mode::Stop),"audio mode");
     }
+    void quiesceAudio() noexcept override {
+        if (source) source->SetMode(ysAudioSource::Mode::Stop);
+    }
     desktop::AudioOffset audioCursor() override {
         if (!source) throw desktop::DesktopError("audio", "source is not open");
         return source->GetCurrentWritePosition();

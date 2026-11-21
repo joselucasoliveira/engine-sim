@@ -251,7 +251,8 @@ void EngineSimApplication::process(float frame_dt) {
         maxWrite = 0;
     }
 
-    int16_t *samples = new int16_t[maxWrite];
+    maxWrite = std::min<desktop::AudioOffset>(maxWrite, m_audioScratch.size());
+    int16_t *samples = m_audioScratch.data();
     const int readSamples = m_simulator->readAudioOutput(maxWrite, samples);
 
     for (desktop::AudioOffset i = 0; i < (desktop::AudioOffset)readSamples && i < maxWrite; ++i) {
@@ -266,8 +267,6 @@ void EngineSimApplication::process(float frame_dt) {
 
         m_oscillatorSampleOffset = (m_oscillatorSampleOffset + 1) % (44100 / 10);
     }
-
-    delete[] samples;
 
     if (readSamples > 0) {
         const auto segments = m_host->lockAudio(m_audioBuffer.m_writePointer, readSamples);
@@ -397,6 +396,7 @@ void EngineSimApplication::destroy() {
     if (m_destroyed) return;
     m_destroyed = true;
     if (m_session != nullptr) m_session->simulator->endAudioRenderingThread();
+    if (m_host) m_host->quiesceAudio();
     m_userInterface.reset();
     destroyObjects();
     m_session.reset();
@@ -449,6 +449,7 @@ bool EngineSimApplication::loadEngine(EngineDefinition definition) {
         simulator->startAudioRenderingThread();
 
         if (m_session != nullptr) m_session->simulator->endAudioRenderingThread();
+        if (m_host) m_host->quiesceAudio();
         m_session.swap(candidate.session);
         m_objects.swap(candidate.objects);
         m_userInterface.swap(candidate.ui);

@@ -92,6 +92,7 @@ public:
     float measureText(const std::string &value,float height) const override { return renderer.measureText(value,height); }
     void openAudio() override { audio.openAudio(); }
     void setAudioPlaying(bool playing) override { audio.setAudioPlaying(playing); }
+    void quiesceAudio() noexcept override { audio.quiesceAudio(); }
     desktop::AudioOffset audioCursor() override { return audio.audioCursor(); }
     desktop::AudioSegments lockAudio(desktop::AudioOffset offset,desktop::AudioOffset count) override { return audio.lockAudio(offset,count); }
     void unlockAudio(const desktop::AudioSegments &segments) override { audio.unlockAudio(segments); }

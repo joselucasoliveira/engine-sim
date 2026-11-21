@@ -105,6 +105,7 @@ public:
     virtual float measureText(const std::string &text, float height) const = 0;
     virtual void openAudio() = 0; // Mono signed S16, 44100 Hz, one-second ring.
     virtual void setAudioPlaying(bool playing) = 0;
+    virtual void quiesceAudio() noexcept = 0;
     virtual AudioOffset audioCursor() = 0;
     virtual AudioSegments lockAudio(AudioOffset offset, AudioOffset count) = 0;
     virtual void unlockAudio(const AudioSegments &segments) = 0;
