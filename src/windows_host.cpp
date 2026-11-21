@@ -1,4 +1,7 @@
 #include "../include/desktop_host.h"
+#include "desktop_run.h"
+#include "virtual_audio.h"
+#include <delta-studio/include/yds_windows_window.h>
 #include <delta-studio/include/yds_core.h>
 #include <delta-studio/engines/basic/include/delta_basic_engine.h>
 #include <chrono>
@@ -234,7 +237,7 @@ ysKey::Code keyCode(desktop::Key key) {
 
 class WindowsHost final : public desktop::Host {
 public:
-    explicit WindowsHost(void *instance) : instance(instance) {}
+    explicit WindowsHost(void *instance,bool virtualAudio) : virtualMode(virtualAudio), instance(instance) {}
     ~WindowsHost() override { shutdown(); }
     void initialize(const engine_sim::ResourcePaths &paths, const engine_sim::CompiledScene &) override {
         if (started || closed) throw desktop::DesktopError("initialize", "host cannot be reopened");
@@ -264,10 +267,22 @@ public:
         checked(engine.GetDevice()->CreateVertexBuffer(&vertexBuffer,sizeof(desktop::Vertex)*100000,nullptr),"vertex buffer");
         text.SetEngine(&engine); text.SetRenderer(engine.GetUiRenderer()); text.SetFont(engine.GetConsole()->GetFont());
         snapshot();
+        if (runEvidence) {
+            runEvidence->videoDriver="win32"; runEvidence->renderer="Direct3D 11";
+            runEvidence->audioDriver=virtualMode?"virtual-clocked-sink":"DirectSound";
+            runEvidence->audioDevice=virtualMode?"Explicit clocked software sink":"Default DirectSound endpoint; native mix format is not exposed by Delta";
+        }
     }
     void shutdown() noexcept override {
         if (closed) return;
         closed=true;
+        for (std::size_t key=0; key<injectedKeys.size(); ++key) if (injectedKeys[key]) {
+            INPUT input{}; input.type=INPUT_KEYBOARD;
+            input.ki.wScan=static_cast<WORD>(MapVirtualKeyW(injectedKeys[key],MAPVK_VK_TO_VSC));
+            input.ki.dwFlags=KEYEVENTF_SCANCODE|KEYEVENTF_KEYUP|(key==static_cast<std::size_t>(desktop::Key::Right)?KEYEVENTF_EXTENDEDKEY:0);
+            SendInput(1,&input,sizeof(input)); injectedKeys[key]=0;
+        }
+        virtualSink.shutdown();
         clearPackets(); engine.ClearDrawQueue();
         if (auto *audio=engine.GetAudioDevice()) {
             if (source) { source->SetMode(ysAudioSource::Mode::Stop); audio->DestroyAudioSource(source); }
@@ -280,8 +295,13 @@ public:
         }
         if (assetsReady) { assets.Destroy(); assetsReady=false; }
         engine.release(); started=false;
+        if (runEvidence) runEvidence->tornDown=true;
     }
-    void StartFrame() override { clearPackets(); checked(engine.StartFrame(),"start frame"); snapshot(); }
+    void StartFrame() override {
+        clearPackets(); if (runEvidence) runEvidence->beforeFrame(*this);
+        checked(engine.StartFrame(),"start frame"); snapshot();
+        if (runEvidence && runEvidence->frames>=runEvidence->options.frames) current.window.open=false;
+    }
     void EndFrame() override {
         const auto &view=drawing.viewport;
         checked(engine.GetDevice()->ResizeRenderTarget(mainTarget,view.width,view.height,view.width,view.height),"resize scene");
@@ -301,10 +321,20 @@ public:
                 packet.baseIndex,packet.baseVertex,packet.faceCount,false,packet.layer),"draw geometry");
         }
         checked(engine.EndFrame(),"present frame");
+        if (runEvidence) {
+            audioCursor();
+            if (virtualMode) {
+                runEvidence->audioConsumedInput=virtualSink.consumed;
+                runEvidence->audioPumpedSource=virtualSink.source;
+                runEvidence->silenceFrames=virtualSink.silence;
+                runEvidence->nonzeroFedToBackend=virtualSink.nonzero;
+            }
+            runEvidence->afterFrame(*this);
+        }
     }
     const desktop::FrameState &frame() const override { return current; }
-    bool IsKeyDown(desktop::Key key) override { return engine.IsKeyDown(keyCode(key)); }
-    bool ProcessKeyDown(desktop::Key key) override { return engine.ProcessKeyDown(keyCode(key)); }
+    bool IsKeyDown(desktop::Key key) override { const bool value=engine.IsKeyDown(keyCode(key)); return runEvidence?runEvidence->key(key,value,false):value; }
+    bool ProcessKeyDown(desktop::Key key) override { const bool value=engine.ProcessKeyDown(keyCode(key)); return runEvidence?runEvidence->key(key,value,true):value; }
     bool ProcessMouseButtonDown(desktop::Button button) override {
         return button==desktop::Button::Left && engine.ProcessMouseButtonDown(ysMouse::Button::Left);
     }
@@ -327,6 +357,7 @@ public:
     }
     float measureText(const std::string &value,float height) const override { return text.CalculateWidth(value,height); }
     void openAudio() override {
+        if (virtualMode) { virtualSink.open(); return; }
         ysAudioParameters parameters;
         parameters.m_bitsPerSample=16; parameters.m_channelCount=1; parameters.m_sampleRate=44100;
         auto *audio=engine.GetAudioDevice();
@@ -338,23 +369,37 @@ public:
         checked(source->SetPan(0),"audio pan"); checked(source->SetVolume(1),"audio volume");
     }
     void setAudioPlaying(bool playing) override {
+        if (virtualMode) { virtualSink.setPlaying(playing); return; }
         if (!source) throw desktop::DesktopError("audio", "source is not open");
         checked(source->SetMode(playing?ysAudioSource::Mode::Loop:ysAudioSource::Mode::Stop),"audio mode");
     }
     void quiesceAudio() noexcept override {
+        virtualSink.quiesce();
         if (source) source->SetMode(ysAudioSource::Mode::Stop);
     }
     desktop::AudioOffset audioCursor() override {
+        if (virtualMode) return virtualSink.cursor();
         if (!source) throw desktop::DesktopError("audio", "source is not open");
-        return source->GetCurrentWritePosition();
+        const auto position=source->GetCurrentWritePosition();
+        if (runEvidence) {
+            if (haveCursor) runEvidence->audioConsumedInput+=(position+44100-lastCursor)%44100;
+            lastCursor=position; haveCursor=true;
+        }
+        return position;
     }
     desktop::AudioSegments lockAudio(desktop::AudioOffset offset,desktop::AudioOffset count) override {
+        if (virtualMode) return virtualSink.lock(offset,count);
         if (!source || offset>=44100 || count>44100) throw desktop::DesktopError("audio", "invalid write span");
         void *first=nullptr,*second=nullptr; SampleOffset a=0,b=0;
         checked(source->LockBufferSegment(offset,count,&first,&a,&second,&b),"audio lock");
         return {static_cast<std::int16_t *>(first),static_cast<std::int16_t *>(second),a,b};
     }
     void unlockAudio(const desktop::AudioSegments &segments) override {
+        if (virtualMode) { virtualSink.unlock(segments); if (runEvidence) runEvidence->source(segments); return; }
+        if (runEvidence) {
+            runEvidence->source(segments); runEvidence->audioPumpedSource=runEvidence->sourceFrames;
+            runEvidence->nonzeroFedToBackend=runEvidence->nonzeroSource;
+        }
         checked(source->UnlockBufferSegments(segments.first,segments.firstCount,segments.second,segments.secondCount),"audio unlock");
     }
     void readScreen(std::uint8_t *rgba,std::size_t capacity) override {
@@ -362,7 +407,35 @@ public:
         if (!rgba || capacity<required) throw desktop::DesktopError("readback", "RGBA destination is too small");
         checked(engine.GetDevice()->ReadRenderTarget(engine.GetScreenRenderTarget(),rgba),"screen readback");
     }
+    void queueKeyEvent(desktop::Key key,bool down) override {
+        auto *window=static_cast<ysWindowsWindow *>(engine.GetGameWindow());
+        const HWND hwnd=window->GetWindowHandle();
+        if (GetForegroundWindow()!=hwnd && !SetForegroundWindow(hwnd)) throw desktop::DesktopError("smoke input","cannot focus the native window");
+        WORD vk=0;
+        switch (key) {
+        case desktop::Key::A: vk='A'; break; case desktop::Key::S: vk='S'; break; case desktop::Key::R: vk='R'; break;
+        case desktop::Key::Tab: vk=VK_TAB; break; case desktop::Key::Return: vk=VK_RETURN; break; case desktop::Key::Right: vk=VK_RIGHT; break;
+        default: throw desktop::DesktopError("smoke input","unsupported scheduled key");
+        }
+        INPUT input{}; input.type=INPUT_KEYBOARD; input.ki.wScan=static_cast<WORD>(MapVirtualKeyW(vk,MAPVK_VK_TO_VSC));
+        input.ki.dwFlags=KEYEVENTF_SCANCODE|(down?0:KEYEVENTF_KEYUP)|(key==desktop::Key::Right?KEYEVENTF_EXTENDEDKEY:0);
+        if (SendInput(1,&input,sizeof(input))!=1) throw desktop::DesktopError("smoke input","SendInput failed");
+        injectedKeys[static_cast<std::size_t>(key)]=down?vk:0;
+    }
+    void resizeForSmoke(int width,int height) override {
+        const HWND hwnd=static_cast<ysWindowsWindow *>(engine.GetGameWindow())->GetWindowHandle();
+        RECT bounds{0,0,width,height};
+        if (!AdjustWindowRectEx(&bounds,static_cast<DWORD>(GetWindowLongPtrW(hwnd,GWL_STYLE)),FALSE,
+            static_cast<DWORD>(GetWindowLongPtrW(hwnd,GWL_EXSTYLE)))
+            || !SetWindowPos(hwnd,nullptr,0,0,bounds.right-bounds.left,bounds.bottom-bounds.top,SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE))
+            throw desktop::DesktopError("smoke resize","native window resize failed");
+    }
 private:
+    bool virtualMode=false;
+    desktop::VirtualAudio virtualSink;
+    desktop::AudioOffset lastCursor=0;
+    bool haveCursor=false;
+    std::array<WORD,static_cast<std::size_t>(desktop::Key::Count)> injectedKeys{};
     void snapshot() {
         auto *window=engine.GetGameWindow();
         if (!window) { current.window.open=false; return; }
@@ -397,6 +470,6 @@ private:
 };
 }
 
-std::unique_ptr<desktop::Host> desktop::makeWindowsHost(void *instance) {
-    return std::make_unique<WindowsHost>(instance);
+std::unique_ptr<desktop::Host> desktop::makeWindowsHost(void *instance,bool virtualAudio) {
+    return std::make_unique<WindowsHost>(instance,virtualAudio);
 }

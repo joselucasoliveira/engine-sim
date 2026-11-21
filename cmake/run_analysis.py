@@ -20,6 +20,7 @@ def main():
     parser.add_argument("--sdl-window", action="store_true")
     parser.add_argument("--sdl-renderer", action="store_true")
     parser.add_argument("--sdl-audio", action="store_true")
+    parser.add_argument("--sdl-host", action="store_true")
     options = parser.parse_args()
     source = Path(__file__).resolve().parent.parent
     output = options.out.resolve()
@@ -30,7 +31,7 @@ def main():
     selected = {source / name for name in ("src/audio_buffer.cpp", "src/convolution_filter.cpp",
                 "src/synthesizer.cpp", "src/engine.cpp", "scripting/src/compiler.cpp", "src/wave_reader.cpp", "src/resource_paths.cpp", "src/compiled_scene.cpp")}
     if options.frontend:
-        selected.update(source / name for name in ("src/desktop_math.cpp", "src/desktop_host.cpp", "src/shaders.cpp",
+        selected.update(source / name for name in ("src/desktop_math.cpp", "src/desktop_host.cpp", "src/desktop_run.cpp", "src/shaders.cpp",
                         "src/engine_sim_application.cpp", "src/geometry_generator.cpp", "src/oscilloscope.cpp"))
     if options.sdl_window:
         selected.add(source / "src/sdl_window.cpp")
@@ -38,6 +39,8 @@ def main():
         selected.update(source / name for name in ("src/sdl_renderer.cpp", "src/font_atlas.cpp"))
     if options.sdl_audio:
         selected.add(source / "src/sdl_audio.cpp")
+    if options.sdl_host:
+        selected.add(source / "src/sdl_host.cpp")
     baseline = json.loads((source / "cmake/analysis-baseline.json").read_text())
     records = []
     for entry in json.loads(options.database.read_text()):

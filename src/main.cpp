@@ -1,4 +1,5 @@
 #include "../include/engine_sim_application.h"
+#include "desktop_run.h"
 
 #include <iostream>
 #include <windows.h>
@@ -13,23 +14,12 @@ int WINAPI WinMain(
     (void)lpCmdLine;
     (void)hPrevInstance;
 
-    EngineSimApplication application;
-    int result = 0;
     try {
-        const auto arguments = engine_sim::processArguments(0, nullptr);
-        if (arguments.size() == 2 && arguments[1] == "--help") {
-            std::cout << "Engine Simulator [--resources ROOT] [--script FILE]\n";
-            return 0;
-        }
-        const auto resources = engine_sim::parseResourceOptions(arguments);
-        application.initialize(desktop::makeWindowsHost((void *)&hInstance), resources);
-        application.run();
+        return desktop::runApplication(engine_sim::processArguments(0,nullptr),
+            [&](const desktop::RunOptions &options) { return desktop::makeWindowsHost((void *)&hInstance,options.virtualAudio); });
     }
     catch (const std::exception &error) {
         std::cerr << error.what() << '\n';
-        result = 1;
+        return 1;
     }
-    application.destroy();
-
-    return result;
 }

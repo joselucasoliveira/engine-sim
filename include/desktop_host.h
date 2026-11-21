@@ -13,6 +13,7 @@
 #include <vector>
 
 namespace desktop {
+struct RunEvidence;
 enum class Key {
     Escape, Return, Tab, F, Insert, Right, Space, Shift, Up, Down,
     N1, N2, N3, N4, N5, F1, F2, F3, Z, X, C, V, B, N, G,
@@ -110,6 +111,9 @@ public:
     virtual AudioSegments lockAudio(AudioOffset offset, AudioOffset count) = 0;
     virtual void unlockAudio(const AudioSegments &segments) = 0;
     virtual void readScreen(std::uint8_t *rgb, std::size_t capacity) = 0;
+    virtual void queueKeyEvent(Key, bool) { throw DesktopError("smoke input", "backend has no native event injector"); }
+    virtual void resizeForSmoke(int, int) { throw DesktopError("smoke resize", "backend has no native window resizer"); }
+    void setRunEvidence(std::shared_ptr<RunEvidence> value) { runEvidence = std::move(value); }
 
     Window *GetGameWindow() { return &window; }
     bool IsOpen() const { return frame().window.open; }
@@ -128,6 +132,8 @@ public:
     void validateGeometry(const Vertex *vertices, std::size_t vertexCount,
                           const std::uint16_t *indices, std::size_t indexCount) const;
     DrawingState drawing;
+protected:
+    std::shared_ptr<RunEvidence> runEvidence;
 private:
     Window window;
     std::vector<Model> models;
@@ -146,7 +152,7 @@ private:
 };
 
 #ifdef _WIN32
-std::unique_ptr<Host> makeWindowsHost(void *instance);
+std::unique_ptr<Host> makeWindowsHost(void *instance, bool virtualAudio = false);
 #endif
 }
 #endif

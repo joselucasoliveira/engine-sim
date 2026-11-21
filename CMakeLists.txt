@@ -249,6 +249,7 @@ endif ()
 if (PIRANHA_ENABLED AND (BUILD_TESTING OR ENGINE_SIM_BUILD_DESKTOP))
     add_library(engine-sim-frontend STATIC
         src/engine_sim_application.cpp
+        src/desktop_run.cpp
         src/geometry_generator.cpp
         src/simulation_object.cpp
         src/piston_object.cpp
@@ -328,6 +329,9 @@ endif ()
 
 if (ENGINE_SIM_BUILD_DESKTOP AND NOT WIN32)
     include(cmake/Sdl.cmake)
+    add_executable(engine-sim-app src/unix_main.cpp src/sdl_host.cpp)
+    target_link_libraries(engine-sim-app PRIVATE engine-sim-frontend engine-sim-sdl-window
+        engine-sim-sdl-renderer engine-sim-sdl-audio SDL3::SDL3-static)
 endif ()
 
 if (BUILD_TESTING)
@@ -336,6 +340,12 @@ if (BUILD_TESTING)
     gtest_discover_tests(engine-sim-host-test DISCOVERY_TIMEOUT 30
         PROPERTIES LABELS host-contract TIMEOUT 30)
     if (TARGET engine-sim-frontend)
+        add_executable(engine-sim-desktop-run-test test/desktop_run_tests.cpp)
+        target_link_libraries(engine-sim-desktop-run-test PRIVATE gtest_main engine-sim-frontend)
+        file(MAKE_DIRECTORY "${PROJECT_BINARY_DIR}/run-working")
+        gtest_discover_tests(engine-sim-desktop-run-test DISCOVERY_TIMEOUT 30
+            WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/run-working"
+            PROPERTIES LABELS desktop-smoke-unit TIMEOUT 30)
         add_executable(engine-sim-host-application-test test/host_application_tests.cpp)
         target_link_libraries(engine-sim-host-application-test PRIVATE gtest_main engine-sim-frontend)
         if (WIN32)
@@ -391,7 +401,7 @@ if (ENGINE_SIM_BUILD_CAPTURE)
     add_subdirectory(tools/capture)
 endif ()
 
-foreach(target IN ITEMS engine-sim engine-sim-sdl-audio engine-sim-sdl-audio-test engine-sim-sdl-renderer engine-sim-sdl-render-test engine-sim-sdl-window engine-sim-sdl-window-test engine-sim-host engine-sim-host-test engine-sim-host-application-test engine-sim-frontend engine-sim-script-interpreter engine-sim-app engine-sim-test
+foreach(target IN ITEMS engine-sim engine-sim-desktop-run-test engine-sim-sdl-audio engine-sim-sdl-audio-test engine-sim-sdl-renderer engine-sim-sdl-render-test engine-sim-sdl-window engine-sim-sdl-window-test engine-sim-host engine-sim-host-test engine-sim-host-application-test engine-sim-frontend engine-sim-script-interpreter engine-sim-app engine-sim-test
         engine-sim-threaded-test engine-sim-script-test engine-sim-lifecycle-test
         engine-sim-displacement-test engine-sim-load-test engine-sim-wave-test engine-sim-resource-test engine-sim-capture)
     engine_sim_diagnose("${target}" TRUE)
@@ -416,6 +426,9 @@ if (PIRANHA_ENABLED AND CMAKE_EXPORT_COMPILE_COMMANDS AND NOT MSVC)
         endif ()
         if (TARGET engine-sim-sdl-audio)
             list(APPEND engine_sim_analysis_frontend --sdl-audio)
+        endif ()
+        if (TARGET engine-sim-app AND NOT WIN32)
+            list(APPEND engine_sim_analysis_frontend --sdl-host)
         endif ()
         add_custom_target(engine-sim-analysis
             COMMAND "${Python3_EXECUTABLE}" -B "${PROJECT_SOURCE_DIR}/cmake/run_analysis.py"

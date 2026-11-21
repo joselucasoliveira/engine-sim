@@ -98,7 +98,3 @@ if (BUILD_TESTING)
         PROPERTIES LABELS desktop-render TIMEOUT 180 RUN_SERIAL TRUE
             ENVIRONMENT "ENGINE_SIM_RENDER_RESOURCES=${engine_sim_render_resources}")
 endif ()
-if (TARGET engine-sim-app)
-    install(FILES "${ENGINE_SIM_SDL3_SOURCE}/LICENSE.txt"
-        DESTINATION share/engine-sim/licenses RENAME SDL3.txt COMPONENT Runtime)
-endif ()

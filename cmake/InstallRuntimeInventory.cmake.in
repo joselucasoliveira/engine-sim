@@ -1,6 +1,8 @@
 cmake_policy(PUSH)
 cmake_policy(VERSION 3.25)
 if ("@APPLE@" AND "@ENGINE_SIM_BUILD_DESKTOP@")
+    file(COPY "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/share/engine-sim/licenses/"
+        DESTINATION "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/EngineSim.app/Contents/Resources/licenses")
     set(engine_sim_bundle_cli "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/EngineSim.app/Contents/MacOS/engine-sim-app")
     file(REMOVE "${engine_sim_bundle_cli}")
     file(CREATE_LINK EngineSim "${engine_sim_bundle_cli}" SYMBOLIC)
