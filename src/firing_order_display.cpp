@@ -17,7 +17,7 @@ FiringOrderDisplay::FiringOrderDisplay() {
 }
 
 FiringOrderDisplay::~FiringOrderDisplay() {
-    /* void */
+    destroy();
 }
 
 void FiringOrderDisplay::initialize(EngineSimApplication *app) {
@@ -25,6 +25,10 @@ void FiringOrderDisplay::initialize(EngineSimApplication *app) {
 }
 
 void FiringOrderDisplay::destroy() {
+    delete[] m_cylinderLit;
+    m_cylinderLit = nullptr;
+    m_cylinderCount = 0;
+    m_engine = nullptr;
     UiElement::destroy();
 }
 
@@ -33,13 +37,11 @@ void FiringOrderDisplay::update(float dt) {
 
     if (m_engine != nullptr) {
         if (m_engine->getCylinderCount() != m_cylinderCount) {
-            if (m_cylinderLit != nullptr) {
-                delete[] m_cylinderLit;
-            }
-
-            m_cylinderCount = m_engine->getCylinderCount();
-            m_cylinderLit = new float[m_cylinderCount];
-            memset(m_cylinderLit, 0, sizeof(float) * m_cylinderCount);
+            const int count = m_engine->getCylinderCount();
+            auto *replacement = new float[count]{};
+            delete[] m_cylinderLit;
+            m_cylinderLit = replacement;
+            m_cylinderCount = count;
         }
 
         for (int i = 0; i < m_cylinderCount; ++i) {

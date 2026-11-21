@@ -1,4 +1,5 @@
 #include "../include/geometry_generator.h"
+#include <stdexcept>
 
 GeometryGenerator::GeometryGenerator() {
     m_vertexData = nullptr;
@@ -14,10 +15,12 @@ GeometryGenerator::GeometryGenerator() {
 }
 
 GeometryGenerator::~GeometryGenerator() {
-    /* void */
+    destroy();
 }
 
 void GeometryGenerator::initialize(int vertexBufferSize, int indexBufferSize) {
+    if (vertexBufferSize <= 0 || indexBufferSize <= 0) throw std::invalid_argument("Geometry capacity must be positive");
+    destroy();
     m_vertexData = new dbasic::Vertex[vertexBufferSize];
     m_indexData = new unsigned short[indexBufferSize];
 
@@ -28,6 +31,10 @@ void GeometryGenerator::initialize(int vertexBufferSize, int indexBufferSize) {
 void GeometryGenerator::destroy() {
     delete[] m_vertexData;
     delete[] m_indexData;
+    m_vertexData = nullptr;
+    m_indexData = nullptr;
+    m_vertexBufferSize = m_indexBufferSize = 0;
+    reset();
 }
 
 void GeometryGenerator::reset() {

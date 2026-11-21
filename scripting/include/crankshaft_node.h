@@ -40,6 +40,14 @@ namespace es_script {
             context->addCrankshaft(this, crankshaft);
         }
 
+        void validate() const override {
+            requirePositive(m_parameters.momentOfInertia, "crankshaft inertia");
+            requirePositive(m_parameters.mass + m_parameters.flywheelMass, "crankshaft total mass");
+            requirePositive(m_parameters.crankThrow, "crank throw");
+            for (auto *journal : m_rodJournals) requireModel(journal != nullptr, "Missing crank journal");
+        }
+        const std::vector<RodJournalNode *> &getJournals() const { return m_rodJournals; }
+
     protected:
         virtual void registerInputs() {
             addInput("throw", &m_parameters.crankThrow);

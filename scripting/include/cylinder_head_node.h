@@ -38,6 +38,19 @@ namespace es_script {
         void setBank(CylinderBankNode *bank) { m_bank = bank; }
         CylinderBankNode *getBank() const { return m_bank; }
 
+        void validate() const override {
+            requireModel(m_intakePortFlow != nullptr && m_exhaustPortFlow != nullptr,
+                "Missing cylinder head flow curve");
+            requireModel(m_valvetrain != nullptr, "Missing cylinder head valvetrain");
+            requirePositive(m_parameters.CombustionChamberVolume, "chamber volume");
+            requirePositive(m_parameters.IntakeRunnerVolume, "intake runner volume");
+            requirePositive(m_parameters.IntakeRunnerCrossSectionArea, "intake runner cross section");
+            requirePositive(m_parameters.ExhaustRunnerVolume, "exhaust runner volume");
+            requirePositive(m_parameters.ExhaustRunnerCrossSectionArea, "exhaust runner cross section");
+            m_valvetrain->validate();
+        }
+        void validateCylinderCount(int count) const { m_valvetrain->validateCylinderCount(count); }
+
     protected:
         virtual void registerInputs() {
             addInput(

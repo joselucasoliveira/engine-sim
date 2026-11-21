@@ -51,6 +51,14 @@ namespace es_script {
             m_posts.push_back({ wire, angle });
         }
 
+        void validate() const override {
+            requireModel(m_timingCurve != nullptr, "Missing ignition timing curve");
+            requirePositive(m_revLimit, "ignition rev limit");
+            requireModel(m_limiterDuration >= 0, "Negative ignition limiter duration");
+            for (const auto &post : m_posts) requireModel(post.wire != nullptr, "Missing ignition wire");
+        }
+        const std::vector<Post> &getPosts() const { return m_posts; }
+
     protected:
         virtual void registerInputs() {
             addInput("timing_curve", &m_timingCurve);

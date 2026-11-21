@@ -22,15 +22,25 @@
 #include "info_cluster.h"
 #include "application_settings.h"
 #include "transmission.h"
+#include "engine_session.h"
 
 #include "delta.h"
 #include "dtv.h"
 
 #include <vector>
+#include <memory>
 
 class EngineSimApplication {
     private:
         static std::string s_buildVersion;
+        struct UserInterface;
+        struct PendingSession;
+        bool loadEngine(EngineDefinition definition);
+        void buildObjects(Engine *engine, std::vector<SimulationObject *> &objects);
+        std::unique_ptr<UserInterface> prepareUserInterface(Engine *engine, Simulator *simulator);
+        void bindSession();
+        void updatePalette();
+        void reportLoadFailure(const std::string &message);
 
     public:
         EngineSimApplication();
@@ -42,7 +52,8 @@ class EngineSimApplication {
         void run();
         void destroy();
 
-        void loadEngine(Engine *engine, Vehicle *vehicle, Transmission *transmission);
+        // Takes ownership of all three arguments, including on a rejected load.
+        bool loadEngine(Engine *engine, Vehicle *vehicle, Transmission *transmission);
         void drawGenerated(
                 const GeometryGenerator::GeometryIndices &indices,
                 int layer = 0);
@@ -89,7 +100,7 @@ class EngineSimApplication {
         ApplicationSettings* getAppSettings() { return &m_applicationSettings; }
 
     protected:
-        void loadScript();
+        bool loadScript();
         void processEngineInput();
         void renderScene();
 
@@ -138,7 +149,8 @@ class EngineSimApplication {
         double m_dynoSpeed;
         double m_torque;
 
-        UiManager m_uiManager;
+        std::unique_ptr<EngineSession> m_session;
+        std::unique_ptr<UserInterface> m_userInterface;
         EngineView *m_engineView;
         RightGaugeCluster *m_rightGaugeCluster;
         OscilloscopeCluster *m_oscCluster;
@@ -148,6 +160,12 @@ class EngineSimApplication {
         MixerCluster *m_mixerCluster;
         InfoCluster *m_infoCluster;
         SimulationObject::ViewParameters m_viewParameters;
+
+        bool m_windowCreated = false;
+        bool m_shaderSetReady = false;
+        bool m_assetsReady = false;
+        bool m_destroyed = false;
+        std::string m_loadError;
 
         bool m_paused;
 

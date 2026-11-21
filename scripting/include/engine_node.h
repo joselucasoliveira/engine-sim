@@ -14,6 +14,8 @@
 
 #include <map>
 #include <set>
+#include <limits>
+#include <algorithm>
 
 namespace es_script {
 
@@ -23,18 +25,25 @@ namespace es_script {
         virtual ~EngineNode() { /* void */ }
 
         void buildEngine(Engine *engine) {
+            validate();
             int cylinderCount = 0;
             for (const CylinderBankNode *bank : m_cylinderBanks) {
                 cylinderCount += bank->getCylinderCount();
             }
 
-            std::set<ExhaustSystemNode *> exhaustSystems;
-            std::set<IntakeNode *> intakes;
+            // Shared systems follow their first cylinder-bank encounter. Heap
+            // addresses cannot define channel routing across independent loads.
+            std::vector<ExhaustSystemNode *> exhaustSystems;
+            std::vector<IntakeNode *> intakes;
             for (const CylinderBankNode *bank : m_cylinderBanks) {
                 const int n = bank->getCylinderCount();
                 for (int i = 0; i < n; ++i) {
-                    exhaustSystems.insert(bank->getCylinder(i).exhaust);
-                    intakes.insert(bank->getCylinder(i).intake);
+                    auto *exhaust = bank->getCylinder(i).exhaust;
+                    auto *intake = bank->getCylinder(i).intake;
+                    if (std::find(exhaustSystems.begin(), exhaustSystems.end(), exhaust) == exhaustSystems.end()) {
+                        exhaustSystems.push_back(exhaust);
+                    }
+                    if (std::find(intakes.begin(), intakes.end(), intake) == intakes.end()) intakes.push_back(intake);
                 }
             }
 
@@ -73,14 +82,6 @@ namespace es_script {
                 }
             }
 
-            for (const CylinderBankNode *bank : m_cylinderBanks) {
-                const int n = bank->getCylinderCount();
-                for (int i = 0; i < n; ++i) {
-                    exhaustSystems.insert(bank->getCylinder(i).exhaust);
-                    intakes.insert(bank->getCylinder(i).intake);
-                }
-            }
-
             for (int i = 0; i < parameters.crankshaftCount; ++i) {
                 m_crankshafts[i]->generate(engine->getCrankshaft(i), &context);
             }
@@ -103,6 +104,13 @@ namespace es_script {
 
             for (int i = 0; i < parameters.cylinderBanks; ++i) {
                 m_cylinderBanks[i]->connectRodAssemblies(&context);
+            }
+
+            // All master links now exist, including chains declared in other banks.
+            for (int i = 0; i < parameters.cylinderCount; ++i) {
+                auto *root = engine->getConnectingRod(i);
+                while (root->getMasterRod() != nullptr) root = root->getMasterRod();
+                engine->getConnectingRod(i)->setCrankshaft(root->getCrankshaft());
             }
 
             m_ignitionModule->generate(engine, &context);
@@ -128,6 +136,68 @@ namespace es_script {
                 ccParams.Piston = engine->getPiston(i);
                 ccParams.Head = engine->getHead(ccParams.Piston->getCylinderBank()->getIndex());
                 engine->getChamber(i)->initialize(ccParams);
+            }
+        }
+
+        void validate() const override {
+            requireModel(m_ignitionModule != nullptr, "Missing ignition module");
+            requireModel(m_throttle != nullptr && m_fuel != nullptr, "Missing throttle or fuel");
+            requireModel(!m_crankshafts.empty() && !m_cylinderBanks.empty(), "Engine topology is empty");
+            requirePositive(m_parameters.initialSimulationFrequency, "simulation frequency");
+            requirePositive(m_parameters.redline, "engine redline");
+            m_ignitionModule->validate();
+            m_fuel->validate();
+            std::set<CrankshaftNode *> shafts;
+            std::set<const CylinderBankNode *> banks;
+            std::set<RodJournalNode *> journals;
+            std::map<ConnectingRodNode *, RodJournalNode *> routes;
+            size_t count = 0;
+            for (auto *shaft : m_crankshafts) {
+                requireModel(shaft && shafts.insert(shaft).second, "Missing or duplicate crankshaft");
+                shaft->validate();
+                for (auto *journal : shaft->getJournals()) {
+                    requireModel(journals.insert(journal).second && journal->getCrankshaft() == shaft
+                        && journal->getRod() == nullptr, "Crank journal has inconsistent ownership");
+                }
+            }
+            for (auto *bank : m_cylinderBanks) {
+                requireModel(bank && banks.insert(bank).second, "Missing or duplicate cylinder bank");
+                bank->validate();
+                requireModel(bank->getCylinderHead()->getBank() == bank, "Cylinder head belongs to another bank");
+                count += bank->getCylinderCount();
+                requireModel(count <= static_cast<size_t>(std::numeric_limits<int>::max()), "Too many cylinders");
+                for (int i = 0; i < bank->getCylinderCount(); ++i) {
+                    const auto &cylinder = bank->getCylinder(i);
+                    requireModel(routes.emplace(cylinder.rod, cylinder.rodJournal).second, "Rod is shared by cylinders");
+                }
+            }
+            for (const auto &route : routes) {
+                for (auto *journal : route.first->getJournals()) {
+                    requireModel(journals.insert(journal).second && journal->getRod() == route.first
+                        && journal->getCrankshaft() == nullptr, "Slave journal has inconsistent ownership");
+                }
+            }
+            for (const auto &route : routes) {
+                std::set<ConnectingRodNode *> visited;
+                auto *rod = route.first;
+                while (true) {
+                    requireModel(visited.insert(rod).second, "Master rod graph contains a cycle");
+                    const auto found = routes.find(rod);
+                    requireModel(found != routes.end(), "Master rod is outside this engine");
+                    auto *journal = found->second;
+                    requireModel(journals.count(journal) != 0, "Rod journal is outside this engine");
+                    if (journal->getRod() == nullptr) {
+                        requireModel(shafts.count(journal->getCrankshaft()) != 0, "Journal crankshaft is outside this engine");
+                        break;
+                    }
+                    rod = journal->getRod();
+                }
+            }
+            for (const auto &post : m_ignitionModule->getPosts()) {
+                for (const auto &connection : post.wire->getConnections()) {
+                    requireModel(banks.count(connection.first) != 0 && connection.second >= 0
+                        && connection.second < connection.first->getCylinderCount(), "Ignition wire targets an unknown cylinder");
+                }
             }
         }
 

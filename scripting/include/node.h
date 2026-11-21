@@ -2,9 +2,11 @@
 #define ATG_ENGINE_SIM_NODE_H
 
 #include "piranha.h"
+#include "model_validation.h"
 
 #include <map>
 #include <string>
+#include <type_traits>
 
 namespace es_script {
 
@@ -19,6 +21,7 @@ namespace es_script {
             piranha::pNodeInput *input = nullptr;
             void *memoryTarget = nullptr;
             Type type = Type::Atomic;
+            bool (*valid)(const void *) = nullptr;
         };
 
     public:
@@ -34,9 +37,13 @@ namespace es_script {
 
         template <typename T_Out>
         T_Out readAtomicInput(const std::string &name) {
-            T_Out out;
-            (*m_inputMap[name].input)->fullCompute(&out);
-
+            const auto found = m_inputMap.find(name);
+            requireModel(found != m_inputMap.end() && found->second.input != nullptr
+                && *found->second.input != nullptr, "Missing input: " + name);
+            T_Out out{};
+            (*found->second.input)->fullCompute(&out);
+            checkRuntimeError();
+            if constexpr (std::is_floating_point_v<T_Out>) requireFinite(out, name);
             return out;
         }
 
@@ -45,20 +52,30 @@ namespace es_script {
                 if (i.second.type == InputTarget::Type::Atomic
                     || i.second.type == InputTarget::Type::Object)
                 {
-                    (*m_inputMap[i.first].input)->fullCompute(i.second.memoryTarget);
+                    requireModel(i.second.input != nullptr && *i.second.input != nullptr,
+                        "Missing input: " + i.first);
+                    (*i.second.input)->fullCompute(i.second.memoryTarget);
+                    checkRuntimeError();
+                    requireModel(i.second.valid == nullptr || i.second.valid(i.second.memoryTarget),
+                        "Input must be finite: " + i.first);
                 }
             }
         }
 
+        template <typename T>
         void addInput(
             const std::string &name,
-            void *target,
+            T *target,
             InputTarget::Type type = InputTarget::Type::Atomic)
         {
             m_inputMap[name] = {
-                new piranha::pNodeInput,
+                new piranha::pNodeInput{},
                 target,
-                type
+                type,
+                [](const void *value) {
+                    if constexpr (std::is_floating_point_v<T>) return std::isfinite(*static_cast<const T *>(value));
+                    else return true;
+                }
             };
         }
 
@@ -69,6 +86,12 @@ namespace es_script {
         }
 
     private:
+        void checkRuntimeError() {
+            if (getProgram() != nullptr) {
+                const auto message = getProgram()->getRuntimeError();
+                if (!message.empty()) throw ModelError(message);
+            }
+        }
         std::map<std::string, InputTarget> m_inputMap;
     };
 

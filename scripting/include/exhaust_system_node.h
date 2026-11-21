@@ -25,6 +25,12 @@ namespace es_script {
             return exhaust;
         }
 
+        void validate() const override {
+            requireModel(m_impulseResponse != nullptr, "Missing exhaust impulse response");
+            requirePositive(m_parameters.length, "exhaust length");
+            requirePositive(m_parameters.collectorCrossSectionArea, "exhaust collector cross section");
+        }
+
     protected:
         virtual void registerInputs() {
             addInput("length", &m_parameters.length);

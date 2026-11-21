@@ -53,6 +53,14 @@ namespace es_script {
             }
         }
 
+        void validate() const override {
+            requirePositive(m_parameters.mass, "rod mass");
+            requirePositive(m_parameters.momentOfInertia, "rod inertia");
+            requirePositive(m_parameters.length, "rod length");
+            for (auto *journal : m_rodJournals) requireModel(journal != nullptr, "Missing slave journal");
+        }
+        const std::vector<RodJournalNode *> &getJournals() const { return m_rodJournals; }
+
     protected:
         virtual void registerInputs() {
             addInput("mass", &m_parameters.mass);

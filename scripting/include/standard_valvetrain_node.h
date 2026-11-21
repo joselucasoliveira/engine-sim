@@ -35,6 +35,18 @@ namespace es_script {
             return valvetrain;
         }
 
+        void validate() const override {
+            requireModel(m_intakeCamshaft != nullptr, "Missing camshaft: intakeCamshaft");
+            m_intakeCamshaft->validate();
+            requireModel(m_exhaustCamshaft != nullptr, "Missing camshaft: exhaustCamshaft");
+            m_exhaustCamshaft->validate();
+        }
+        void validateCylinderCount(int count) const override {
+            validate();
+            requireModel(m_intakeCamshaft->getLobeCount() >= count, "Cam has fewer lobes than cylinders");
+            requireModel(m_exhaustCamshaft->getLobeCount() >= count, "Cam has fewer lobes than cylinders");
+        }
+
     protected:
         virtual void registerInputs() {
             addInput("intake_camshaft", &m_intakeCamshaft, InputTarget::Type::Object);

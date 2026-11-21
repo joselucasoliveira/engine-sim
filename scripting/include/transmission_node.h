@@ -26,6 +26,12 @@ namespace es_script {
             m_gears.push_back(ratio);
         }
 
+        void validate() const override {
+            requireModel(!m_gears.empty(), "Transmission has no gears");
+            for (double ratio : m_gears) requireModel(std::isfinite(ratio) && ratio != 0, "Invalid gear ratio");
+            requireModel(m_parameters.MaxClutchTorque >= 0, "Negative clutch torque");
+        }
+
     protected:
         virtual void registerInputs() {
             addInput("max_clutch_torque", &m_parameters.MaxClutchTorque);

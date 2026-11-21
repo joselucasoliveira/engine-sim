@@ -4,27 +4,26 @@
 #include "language_rules.h"
 
 #include "engine_sim.h"
+#include "../../include/engine_session.h"
 #include "piranha.h"
 
 #include <iosfwd>
+#include <memory>
+#include <stdexcept>
+#include <string>
 #include <vector>
 
 namespace es_script {
 
     class Compiler {
     public:
-        struct Output {
-            Engine *engine = nullptr;
-            Vehicle *vehicle = nullptr;
-            Transmission *transmission = nullptr;
-            Simulator::Parameters simulatorParameters;
-            ApplicationSettings applicationSettings;
-
-            std::vector<Function *> functions;
-        };
+        using Output = EngineDefinition;
+        using Diagnostic = EngineLoadDiagnostic;
+        using Error = EngineLoadError;
+        const Diagnostic &getLastError() const { return m_lastError; }
 
     private:
-        static Output *s_output;
+        static thread_local Output *s_output;
 
     public:
         Compiler();
@@ -42,11 +41,18 @@ namespace es_script {
 
     private:
         void printError(const piranha::CompilationError *err, std::ostream &diagnostics) const;
+        void resetCompilation();
 
     private:
         LanguageRules m_rules;
         piranha::Compiler *m_compiler;
-        piranha::NodeProgram m_program;
+        std::unique_ptr<piranha::NodeProgram> m_program;
+        std::vector<piranha::IrPath> m_libraryRoots;
+        std::string m_entryPath;
+        Diagnostic m_lastError;
+        bool m_initialized = false;
+        bool m_rulesInitialized = false;
+        bool m_compiled = false;
     };
 
 } /* namespace es_script */

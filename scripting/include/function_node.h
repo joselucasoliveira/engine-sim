@@ -20,6 +20,8 @@ namespace es_script {
         virtual ~FunctionNode() { /* void */ }
 
         void addSample(double x, double y) {
+            requireFinite(x, "curve x");
+            requireFinite(y, "curve y");
             m_samples.push_back({ x, y });
         }
 

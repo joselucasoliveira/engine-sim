@@ -17,6 +17,12 @@ namespace es_script {
             vehicle->initialize(m_parameters);
         }
 
+        void validate() const override {
+            requirePositive(m_parameters.mass, "vehicle mass");
+            requirePositive(m_parameters.tireRadius, "tire radius");
+            requireModel(m_parameters.diffRatio != 0, "Zero differential ratio");
+        }
+
     protected:
         virtual void registerInputs() {
             addInput("mass", &m_parameters.mass);

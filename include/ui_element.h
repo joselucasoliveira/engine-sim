@@ -6,6 +6,7 @@
 #include "delta.h"
 
 #include <vector>
+#include <memory>
 
 class EngineSimApplication;
 class UiElement {
@@ -38,14 +39,15 @@ class UiElement {
 
         template <typename T_Element>
         T_Element *addElement(UiElement *signalTarget = nullptr) {
-            T_Element *newElement = new T_Element;
+            auto release = [](T_Element *element) { static_cast<UiElement *>(element)->destroy(); delete element; };
+            std::unique_ptr<T_Element, decltype(release)> newElement(new T_Element, release);
             newElement->initialize(m_app);
             newElement->m_parent = this;
             newElement->m_signalTarget = signalTarget;
             newElement->m_index = (int)m_children.size();
-            m_children.push_back(newElement);
+            m_children.push_back(newElement.get());
 
-            return newElement;
+            return newElement.release();
         }
 
         UiElement *mouseOver(const Point &mouseLocal);

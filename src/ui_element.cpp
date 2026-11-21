@@ -19,7 +19,7 @@ UiElement::UiElement() {
 }
 
 UiElement::~UiElement() {
-    /* void */
+    destroy();
 }
 
 void UiElement::initialize(EngineSimApplication *app) {

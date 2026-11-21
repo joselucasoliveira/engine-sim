@@ -114,11 +114,11 @@ TEST(Displacement, SuppliedRadialMatchesIndependentMasterJoints) {
     compiler.initialize({(resources / "es").string(), (resources / "assets").string()});
     std::ostringstream diagnostic;
     ASSERT_TRUE(compiler.compile(entry.string(), diagnostic)) << diagnostic.str();
-    const auto output = compiler.execute();
+    auto output = compiler.execute();
     compiler.destroy();
-    std::unique_ptr<Engine> engine(output.engine);
-    std::unique_ptr<Vehicle> vehicle(output.vehicle);
-    std::unique_ptr<Transmission> transmission(output.transmission);
+    std::unique_ptr<Engine> engine(std::move(output.engine));
+    std::unique_ptr<Vehicle> vehicle(std::move(output.vehicle));
+    std::unique_ptr<Transmission> transmission(std::move(output.transmission));
     ASSERT_NE(engine, nullptr);
     ASSERT_EQ(engine->getCylinderCount(), 9);
     double coarseVolume = 0, fineVolume = 0, independentSamplingBound = 0;

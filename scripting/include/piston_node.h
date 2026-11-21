@@ -32,6 +32,8 @@ namespace es_script {
             piston->initialize(params);
         }
 
+        void validate() const override { requirePositive(m_parameters.mass, "piston mass"); }
+
     protected:
         virtual void registerInputs() {
             addInput("mass", &m_parameters.mass);

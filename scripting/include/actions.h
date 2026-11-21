@@ -4,6 +4,7 @@
 #include "piranha.h"
 
 #include "compiler.h"
+#include "model_validation.h"
 #include "object_reference_node.h"
 #include "engine_node.h"
 #include "crankshaft_node.h"
@@ -32,9 +33,11 @@ namespace es_script {
         virtual void _evaluate() {
             EngineNode *engineNode = getObject<EngineNode>(m_engineInput);
 
+            requireModel(engineNode != nullptr, "set_engine requires an engine");
+            engineNode->validate();
             auto engine = std::make_unique<Engine>();
             engineNode->buildEngine(engine.get());
-            Compiler::output()->engine = engine.release();
+            Compiler::output()->engine = std::move(engine);
         }
 
     protected:
@@ -57,6 +60,7 @@ namespace es_script {
         virtual void _evaluate() {
             readAllInputs();
 
+            requireModel(m_crankshaft && m_rodJournal, "Action is missing a required object");
             m_crankshaft->addRodJournal(m_rodJournal);
         }
 
@@ -81,6 +85,7 @@ namespace es_script {
         virtual void _evaluate() {
             readAllInputs();
 
+            requireModel(m_rod && m_rodJournal, "Action is missing a required object");
             m_rod->addRodJournal(m_rodJournal);
         }
 
@@ -105,6 +110,7 @@ namespace es_script {
         virtual void _evaluate() {
             readAllInputs();
 
+            requireModel(m_engine && m_crankshaft, "Action is missing a required object");
             m_engine->addCrankshaft(m_crankshaft);
         }
 
@@ -129,6 +135,7 @@ namespace es_script {
         virtual void _evaluate() {
             readAllInputs();
 
+            requireModel(m_engine && m_cylinderBankNode, "Action is missing a required object");
             m_engine->addCylinderBank(m_cylinderBankNode);
         }
 
@@ -160,6 +167,7 @@ namespace es_script {
         virtual void _evaluate() {
             readAllInputs();
 
+            requireModel(m_cylinderBank && m_pistonNode && m_connectingRod && m_rodJournal && m_intake && m_exhaustSystem && m_ignitionWire, "Action is missing a required object");
             m_cylinderBank->addCylinder(
                 m_pistonNode,
                 m_connectingRod,
@@ -201,6 +209,7 @@ namespace es_script {
         virtual void _evaluate() {
             readAllInputs();
 
+            requireModel(m_function != nullptr, "Action is missing a required object");
             m_function->addSample(m_x, m_y);
         }
 
@@ -226,6 +235,7 @@ namespace es_script {
         virtual void _evaluate() {
             readAllInputs();
 
+            requireModel(m_camshaft != nullptr, "Action is missing a required object");
             m_camshaft->addLobe(m_centerline);
         }
 
@@ -250,6 +260,7 @@ namespace es_script {
         virtual void _evaluate() {
             readAllInputs();
 
+            requireModel(m_bank && m_head, "Action is missing a required object");
             if (m_bank->getCylinderHead() != nullptr) {
                 throwError("Cylinder bank already has a head");
                 return;
@@ -385,6 +396,7 @@ namespace es_script {
         virtual void _evaluate() {
             readAllInputs();
 
+            requireModel(m_module && m_wire, "Action is missing a required object");
             m_module->connect(m_wire, m_angle);
         }
 
@@ -410,6 +422,7 @@ namespace es_script {
         virtual void _evaluate() {
             readAllInputs();
 
+            requireModel(m_engine && m_ignitionModule, "Action is missing a required object");
             m_engine->addIgnitionModule(m_ignitionModule);
         }
 
@@ -437,6 +450,11 @@ namespace es_script {
         virtual void _evaluate() {
             readAllInputs();
 
+            requireModel(m_function != nullptr, "Action is missing a required object");
+            requirePositive(m_durationAt50Thou, "cam duration");
+            requirePositive(m_gamma, "cam gamma");
+            requirePositive(m_lift, "cam lift");
+            requireModel(m_steps > 5, "Cam requires more than five sampling steps");
             const double angle = m_durationAt50Thou / 4;
             const double s = std::pow(2 * units::distance(50, units::thou) / m_lift, 1 / m_gamma) - 1;
             const double k = std::acos(s) / angle;
@@ -486,6 +504,7 @@ namespace es_script {
         virtual void _evaluate() {
             readAllInputs();
 
+            requireModel(m_transmission != nullptr, "Action is missing a required object");
             m_transmission->addGear(m_ratio);
         }
 
@@ -509,9 +528,11 @@ namespace es_script {
         virtual void _evaluate() {
             readAllInputs();
 
-            Transmission *transmission = new Transmission;
-            m_transmission->generate(transmission);
-            Compiler::output()->transmission = transmission;
+            requireModel(m_transmission != nullptr, "set_transmission requires a transmission");
+            auto transmission = std::make_unique<Transmission>();
+            m_transmission->validate();
+            m_transmission->generate(transmission.get());
+            Compiler::output()->transmission = std::move(transmission);
         }
 
     protected:
@@ -533,9 +554,11 @@ namespace es_script {
         virtual void _evaluate() {
             VehicleNode *vehicleNode = getObject<VehicleNode>(m_vehicle);
 
-            Vehicle *vehicle = new Vehicle;
-            vehicleNode->generate(vehicle);
-            Compiler::output()->vehicle = vehicle;
+            requireModel(vehicleNode != nullptr, "set_vehicle requires a vehicle");
+            auto vehicle = std::make_unique<Vehicle>();
+            vehicleNode->validate();
+            vehicleNode->generate(vehicle.get());
+            Compiler::output()->vehicle = std::move(vehicle);
         }
 
     protected:

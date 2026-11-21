@@ -45,6 +45,24 @@ namespace es_script {
             return valvetrain;
         }
 
+        void validate() const override {
+            requireModel(m_intakeCamshaft != nullptr, "Missing camshaft: intakeCamshaft");
+            m_intakeCamshaft->validate();
+            requireModel(m_exhaustCamshaft != nullptr, "Missing camshaft: exhaustCamshaft");
+            m_exhaustCamshaft->validate();
+            requireModel(m_vtecIntakeCamshaft != nullptr, "Missing camshaft: vtecIntakeCamshaft");
+            m_vtecIntakeCamshaft->validate();
+            requireModel(m_vtecExhaustCamshaft != nullptr, "Missing camshaft: vtecExhaustCamshaft");
+            m_vtecExhaustCamshaft->validate();
+        }
+        void validateCylinderCount(int count) const override {
+            validate();
+            requireModel(m_intakeCamshaft->getLobeCount() >= count, "Cam has fewer lobes than cylinders");
+            requireModel(m_exhaustCamshaft->getLobeCount() >= count, "Cam has fewer lobes than cylinders");
+            requireModel(m_vtecIntakeCamshaft->getLobeCount() >= count, "Cam has fewer lobes than cylinders");
+            requireModel(m_vtecExhaustCamshaft->getLobeCount() >= count, "Cam has fewer lobes than cylinders");
+        }
+
     protected:
         virtual void registerInputs() {
             addInput("vtec_intake_camshaft", &m_vtecIntakeCamshaft, InputTarget::Type::Object);

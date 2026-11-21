@@ -39,6 +39,12 @@ namespace es_script {
             m_lobes.push_back(lobeCenterline);
         }
 
+        void validate() const override {
+            requireModel(m_lobeProfile != nullptr, "Missing cam lobe profile");
+            requireModel(m_parameters.baseRadius >= 0, "Negative cam base radius");
+        }
+        int getLobeCount() const { return static_cast<int>(m_lobes.size()); }
+
     protected:
         virtual void registerInputs() {
             addInput("advance", &m_parameters.advance);

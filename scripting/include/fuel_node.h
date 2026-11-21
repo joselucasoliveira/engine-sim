@@ -26,6 +26,14 @@ namespace es_script {
             fuel->initialize(params);
         }
 
+        void validate() const override {
+            requireModel(m_turbulenceToFlameSpeedRatio != nullptr, "Missing fuel turbulence curve");
+            requirePositive(m_parameters.molecularMass, "fuel molecular mass");
+            requirePositive(m_parameters.density, "fuel density");
+            requireModel(m_parameters.energyDensity >= 0, "Negative fuel energy density");
+            requirePositive(m_parameters.molecularAfr, "fuel molecular AFR");
+        }
+
     protected:
         virtual void registerInputs() {
             addInput(

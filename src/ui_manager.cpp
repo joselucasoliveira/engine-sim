@@ -10,7 +10,7 @@ UiManager::UiManager() {
 }
 
 UiManager::~UiManager() {
-    /* void */
+    destroy();
 }
 
 void UiManager::initialize(EngineSimApplication *app) {

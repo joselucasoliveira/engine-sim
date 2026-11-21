@@ -302,9 +302,9 @@ void runEngine(const fs::path &resources, const fs::path &out, std::string_view 
     const auto parseTime = microsecondsSince(parseStart);
     if (!compiled) throw std::runtime_error("script compile failed: " + entry.string());
 
-    std::unique_ptr<Engine, decltype(&freeEngine)> engine(parsed.engine, freeEngine);
-    std::unique_ptr<Vehicle> vehicle(parsed.vehicle);
-    std::unique_ptr<Transmission> transmission(parsed.transmission);
+    std::unique_ptr<Engine, decltype(&freeEngine)> engine(parsed.engine.release(), freeEngine);
+    std::unique_ptr<Vehicle> vehicle(std::move(parsed.vehicle));
+    std::unique_ptr<Transmission> transmission(std::move(parsed.transmission));
     if (!engine || !vehicle || !transmission || engine->getCylinderCount() != scenario.cylinders
         || engine->getExhaustSystemCount() != scenario.exhausts
         || engine->getSimulationFrequency() != scenario.frequency) {

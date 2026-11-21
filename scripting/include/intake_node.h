@@ -26,6 +26,12 @@ namespace es_script {
             return intake;
         }
 
+        void validate() const override {
+            requirePositive(m_parameters.volume, "intake volume");
+            requirePositive(m_parameters.CrossSectionArea, "intake cross section");
+            requirePositive(m_parameters.MolecularAfr, "intake molecular AFR");
+        }
+
     protected:
         virtual void registerInputs() {
             addInput("plenum_volume", &m_parameters.volume);

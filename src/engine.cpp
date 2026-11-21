@@ -49,6 +49,8 @@ Engine::~Engine() {
 
 void Engine::initialize(const Parameters &params) {
     destroy();
+    // Adopt the transferred owner before string or array allocation can throw.
+    m_throttle = params.throttle;
     m_crankshaftCount = params.crankshaftCount;
     m_cylinderCount = params.cylinderCount;
     m_cylinderBankCount = params.cylinderBanks;
@@ -61,7 +63,6 @@ void Engine::initialize(const Parameters &params) {
     m_dynoHoldStep = params.dynoHoldStep;
     m_redline = params.redline;
     m_name = params.name;
-    m_throttle = params.throttle;
     m_initialHighFrequencyGain = params.initialHighFrequencyGain;
     m_initialSimulationFrequency = params.initialSimulationFrequency;
     m_initialJitter = params.initialJitter;
@@ -377,7 +378,7 @@ int Engine::getMaxDepth() const {
 }
 
 Simulator *Engine::createSimulator(Vehicle *vehicle, Transmission *transmission) {
-    PistonEngineSimulator *simulator = new PistonEngineSimulator;
+    auto simulator = std::make_unique<PistonEngineSimulator>();
     Simulator::Parameters simulatorParams;
     simulatorParams.systemType = Simulator::SystemType::NsvOptimized;
     simulator->initialize(simulatorParams);
@@ -385,7 +386,7 @@ Simulator *Engine::createSimulator(Vehicle *vehicle, Transmission *transmission)
     simulator->loadSimulation(this, vehicle, transmission);
     simulator->setFluidSimulationSteps(8);
 
-    return static_cast<Simulator *>(simulator);
+    return simulator.release();
 }
 
 double Engine::getRpm() const {

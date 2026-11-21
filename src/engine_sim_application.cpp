@@ -13,15 +13,83 @@
 #include "../include/feedback_comb_filter.h"
 #include "../include/utilities.h"
 
+#ifdef ATG_ENGINE_SIM_PIRANHA_ENABLED
 #include "../scripting/include/compiler.h"
+#endif
 
 #include <chrono>
 #include <stdlib.h>
 #include <sstream>
+#include <iostream>
+#include <cstring>
+#include <utility>
 
 #ifdef ATG_ENGINE_SIM_DISCORD_ENABLED
 #include "../dependencies/discord/Discord.h"
 #endif
+
+
+namespace {
+void releaseObjects(std::vector<SimulationObject *> &objects) {
+    for (auto *object : objects) { object->destroy(); delete object; }
+    objects.clear();
+}
+
+template <typename T>
+T *appendObject(std::vector<SimulationObject *> &objects, EngineSimApplication *application) {
+    auto release = [](T *object) { static_cast<SimulationObject *>(object)->destroy(); delete object; };
+    std::unique_ptr<T, decltype(release)> candidate(new T, release);
+    candidate->initialize(application);
+    objects.push_back(candidate.get());
+    return candidate.release();
+}
+
+std::vector<int16_t> readWindowsImpulse(const ImpulseResponse &response) {
+    const auto path = response.getFilename();
+    ysWindowsAudioWaveFile wave;
+    if (wave.OpenFile(path.c_str()) != ysAudioFile::Error::None) {
+        throw EngineLoadError({"resources", path, "Could not open impulse response"});
+    }
+    const auto *format = wave.GetAudioParameters();
+    if (format->m_channelCount != 1 || format->m_bitsPerSample != 16 || format->m_sampleRate != 44100) {
+        throw EngineLoadError({"resources", path, "Impulse response must be mono PCM16 at 44100 Hz"});
+    }
+    const auto count = wave.GetSampleCount();
+    if (wave.InitializeInternalBuffer(count) != ysAudioFile::Error::None
+        || wave.FillBuffer(0) != ysAudioFile::Error::None || wave.GetBuffer() == nullptr) {
+        throw EngineLoadError({"resources", path, "Could not read impulse response samples"});
+    }
+    std::vector<int16_t> samples(count);
+    std::memcpy(samples.data(), wave.GetBuffer(), samples.size() * sizeof(int16_t));
+    if (wave.CloseFile() != ysAudioFile::Error::None) {
+        throw EngineLoadError({"resources", path, "Could not close impulse response"});
+    }
+    return samples;
+}
+}
+
+struct EngineSimApplication::UserInterface {
+    UiManager manager;
+    EngineView *engineView = nullptr;
+    RightGaugeCluster *rightGauge = nullptr;
+    OscilloscopeCluster *oscilloscope = nullptr;
+    PerformanceCluster *performance = nullptr;
+    LoadSimulationCluster *load = nullptr;
+    MixerCluster *mixer = nullptr;
+    InfoCluster *info = nullptr;
+};
+
+struct EngineSimApplication::PendingSession {
+    std::unique_ptr<EngineSession> session;
+    std::vector<SimulationObject *> objects;
+    std::unique_ptr<UserInterface> ui;
+    ~PendingSession() {
+        if (session != nullptr && session->simulator != nullptr) session->simulator->endAudioRenderingThread();
+        ui.reset();
+        releaseObjects(objects);
+        session.reset();
+    }
+};
 
 std::string EngineSimApplication::s_buildVersion = "0.1.12a";
 
@@ -83,11 +151,11 @@ EngineSimApplication::EngineSimApplication() {
     m_displayAngle = 0.0f;
 }
 
-EngineSimApplication::~EngineSimApplication() {
-    /* void */
-}
+EngineSimApplication::~EngineSimApplication() { destroy(); }
 
 void EngineSimApplication::initialize(void *instance, ysContextObject::DeviceAPI api) {
+    if (m_windowCreated) throw std::logic_error("Application is already initialized");
+    m_destroyed = false;
     dbasic::Path modulePath = dbasic::GetModulePath();
     dbasic::Path confPath = modulePath.Append("delta.conf");
 
@@ -121,6 +189,7 @@ void EngineSimApplication::initialize(void *instance, ysContextObject::DeviceAPI
     settings.WindowHeight = 1080;
 
     m_engine.CreateGameWindow(settings);
+    m_windowCreated = true;
 
     m_engine.GetDevice()->CreateSubRenderTarget(
         &m_mainRenderTarget,
@@ -131,6 +200,7 @@ void EngineSimApplication::initialize(void *instance, ysContextObject::DeviceAPI
         0);
 
     m_engine.InitializeShaderSet(&m_shaderSet);
+    m_shaderSetReady = true;
     m_shaders.Initialize(
         &m_shaderSet,
         m_mainRenderTarget,
@@ -143,6 +213,7 @@ void EngineSimApplication::initialize(void *instance, ysContextObject::DeviceAPI
     m_shaders.SetClearColor(ysColor::srgbiToLinear(0x34, 0x98, 0xdb));
 
     m_assetManager.SetEngine(&m_engine);
+    m_assetsReady = true;
 
     m_engine.GetDevice()->CreateIndexBuffer(
         &m_geometryIndexBuffer, sizeof(unsigned short) * 200000, nullptr);
@@ -163,7 +234,7 @@ void EngineSimApplication::initialize() {
     m_textRenderer.SetRenderer(m_engine.GetUiRenderer());
     m_textRenderer.SetFont(m_engine.GetConsole()->GetFont());
 
-    loadScript();
+    if (!loadScript()) throw std::runtime_error(m_loadError);
 
     m_audioBuffer.initialize(44100, 44100);
     m_audioBuffer.m_writePointer = (int)(44100 * 0.1);
@@ -330,7 +401,7 @@ void EngineSimApplication::render() {
         object->render(&getViewParameters());
     }
 
-    m_uiManager.render();
+    m_userInterface->manager.render();
 }
 
 float EngineSimApplication::pixelsToUnits(float pixels) const {
@@ -353,9 +424,8 @@ void EngineSimApplication::run() {
         }
 
         if (m_engine.ProcessKeyDown(ysKey::Code::Return)) {
-            m_audioSource->SetMode(ysAudioSource::Mode::Stop);
-            loadScript();
-            if (m_simulator->getEngine() != nullptr) {
+            if (loadScript()) {
+                m_audioSource->SetMode(ysAudioSource::Mode::Stop);
                 m_audioSource->SetMode(ysAudioSource::Mode::Loop);
             }
         }
@@ -402,7 +472,7 @@ void EngineSimApplication::run() {
             process(m_engine.GetFrameLength());
         }
 
-        m_uiManager.update(m_engine.GetFrameLength());
+        m_userInterface->manager.update(m_engine.GetFrameLength());
 
         renderScene();
 
@@ -421,103 +491,112 @@ void EngineSimApplication::run() {
 }
 
 void EngineSimApplication::destroy() {
-    if (m_simulator != nullptr) {
-        m_simulator->endAudioRenderingThread();
-        m_simulator->releaseSimulation();
-        delete m_simulator;
-        m_simulator = nullptr;
-    }
+    if (m_destroyed) return;
+    m_destroyed = true;
+    if (m_session != nullptr) m_session->simulator->endAudioRenderingThread();
+    m_userInterface.reset();
     destroyObjects();
-    delete m_transmission;
-    m_transmission = nullptr;
-    delete m_vehicle;
-    m_vehicle = nullptr;
-    delete m_iceEngine;
-    m_iceEngine = nullptr;
-    m_shaderSet.Destroy();
+    m_session.reset();
+    bindSession();
 
-    m_engine.GetDevice()->DestroyGPUBuffer(m_geometryVertexBuffer);
-    m_engine.GetDevice()->DestroyGPUBuffer(m_geometryIndexBuffer);
-
-    m_assetManager.Destroy();
-    m_engine.Destroy();
-
+    if (m_windowCreated) {
+        if (auto *audio = m_engine.GetAudioDevice()) {
+            if (m_audioSource != nullptr) {
+                m_audioSource->SetMode(ysAudioSource::Mode::Stop);
+                audio->DestroyAudioSource(m_audioSource);
+            }
+            if (m_outputAudioBuffer != nullptr) audio->DestroyAudioBuffer(m_outputAudioBuffer);
+        }
+        if (m_shaderSetReady) { m_shaderSet.Destroy(); m_shaderSetReady = false; }
+        if (auto *device = m_engine.GetDevice()) {
+            if (m_geometryVertexBuffer != nullptr) device->DestroyGPUBuffer(m_geometryVertexBuffer);
+            if (m_geometryIndexBuffer != nullptr) device->DestroyGPUBuffer(m_geometryIndexBuffer);
+        }
+        if (m_assetsReady) { m_assetManager.Destroy(); m_assetsReady = false; }
+        m_engine.Destroy();
+        m_windowCreated = false;
+    }
+    m_geometryVertexBuffer = m_geometryIndexBuffer = nullptr;
+    m_geometryGenerator.destroy();
     m_audioBuffer.destroy();
 }
 
-void EngineSimApplication::loadEngine(
-    Engine *engine,
-    Vehicle *vehicle,
-    Transmission *transmission)
-{
-    destroyObjects();
+bool EngineSimApplication::loadEngine(Engine *engine, Vehicle *vehicle, Transmission *transmission) {
+    EngineDefinition definition;
+    definition.engine.reset(engine);
+    definition.vehicle.reset(vehicle);
+    definition.transmission.reset(transmission);
+    definition.applicationSettings = m_applicationSettings;
+    return loadEngine(std::move(definition));
+}
 
-    if (m_simulator != nullptr) {
-        m_simulator->releaseSimulation();
-        delete m_simulator;
+bool EngineSimApplication::loadEngine(EngineDefinition definition) {
+    const auto path = definition.sourcePath;
+    try {
+        PendingSession candidate;
+        candidate.session = EngineSession::prepare(std::move(definition), readWindowsImpulse);
+        // Widget initialization reads the palette and units. Roll back those values
+        // on any failure; window changes are deferred until the accepted swap.
+        auto previousSettings = candidate.session->definition.applicationSettings;
+        using std::swap;
+        swap(m_applicationSettings, previousSettings);
+        struct PaletteRollback {
+            EngineSimApplication &application;
+            ApplicationSettings &previous;
+            bool accepted = false;
+            ~PaletteRollback() {
+                if (!accepted) {
+                    using std::swap;
+                    swap(application.m_applicationSettings, previous);
+                    application.updatePalette();
+                }
+            }
+        } palette{*this, previousSettings};
+        updatePalette();
+
+        auto *engine = candidate.session->definition.engine.get();
+        auto *simulator = candidate.session->simulator.get();
+        buildObjects(engine, candidate.objects);
+        candidate.ui = prepareUserInterface(engine, simulator);
+        const int maxDepth = engine->getMaxDepth();
+        simulator->startAudioRenderingThread();
+
+        if (m_session != nullptr) m_session->simulator->endAudioRenderingThread();
+        m_session.swap(candidate.session);
+        m_objects.swap(candidate.objects);
+        m_userInterface.swap(candidate.ui);
+        bindSession();
+        m_viewParameters.Layer1 = maxDepth;
+        palette.accepted = true;
+        if (m_applicationSettings.startFullscreen) {
+            m_engine.GetGameWindow()->SetWindowStyle(ysWindow::WindowStyle::Fullscreen);
+        }
+        m_loadError.clear();
+        return true;
     }
+    catch (const EngineLoadError &error) { reportLoadFailure(error.what()); }
+    catch (const std::exception &error) { reportLoadFailure(EngineLoadDiagnostic{"initialize", path, error.what()}.format()); }
+    return false;
+}
 
-    if (m_vehicle != nullptr) {
-        delete m_vehicle;
-        m_vehicle = nullptr;
-    }
+void EngineSimApplication::bindSession() {
+    m_iceEngine = m_session ? m_session->definition.engine.get() : nullptr;
+    m_vehicle = m_session ? m_session->definition.vehicle.get() : nullptr;
+    m_transmission = m_session ? m_session->definition.transmission.get() : nullptr;
+    m_simulator = m_session ? m_session->simulator.get() : nullptr;
+    m_engineView = m_userInterface ? m_userInterface->engineView : nullptr;
+    m_rightGaugeCluster = m_userInterface ? m_userInterface->rightGauge : nullptr;
+    m_oscCluster = m_userInterface ? m_userInterface->oscilloscope : nullptr;
+    m_performanceCluster = m_userInterface ? m_userInterface->performance : nullptr;
+    m_loadSimulationCluster = m_userInterface ? m_userInterface->load : nullptr;
+    m_mixerCluster = m_userInterface ? m_userInterface->mixer : nullptr;
+    m_infoCluster = m_userInterface ? m_userInterface->info : nullptr;
+}
 
-    if (m_transmission != nullptr) {
-        delete m_transmission;
-        m_transmission = nullptr;
-    }
-
-    if (m_iceEngine != nullptr) {
-        m_iceEngine->destroy();
-        delete m_iceEngine;
-    }
-
-    m_iceEngine = engine;
-    m_vehicle = vehicle;
-    m_transmission = transmission;
-
-    m_simulator = engine->createSimulator(vehicle, transmission);
-
-    if (engine == nullptr || vehicle == nullptr || transmission == nullptr) {
-        m_iceEngine = nullptr;
-        m_viewParameters.Layer1 = 0;
-
-        return;
-    }
-
-    createObjects(engine);
-
-    m_viewParameters.Layer1 = engine->getMaxDepth();
-    engine->calculateDisplacement();
-
-    m_simulator->setSimulationFrequency(engine->getSimulationFrequency());
-
-    Synthesizer::AudioParameters audioParams = m_simulator->synthesizer().getAudioParameters();
-    audioParams.inputSampleNoise = static_cast<float>(engine->getInitialJitter());
-    audioParams.airNoise = static_cast<float>(engine->getInitialNoise());
-    audioParams.dF_F_mix = static_cast<float>(engine->getInitialHighFrequencyGain());
-    m_simulator->synthesizer().setAudioParameters(audioParams);
-
-    for (int i = 0; i < engine->getExhaustSystemCount(); ++i) {
-        ImpulseResponse *response = engine->getExhaustSystem(i)->getImpulseResponse();
-
-        ysWindowsAudioWaveFile waveFile;
-        waveFile.OpenFile(response->getFilename().c_str());
-        waveFile.InitializeInternalBuffer(waveFile.GetSampleCount());
-        waveFile.FillBuffer(0);
-        waveFile.CloseFile();
-
-        m_simulator->synthesizer().initializeImpulseResponse(
-            reinterpret_cast<const int16_t *>(waveFile.GetBuffer()),
-            waveFile.GetSampleCount(),
-            response->getVolume(),
-            i
-        );
-
-        waveFile.DestroyInternalBuffer();
-    }
-
-    m_simulator->startAudioRenderingThread();
+void EngineSimApplication::reportLoadFailure(const std::string &message) {
+    m_loadError = message;
+    std::cerr << message << '\n';
+    if (m_infoCluster != nullptr) m_infoCluster->setLogMessage(message);
 }
 
 void EngineSimApplication::drawGenerated(
@@ -558,6 +637,10 @@ void EngineSimApplication::configure(const ApplicationSettings &settings) {
         m_engine.GetGameWindow()->SetWindowStyle(ysWindow::WindowStyle::Fullscreen);
     }
 
+    updatePalette();
+}
+
+void EngineSimApplication::updatePalette() {
     m_background = ysColor::srgbiToLinear(m_applicationSettings.colorBackground);
     m_foreground = ysColor::srgbiToLinear(m_applicationSettings.colorForeground);
     m_shadow = ysColor::srgbiToLinear(m_applicationSettings.colorShadow);
@@ -572,53 +655,36 @@ void EngineSimApplication::configure(const ApplicationSettings &settings) {
 }
 
 void EngineSimApplication::createObjects(Engine *engine) {
+    PendingSession candidate;
+    buildObjects(engine, candidate.objects);
+    m_objects.swap(candidate.objects);
+}
+
+void EngineSimApplication::buildObjects(Engine *engine, std::vector<SimulationObject *> &objects) {
+    if (engine == nullptr) throw std::invalid_argument("Cannot build display objects without an engine");
     for (int i = 0; i < engine->getCylinderCount(); ++i) {
-        ConnectingRodObject *rodObject = new ConnectingRodObject;
-        rodObject->initialize(this);
-        rodObject->m_connectingRod = engine->getConnectingRod(i);
-        m_objects.push_back(rodObject);
-
-        PistonObject *pistonObject = new PistonObject;
-        pistonObject->initialize(this);
-        pistonObject->m_piston = engine->getPiston(i);
-        m_objects.push_back(pistonObject);
-
-        CombustionChamberObject *ccObject = new CombustionChamberObject;
-        ccObject->initialize(this);
-        ccObject->m_chamber = m_iceEngine->getChamber(i);
-        m_objects.push_back(ccObject);
+        auto *rod = appendObject<ConnectingRodObject>(objects, this);
+        rod->m_connectingRod = engine->getConnectingRod(i);
+        auto *piston = appendObject<PistonObject>(objects, this);
+        piston->m_piston = engine->getPiston(i);
+        auto *chamber = appendObject<CombustionChamberObject>(objects, this);
+        chamber->m_chamber = engine->getChamber(i);
     }
-
     for (int i = 0; i < engine->getCrankshaftCount(); ++i) {
-        CrankshaftObject *crankshaftObject = new CrankshaftObject;
-        crankshaftObject->initialize(this);
-        crankshaftObject->m_crankshaft = engine->getCrankshaft(i);
-        m_objects.push_back(crankshaftObject);
+        auto *shaft = appendObject<CrankshaftObject>(objects, this);
+        shaft->m_crankshaft = engine->getCrankshaft(i);
     }
-
     for (int i = 0; i < engine->getCylinderBankCount(); ++i) {
-        CylinderBankObject *cbObject = new CylinderBankObject;
-        cbObject->initialize(this);
-        cbObject->m_bank = engine->getCylinderBank(i);
-        cbObject->m_head = engine->getHead(i);
-        m_objects.push_back(cbObject);
-
-        CylinderHeadObject *chObject = new CylinderHeadObject;
-        chObject->initialize(this);
-        chObject->m_head = engine->getHead(i);
-        chObject->m_engine = engine;
-        m_objects.push_back(chObject);
+        auto *bank = appendObject<CylinderBankObject>(objects, this);
+        bank->m_bank = engine->getCylinderBank(i);
+        bank->m_head = engine->getHead(i);
+        auto *head = appendObject<CylinderHeadObject>(objects, this);
+        head->m_head = engine->getHead(i);
+        head->m_engine = engine;
     }
 }
 
-void EngineSimApplication::destroyObjects() {
-    for (SimulationObject *object : m_objects) {
-        object->destroy();
-        delete object;
-    }
-
-    m_objects.clear();
-}
+void EngineSimApplication::destroyObjects() { releaseObjects(m_objects); }
 
 const SimulationObject::ViewParameters &
     EngineSimApplication::getViewParameters() const
@@ -626,56 +692,23 @@ const SimulationObject::ViewParameters &
     return m_viewParameters;
 }
 
-void EngineSimApplication::loadScript() {
-    Engine *engine = nullptr;
-    Vehicle *vehicle = nullptr;
-    Transmission *transmission = nullptr;
-
+bool EngineSimApplication::loadScript() {
 #ifdef ATG_ENGINE_SIM_PIRANHA_ENABLED
-    es_script::Compiler compiler;
-    compiler.initialize();
-    const bool compiled = compiler.compile("../assets/main.mr");
-    if (compiled) {
-        const es_script::Compiler::Output output = compiler.execute();
-        configure(output.applicationSettings);
-
-        engine = output.engine;
-        vehicle = output.vehicle;
-        transmission = output.transmission;
+    try {
+        es_script::Compiler compiler;
+        compiler.initialize();
+        std::ostringstream diagnostics;
+        if (!compiler.compile("../assets/main.mr", diagnostics)) {
+            reportLoadFailure(compiler.getLastError().format() + "\n" + diagnostics.str());
+            return false;
+        }
+        return loadEngine(compiler.execute());
     }
-    else {
-        engine = nullptr;
-        vehicle = nullptr;
-        transmission = nullptr;
-    }
-
-    compiler.destroy();
-#endif /* ATG_ENGINE_SIM_PIRANHA_ENABLED */
-
-    if (vehicle == nullptr) {
-        Vehicle::Parameters vehParams;
-        vehParams.mass = units::mass(1597, units::kg);
-        vehParams.diffRatio = 3.42;
-        vehParams.tireRadius = units::distance(10, units::inch);
-        vehParams.dragCoefficient = 0.25;
-        vehParams.crossSectionArea = units::distance(6.0, units::foot) * units::distance(6.0, units::foot);
-        vehParams.rollingResistance = 2000.0;
-        vehicle = new Vehicle;
-        vehicle->initialize(vehParams);
-    }
-
-    if (transmission == nullptr) {
-        const double gearRatios[] = { 2.97, 2.07, 1.43, 1.00, 0.84, 0.56 };
-        Transmission::Parameters tParams;
-        tParams.GearCount = 6;
-        tParams.GearRatios = gearRatios;
-        tParams.MaxClutchTorque = units::torque(1000.0, units::ft_lb);
-        transmission = new Transmission;
-        transmission->initialize(tParams);
-    }
-
-    loadEngine(engine, vehicle, transmission);
-    refreshUserInterface();
+    catch (const std::exception &error) { reportLoadFailure(error.what()); }
+#else
+    reportLoadFailure("compile: ../assets/main.mr: Script support is disabled");
+#endif
+    return false;
 }
 
 void EngineSimApplication::processEngineInput() {
@@ -1060,28 +1093,34 @@ void EngineSimApplication::renderScene() {
         0);
 }
 
+std::unique_ptr<EngineSimApplication::UserInterface>
+EngineSimApplication::prepareUserInterface(Engine *engine, Simulator *simulator) {
+    if (engine == nullptr || simulator == nullptr) throw std::invalid_argument("Cannot build interface without an engine session");
+    auto candidate = std::make_unique<UserInterface>();
+    candidate->manager.initialize(this);
+    auto *root = candidate->manager.getRoot();
+    candidate->engineView = root->addElement<EngineView>();
+    candidate->rightGauge = root->addElement<RightGaugeCluster>();
+    candidate->oscilloscope = root->addElement<OscilloscopeCluster>();
+    candidate->performance = root->addElement<PerformanceCluster>();
+    candidate->load = root->addElement<LoadSimulationCluster>();
+    candidate->mixer = root->addElement<MixerCluster>();
+    candidate->info = root->addElement<InfoCluster>();
+    candidate->info->setEngine(engine);
+    candidate->rightGauge->m_simulator = simulator;
+    candidate->rightGauge->setEngine(engine);
+    candidate->oscilloscope->setSimulator(simulator);
+    candidate->oscilloscope->setDynoMaxRange(units::toRpm(engine->getRedline()));
+    candidate->performance->setSimulator(simulator);
+    candidate->load->setSimulator(simulator);
+    candidate->mixer->setSimulator(simulator);
+    return candidate;
+}
+
 void EngineSimApplication::refreshUserInterface() {
-    m_uiManager.destroy();
-    m_uiManager.initialize(this);
-
-    m_engineView = m_uiManager.getRoot()->addElement<EngineView>();
-    m_rightGaugeCluster = m_uiManager.getRoot()->addElement<RightGaugeCluster>();
-    m_oscCluster = m_uiManager.getRoot()->addElement<OscilloscopeCluster>();
-    m_performanceCluster = m_uiManager.getRoot()->addElement<PerformanceCluster>();
-    m_loadSimulationCluster = m_uiManager.getRoot()->addElement<LoadSimulationCluster>();
-    m_mixerCluster = m_uiManager.getRoot()->addElement<MixerCluster>();
-    m_infoCluster = m_uiManager.getRoot()->addElement<InfoCluster>();
-
-    m_infoCluster->setEngine(m_iceEngine);
-    m_rightGaugeCluster->m_simulator = m_simulator;
-    m_rightGaugeCluster->setEngine(m_iceEngine);
-    m_oscCluster->setSimulator(m_simulator);
-    if (m_iceEngine != nullptr) {
-        m_oscCluster->setDynoMaxRange(units::toRpm(m_iceEngine->getRedline()));
-    }
-    m_performanceCluster->setSimulator(m_simulator);
-    m_loadSimulationCluster->setSimulator(m_simulator);
-    m_mixerCluster->setSimulator(m_simulator);
+    auto candidate = prepareUserInterface(m_iceEngine, m_simulator);
+    m_userInterface.swap(candidate);
+    bindSession();
 }
 
 void EngineSimApplication::startRecording() {

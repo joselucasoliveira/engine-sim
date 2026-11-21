@@ -48,9 +48,9 @@ void destroyEngine(Engine *engine) {
 TEST_F(ScriptTests, DefaultScriptProducesTheExpectedEngine) {
     es_script::Compiler::Output output;
     ASSERT_TRUE(compile(resources / "assets" / "main.mr", &output)) << diagnostics.str();
-    std::unique_ptr<Engine, decltype(&destroyEngine)> engine(output.engine, destroyEngine);
-    std::unique_ptr<Vehicle> vehicle(output.vehicle);
-    std::unique_ptr<Transmission> transmission(output.transmission);
+    std::unique_ptr<Engine, decltype(&destroyEngine)> engine(output.engine.release(), destroyEngine);
+    std::unique_ptr<Vehicle> vehicle(std::move(output.vehicle));
+    std::unique_ptr<Transmission> transmission(std::move(output.transmission));
     ASSERT_NE(engine.get(), nullptr);
     ASSERT_NE(vehicle.get(), nullptr);
     ASSERT_NE(transmission.get(), nullptr);

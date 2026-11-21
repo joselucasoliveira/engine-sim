@@ -13,9 +13,16 @@ int WINAPI WinMain(
     (void)hPrevInstance;
 
     EngineSimApplication application;
-    application.initialize((void *)&hInstance, ysContextObject::DeviceAPI::DirectX11);
-    application.run();
+    int result = 0;
+    try {
+        application.initialize((void *)&hInstance, ysContextObject::DeviceAPI::DirectX11);
+        application.run();
+    }
+    catch (const std::exception &error) {
+        std::cerr << error.what() << '\n';
+        result = 1;
+    }
     application.destroy();
 
-    return 0;
+    return result;
 }

@@ -18,6 +18,8 @@ namespace es_script {
             /* void */
         }
 
+        virtual void validate() const {}
+
         template <typename Override>
         void overrideType() {
             m_output.overrideType(LookupChannelType<Override>());

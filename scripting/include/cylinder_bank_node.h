@@ -150,6 +150,20 @@ namespace es_script {
             return m_head;
         }
 
+        void validate() const override {
+            requireModel(!m_cylinders.empty(), "Cylinder bank has no cylinders");
+            requireModel(m_head != nullptr, "Cylinder bank has no head");
+            requirePositive(m_parameters.bore, "cylinder bore");
+            m_head->validate();
+            m_head->validateCylinderCount(getCylinderCount());
+            for (const auto &cylinder : m_cylinders) {
+                requireModel(cylinder.piston && cylinder.rod && cylinder.rodJournal
+                    && cylinder.intake && cylinder.exhaust, "Cylinder has a missing required part");
+                cylinder.piston->validate(); cylinder.rod->validate();
+                cylinder.intake->validate(); cylinder.exhaust->validate();
+            }
+        }
+
     protected:
         virtual void registerInputs() {
             addInput("angle", &m_parameters.angle);

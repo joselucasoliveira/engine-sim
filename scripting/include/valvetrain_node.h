@@ -12,6 +12,8 @@ namespace es_script {
         ValvetrainNode() { /* void */ }
         virtual ~ValvetrainNode() { /* void */ }
 
+        virtual void validateCylinderCount(int) const { validate(); }
+
         virtual Valvetrain *generate(EngineContext *context, Crankshaft *crank) = 0;
 
     protected:
