@@ -81,6 +81,12 @@ TEST_F(Load, SameCompilerRecoversAcrossFailures) {
     const auto nonfinite = write("nonfinite", "import \"engine_sim.mr\"\nset_engine(engine(simulation_frequency: 1.0 / 0.0))\n");
     const auto syntax = write("syntax", "import \"engine_sim.mr\"\nset_engine(\n");
     const auto missingInput = write("input", "import \"engine_sim.mr\"\nset_engine()\n");
+    const std::array<fs::path,5> discarded{
+        write("discarded-label", "invalid !!!\n"),
+        write("discarded-expression", "unknown(1 + (2 * 3) + !!!\n"),
+        write("discarded-ports", "! { input x; }\n"),
+        write("discarded-body", "! { input x; unknown() }\n"),
+        write("recovered-connection", "unknown(! ! !)\n")};
     for (int repeat = 0; repeat < 5; ++repeat) {
         auto valid = execute(resources / "assets/main.mr");
         ASSERT_NE(valid.engine, nullptr);
@@ -94,6 +100,12 @@ TEST_F(Load, SameCompilerRecoversAcrossFailures) {
             EXPECT_EQ(compiler.getLastError().path, entry.string());
             EXPECT_FALSE(diagnostics.str().empty());
             expectError([&] { compiler.execute(); }, "execute", entry);
+        }
+        for (const auto &entry:discarded) {
+            std::ostringstream diagnostics;
+            EXPECT_FALSE(compiler.compile(entry.string(),diagnostics));
+            EXPECT_FALSE(diagnostics.str().empty());
+            expectError([&]{compiler.execute();},"execute",entry);
         }
         auto recovered = execute(resources / "assets/main.mr");
         EXPECT_EQ(recovered.engine->getName(), valid.engine->getName());

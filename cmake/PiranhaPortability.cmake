@@ -8,6 +8,8 @@ function(engine_sim_project_piranha original projected)
         include/language_rules.h
         include/ir_value_constant.h
         src/standard_allocator.cpp
+        flex-bison/specification.y
+        src/ir_compilation_unit.cpp
     )
     foreach(input IN LISTS inputs)
         if (NOT input IN_LIST patched)
@@ -59,6 +61,58 @@ function(engine_sim_project_piranha original projected)
         2a614ce98e0a62900327a7c71cb5f2eef0b4120fc24612f89b1eb1efbccb6f5f)
     string(REPLACE "#include <malloc.h>" "#ifdef _MSC_VER\n#include <malloc.h>\n#endif" allocator "${allocator}")
     file(CONFIGURE OUTPUT "${projected}/src/standard_allocator.cpp" CONTENT "${allocator}" @ONLY)
+
+    engine_sim_read_piranha_source(grammar "${original}/flex-bison/specification.y"
+        35315cd092a8e2df06f4b511df91190449fd8f80aab58edda348cac6e25c31df)
+    # Track grammar allocations until parsing finishes. Attached nodes retain
+    # their existing tree owner; discarded trees are reclaimed by the parse scope.
+    string(REPLACE "%parse-param {IrCompilationUnit &driver}"
+        "%parse-param {IrCompilationUnit &driver}\n%parse-param {std::vector<piranha::IrParserStructure *> &allocations}"
+        grammar "${grammar}")
+    set(tracking [=[
+#undef yylex
+#define yylex scanner.yylex
+
+template <typename T>
+T *trackParserNode(std::vector<piranha::IrParserStructure *> &nodes, T *node) {
+    nodes.push_back(node);
+    return node;
+}
+#define PARSER_TRACK(node) trackParserNode(allocations, TRACK(node))]=])
+    string(REPLACE "#undef yylex\n#define yylex scanner.yylex" "${tracking}" grammar "${grammar}")
+    string(REPLACE "TRACK(new Ir" "PARSER_TRACK(new Ir" grammar "${grammar}")
+    string(REPLACE "| '(' error ')'                       { yyerrok; }"
+        "| '(' error ')'                       { $$ = nullptr; yyerrok; }" grammar "${grammar}")
+    file(CONFIGURE OUTPUT "${projected}/flex-bison/specification.y" CONTENT "${grammar}" @ONLY)
+
+    engine_sim_read_piranha_source(unit "${original}/src/ir_compilation_unit.cpp"
+        452c432d5fd9085005973430ca09ed7d011122108e5e570e41af6e66d1376d60)
+    string(REPLACE "#include <sstream>" "#include <sstream>\n#include <algorithm>" unit "${unit}")
+    set(scope [=[
+    struct ParseAllocations {
+        std::vector<IrParserStructure *> nodes;
+        ~ParseAllocations() {
+            // Select roots while every pointer is still alive. Freeing one
+            // root recursively releases its children, including discarded RHSs.
+            nodes.erase(std::remove_if(nodes.begin(), nodes.end(), [](auto *node) {
+                return node->getLogicalParent() != nullptr;
+            }), nodes.end());
+            for (auto *node : nodes) { node->free(); delete FTRACK(node); }
+        }
+    } allocations;
+    Parser parser(*m_scanner, *this, allocations.nodes);
+    if (parser.parse() != 0) {]=])
+    set(original_parser [=[    if (m_parser != nullptr) delete FTRACK(m_parser);
+    try {
+        m_parser = TRACK(new piranha::Parser(*m_scanner, *this));
+    }
+    catch (std::bad_alloc) {
+        return ParseResult::Fail;
+    }
+
+    if (m_parser->parse() != 0) {]=])
+    string(REPLACE "${original_parser}" "${scope}" unit "${unit}")
+    file(CONFIGURE OUTPUT "${projected}/src/ir_compilation_unit.cpp" CONTENT "${unit}" @ONLY)
 endfunction()
 
 function(engine_sim_read_piranha_source output path expected)

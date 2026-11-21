@@ -34,6 +34,16 @@ TEST(HostContract, PacketsOwnTransformColorStageLayerAndText) {
     EXPECT_EQ(packets[2].stage,TextStage); EXPECT_EQ(packets[2].text,"first\nsecond"); EXPECT_FLOAT_EQ(packets[2].state.color.z,1);
     EXPECT_THROW(host.drawGenerated(UiStage,0,0,1,256),DesktopError);
     host.clearPackets(); EXPECT_TRUE(host.drawPackets().empty());
+    TextRenderer text;text.SetHost(&host);
+    EXPECT_FLOAT_EQ(text.CalculateWidth("short\nlongest",12),42);
+    EXPECT_FLOAT_EQ(text.CalculateWidth(u8"A\tB\r\n\u03a9 \u00e7\rX",12),30);
+    host.drawText(u8"A\tB\r\n\u03a9 \u00e7\rX",0,0,12,{1,1,1,1});
+    EXPECT_EQ(host.drawPackets().back().text,"A   B\n? ?\nX");
+    host.drawText(u8"\u00e9\u20ac\U0001f600",0,0,12,{1,1,1,1});EXPECT_EQ(host.drawPackets().back().text,"???");
+    const std::string malformed("\xc0\xaf\xed\xa0\x80\xf4\x90\x80\x80\xe2\x82\0",12);
+    host.drawText(malformed,0,0,12,{1,1,1,1});EXPECT_EQ(host.drawPackets().back().text,std::string(12,'?'));
+    std::string supported;for (int byte=32;byte<=127;++byte) supported+=static_cast<char>(byte);
+    host.drawText(supported,0,0,12,{1,1,1,1});EXPECT_EQ(host.drawPackets().back().text,supported);
 }
 TEST(HostContract, GeometryRejectsNonfiniteValuesInvalidIndicesAndRanges) {
     auto recording=std::make_shared<host_test::Recording>(); host_test::RecordingHost host(recording);

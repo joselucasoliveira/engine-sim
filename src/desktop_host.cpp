@@ -6,6 +6,39 @@
 #include <limits>
 
 namespace desktop {
+namespace {
+// The original font contains glyphs 32..127. Keep raw diagnostics in their
+// model; only the common display boundary converts them to this repertoire.
+std::string displayText(const std::string &text) {
+    std::string result;result.reserve(text.size());std::size_t column=0;
+    for (std::size_t i=0;i<text.size();) {
+        const auto byte=static_cast<unsigned char>(text[i]);
+        if (byte=='\r' || byte=='\n') {
+            ++i;if (byte=='\r' && i<text.size() && text[i]=='\n') ++i;
+            result+='\n';column=0;continue;
+        }
+        if (byte=='\t') {
+            const auto spaces=4-column%4;result.append(spaces,' ');column+=spaces;++i;continue;
+        }
+        if (byte>=32 && byte<=127) { result+=text[i++];++column;continue; }
+        std::size_t count=1;
+        if (byte>=0xc2 && byte<=0xdf) count=2;
+        else if (byte>=0xe0 && byte<=0xef) count=3;
+        else if (byte>=0xf0 && byte<=0xf4) count=4;
+        bool valid=count>1 && count<=text.size()-i;
+        for (std::size_t j=1;valid && j<count;++j) {
+            const auto next=static_cast<unsigned char>(text[i+j]);valid=next>=0x80 && next<=0xbf;
+        }
+        if (valid) {
+            const auto second=static_cast<unsigned char>(text[i+1]);
+            valid=!((byte==0xe0 && second<0xa0) || (byte==0xed && second>=0xa0)
+                || (byte==0xf0 && second<0x90) || (byte==0xf4 && second>=0x90));
+        }
+        result+='?';++column;i+=valid?count:1;
+    }
+    return result;
+}
+}
 Host::Host() : window(*this) {}
 void Host::loadModels(const engine_sim::CompiledScene &scene) {
     models.clear();
@@ -35,7 +68,7 @@ void Host::drawGenerated(StageEnableFlags stage, int baseIndex, int baseVertex, 
 void Host::drawText(const std::string &text, float x, float y, float height, const Vector &color) {
     DrawPacket packet;
     packet.kind=DrawPacket::Kind::Text; packet.stage=TextStage; packet.state=drawing;
-    packet.state.color=color; packet.text=text; packet.x=x; packet.y=y; packet.height=height;
+    packet.state.color=color; packet.text=displayText(text); packet.x=x; packet.y=y; packet.height=height;
     packets.push_back(std::move(packet));
 }
 void Host::validateGeometry(const Vertex *vertices, std::size_t vertexCount,
@@ -80,7 +113,14 @@ void Host::validateGeometry(const Vertex *vertices, std::size_t vertexCount,
 }
 float TextRenderer::CalculateWidth(const std::string &text, float height) const {
     if (!host) throw DesktopError("text", "renderer is not initialized");
-    return host->measureText(text, height);
+    const auto value=displayText(text);float longest=0;std::size_t start=0;
+    do {
+        const auto end=value.find('\n',start);
+        longest=std::max(longest,host->measureText(value.substr(start,end-start),height));
+        if (end==std::string::npos) break;
+        start=end+1;
+    } while (start<=value.size());
+    return longest;
 }
 void TextRenderer::RenderText(const std::string &text, float x, float y, float height) {
     if (!host) throw DesktopError("text", "renderer is not initialized");

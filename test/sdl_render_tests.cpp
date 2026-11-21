@@ -107,6 +107,44 @@ TEST_F(DesktopRender, ActualApplicationRendersAllScreensAndNineCylinderEngine) {
         else EXPECT_TRUE(std::any_of(data->audio->pcm.begin(),data->audio->pcm.end(),[](auto sample){return sample!=0;}));
     }
 }
+TEST_F(DesktopRender, VisibleLoadDiagnosticRetainsRunningRadialAndRecoversOnNativeReturn) {
+    EngineSimApplication app;auto data=std::make_shared<render_test::Output>();
+    const auto entry=scratch/fs::u8path("entry Ω ç.mr");
+    const std::string source="import \"engine_sim.mr\"\nimport \"engines/atg-video-2/09_radial_9.mr\"\nmain()\n";
+    std::ofstream(entry)<<source;
+    auto host=std::make_unique<render_test::RenderingHost>(data,scratch,24);host->startEngine=true;
+    Simulator *original=nullptr;bool rejected=false,recovered=false;
+    host->beforeEvents=[&](std::size_t frame,SDL_Window *window) {
+        if (frame==4) std::ofstream(entry)<<"invalid !!!\n";
+        if (frame==9) std::ofstream(entry)<<source;
+        if (frame==4 || frame==5 || frame==9 || frame==10) {
+            const bool down=frame==4 || frame==9;SDL_Event event{};
+            event.type=down?SDL_EVENT_KEY_DOWN:SDL_EVENT_KEY_UP;event.key.windowID=SDL_GetWindowID(window);
+            event.key.scancode=SDL_SCANCODE_RETURN;event.key.down=down;ASSERT_TRUE(SDL_PushEvent(&event));
+        }
+        if (frame==5) {
+            rejected=true;EXPECT_EQ(app.getSimulator(),original);
+            const auto raw=app.getInfoCluster()->getLogMessage();
+            EXPECT_NE(raw.find("Ω ç"),std::string::npos);EXPECT_NE(raw.find('\n'),std::string::npos);
+            EXPECT_GT(std::abs(original->getEngine()->getRpm()),0);
+        }
+        if (frame==10) {
+            recovered=true;EXPECT_NE(app.getSimulator(),original);
+            EXPECT_EQ(app.getSimulator()->getEngine()->getCylinderCount(),9);
+        }
+    };
+    app.initialize(std::move(host),{paths.root,entry});original=app.getSimulator();
+    ASSERT_NE(original,nullptr);ASSERT_EQ(original->getEngine()->getCylinderCount(),9);
+    data->onShutdown=[&]{EXPECT_EQ(app.getSimulator(),nullptr);};
+    app.run();app.destroy();EXPECT_TRUE(rejected);EXPECT_TRUE(recovered);EXPECT_EQ(data->shutdowns,1);
+    EXPECT_EQ(data->gpu.presentedFrames,24U);EXPECT_GT(data->gpu.glyphs,100U);
+    bool diagnostic=false;
+    for (const auto &label:data->labels) {
+        if (label.find("entry ? ?.mr")!=std::string::npos) diagnostic=true;
+        for (unsigned char byte:label) EXPECT_TRUE(byte=='\n' || (byte>=32 && byte<=127));
+    }
+    EXPECT_TRUE(diagnostic);
+}
 TEST_F(DesktopRender, MissingMalformedInputsAndRepeatedGpuLifetimeFailOrReleaseCleanly) {
     window.initialize({"GPU failure lifecycle",640,360,false});window.pumpEvents();
     auto absent=paths;absent.desktop=scratch/"absent";EXPECT_THROW(renderer.initialize(window.nativeHandle(),absent,scene),engine_sim::ResourceError);

@@ -28,6 +28,7 @@ public:
         : output(std::move(output)),directory(std::move(directory)),audio(this->output->audio),frames(frames) { audio.inputs.resize(frames); }
     ~RenderingHost() override { shutdown(); }
     bool startEngine=false, tabs=false;
+    std::function<void(std::size_t,SDL_Window *)> beforeEvents;
     void initialize(const engine_sim::ResourcePaths &paths,const engine_sim::CompiledScene &scene) override {
         window.initialize({"Engine Simulator application render integration",startEngine?2560:1920,startEngine?1440:1080,false});
         renderer.initialize(window.nativeHandle(),paths,scene); current=window.frame();
@@ -55,6 +56,7 @@ public:
         }
         if (tabs && (next==1 || next==3)) key(SDL_SCANCODE_TAB,true);
         if (tabs && next==2) key(SDL_SCANCODE_TAB,false);
+        if (beforeEvents) beforeEvents(next,window.nativeHandle());
         window.pumpEvents(); current=window.frame();
         // A scheduled fixture clock keeps simulation assertions independent of GPU speed.
         current.seconds=1.0f/60;current.averageFps=60;audio.StartFrame();++next;
@@ -69,7 +71,7 @@ public:
                 output->sceneViews.push_back(packet.state.viewport);viewportRecorded=true;
             }
         }
-        if (next<=4 || next==frames) {
+        if (next<=5 || next==frames) {
             const auto pixels=renderer.readPixels();
             ppm(directory/("frame-"+std::to_string(next)+".ppm"),pixels,current.window.framebufferWidth,current.window.framebufferHeight);
             const auto &s=renderer.statistics();
