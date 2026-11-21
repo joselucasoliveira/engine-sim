@@ -32,3 +32,11 @@ gtest_discover_tests(engine-sim-lifecycle-test
     WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/lifecycle-working"
     DISCOVERY_TIMEOUT 30
     PROPERTIES LABELS lifecycle TIMEOUT 600 ENVIRONMENT "ENGINE_SIM_TEST_RESOURCES=${PROJECT_SOURCE_DIR}")
+
+add_executable(engine-sim-displacement-test displacement_tests.cpp)
+target_link_libraries(engine-sim-displacement-test PRIVATE engine-sim-script-interpreter gtest_main)
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/displacement-working")
+gtest_discover_tests(engine-sim-displacement-test
+    WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/displacement-working"
+    DISCOVERY_TIMEOUT 30
+    PROPERTIES LABELS displacement TIMEOUT 90 ENVIRONMENT "ENGINE_SIM_TEST_RESOURCES=${PROJECT_SOURCE_DIR}")

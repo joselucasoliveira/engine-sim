@@ -6,6 +6,7 @@
 #include "../include/piston_engine_simulator.h"
 
 #include <cmath>
+#include <stdexcept>
 #include <assert.h>
 
 Engine::Engine() {
@@ -170,65 +171,56 @@ bool placeRod(
     double *theta,
     double *s)
 {
-    double p_x_0, p_y_0, l_x, l_y, theta_0;
-    if (rod.getMasterRod() != nullptr) {
-        double s;
-        const bool succeeded = placeRod(
-            *rod.getMasterRod(),
-            *rod.getMasterRod()->getPiston()->getCylinderBank(),
-            *rod.getCrankshaft(),
-            crankshaftAngle,
-            &p_x_0,
-            &p_y_0,
-            &theta_0,
-            &s);
+    if (p_x == nullptr || p_y == nullptr || theta == nullptr || s == nullptr
+        || !std::isfinite(crankshaftAngle) || !std::isfinite(rod.getLength())
+        || rod.getLength() <= 0 || rod.getCrankshaft() != &crankshaft) return false;
 
-        if (!succeeded) {
-            return false;
-        }
+    // Reject cycles before following any master-rod chain.
+    const ConnectingRod *slow = &rod, *fast = &rod;
+    while (fast != nullptr && fast->getMasterRod() != nullptr) {
+        slow = slow->getMasterRod();
+        fast = fast->getMasterRod()->getMasterRod();
+        if (slow == fast) return false;
+    }
 
-        rod.getMasterRod()->getRodJournalPositionLocal(rod.getPiston()->getCylinderIndex(), &l_x, &l_y);
+    double originX, originY, localX, localY, orientation;
+    const auto *master = rod.getMasterRod();
+    if (master != nullptr) {
+        if (rod.getJournal() < 0 || rod.getJournal() >= master->getRodJournalCount()
+            || master->getPiston() == nullptr || master->getPiston()->getCylinderBank() == nullptr
+            || master->getCrankshaft() == nullptr) return false;
+        double masterTravel;
+        if (!placeRod(*master, *master->getPiston()->getCylinderBank(), *master->getCrankshaft(),
+                crankshaftAngle, &originX, &originY, &orientation, &masterTravel)) return false;
+        // The parent result is its crankpin. Journal coordinates use its body origin.
+        rod.getMasterRod()->getRodJournalPositionLocal(rod.getJournal(), &localX, &localY);
+        localY -= master->getBigEndLocal();
     }
     else {
-        theta_0 = crankshaftAngle;
-        p_x_0 = rod.getCrankshaft()->getPosX();
-        p_y_0 = rod.getCrankshaft()->getPosY();
-        rod.getCrankshaft()->getRodJournalPositionLocal(rod.getPiston()->getCylinderIndex(), &l_x, &l_y);
+        if (rod.getJournal() < 0 || rod.getJournal() >= crankshaft.getRodJournalCount()) return false;
+        orientation = crankshaftAngle;
+        originX = crankshaft.getPosX();
+        originY = crankshaft.getPosY();
+        // The journal accessor predates const-qualified reads.
+        rod.getCrankshaft()->getRodJournalPositionLocal(rod.getJournal(), &localX, &localY);
     }
 
-    const double dx = std::cos(theta_0);
-    const double dy = std::sin(theta_0);
-    *p_x = p_x_0 + (dx * l_x - dy * l_y);
-    *p_y = p_y_0 + (dy * l_x + dx * l_y);
+    const double cosine = std::cos(orientation), sine = std::sin(orientation);
+    *p_x = originX + cosine * localX - sine * localY;
+    *p_y = originY + sine * localX + cosine * localY;
+    const double offsetX = *p_x - bank.getX(), offsetY = *p_y - bank.getY();
+    const double axisSquared = bank.getDx() * bank.getDx() + bank.getDy() * bank.getDy();
+    const double projection = bank.getDx() * offsetX + bank.getDy() * offsetY;
+    const double radiusSquared = offsetX * offsetX + offsetY * offsetY - rod.getLength() * rod.getLength();
+    const double discriminant = projection * projection - axisSquared * radiusSquared;
+    if (!(axisSquared > 0) || !(discriminant >= 0)) return false;
 
-    // (bank->m_x + bank->m_dx * s - p_x)^2 + (bank->m_y + bank->m_dy * s - p_y)^2 = (rod->m_length)^2
-    const double a = bank.getDx() * bank.getDx() + bank.getDy() * bank.getDy();
-    const double b = -2 * bank.getDx() * ((*p_x) - bank.getX()) - 2 * bank.getDy() * ((*p_y) - bank.getY());
-    const double c =
-        ((*p_x) - bank.getX()) * ((*p_x) - bank.getX())
-        + ((*p_y) - bank.getY()) * ((*p_y) - bank.getY())
-        - rod.getLength() * rod.getLength();
-
-    const double det = b * b - 4 * a * c;
-    if (det < 0) return false;
-
-    const double sqrt_det = std::sqrt(det);
-    const double s0 = (-b + sqrt_det) / (2 * a);
-    const double s1 = (-b - sqrt_det) / (2 * a);
-
-    *s = std::max(s0, s1);
-    if (*s < 0) return false;
-   
-    if (s != nullptr) {
-        const double dx = (bank.getX() + bank.getDx() * (*s)) - (*p_x);
-        const double dy = (bank.getY() + bank.getDy() * (*s)) - (*p_y);
-
-        *theta = (dy > 0)
-            ? std::acos(dx)
-            : -std::acos(dx);
-    }
-
-    return true;
+    *s = (projection + std::sqrt(discriminant)) / axisSquared;
+    if (!std::isfinite(*s) || *s < 0) return false;
+    const double wristX = bank.getX() + bank.getDx() * *s;
+    const double wristY = bank.getY() + bank.getDy() * *s;
+    *theta = std::atan2(wristY - *p_y, wristX - *p_x) - constants::pi / 2;
+    return std::isfinite(*p_x) && std::isfinite(*p_y) && std::isfinite(*theta);
 }
 
 void Engine::calculateDisplacement() {
@@ -267,7 +259,8 @@ void Engine::calculateDisplacement() {
                 &theta,
                 &s))
             {
-                continue;
+                throw std::runtime_error("Cannot calculate displacement for cylinder "
+                    + std::to_string(i) + " at crank angle " + std::to_string(crankshaftAngle));
             }
 
             min_s[i] = std::min(min_s[i], s);
