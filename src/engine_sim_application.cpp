@@ -13,6 +13,7 @@
 #include "../include/feedback_comb_filter.h"
 #include "../include/utilities.h"
 #include "../include/wave_reader.h"
+#include "../include/compiled_scene.h"
 
 #ifdef ATG_ENGINE_SIM_PIRANHA_ENABLED
 #include "../scripting/include/compiler.h"
@@ -138,24 +139,15 @@ EngineSimApplication::EngineSimApplication() {
 
 EngineSimApplication::~EngineSimApplication() { destroy(); }
 
-void EngineSimApplication::initialize(void *instance, ysContextObject::DeviceAPI api) {
+void EngineSimApplication::initialize(void *instance, ysContextObject::DeviceAPI api,
+        const engine_sim::ResourceOptions &resources) {
     if (m_windowCreated) throw std::logic_error("Application is already initialized");
     m_destroyed = false;
-    dbasic::Path modulePath = dbasic::GetModulePath();
-    dbasic::Path confPath = modulePath.Append("delta.conf");
-
-    std::string enginePath = "../dependencies/submodules/delta-studio/engines/basic";
-    m_assetPath = "../assets";
-    if (confPath.Exists()) {
-        std::fstream confFile(confPath.ToString(), std::ios::in);
-
-        std::getline(confFile, enginePath);
-        std::getline(confFile, m_assetPath);
-        enginePath = modulePath.Append(enginePath).ToString();
-        m_assetPath = modulePath.Append(m_assetPath).ToString();
-
-        confFile.close();
-    }
+    m_resources = engine_sim::ResourcePaths::resolve(engine_sim::executablePath(), resources, true);
+    m_resources.validateLegacyDesktop();
+    engine_sim::readCompiledScene(m_resources.scene());
+    const std::string enginePath = m_resources.desktop.u8string();
+    m_assetPath = m_resources.assets.u8string();
 
     m_engine.GetConsole()->SetDefaultFontDirectory(enginePath + "/fonts/");
 
@@ -212,8 +204,9 @@ void EngineSimApplication::initialize(void *instance, ysContextObject::DeviceAPI
 
 void EngineSimApplication::initialize() {
     m_shaders.SetClearColor(ysColor::srgbiToLinear(0x34, 0x98, 0xdb));
-    m_assetManager.CompileInterchangeFile((m_assetPath + "/assets").c_str(), 1.0f, true);
-    m_assetManager.LoadSceneFile((m_assetPath + "/assets").c_str(), true);
+    if (m_assetManager.LoadSceneFile((m_assetPath + "/assets").c_str(), true) != ysError::None) {
+        throw engine_sim::ResourceError(m_resources.scene(), "legacy scene loader failed");
+    }
 
     m_textRenderer.SetEngine(&m_engine);
     m_textRenderer.SetRenderer(m_engine.GetUiRenderer());
@@ -681,9 +674,9 @@ bool EngineSimApplication::loadScript() {
 #ifdef ATG_ENGINE_SIM_PIRANHA_ENABLED
     try {
         es_script::Compiler compiler;
-        compiler.initialize();
+        compiler.initialize({m_resources.library.u8string(), m_resources.assets.u8string()});
         std::ostringstream diagnostics;
-        if (!compiler.compile("../assets/main.mr", diagnostics)) {
+        if (!compiler.compile(m_resources.script.u8string(), diagnostics)) {
             reportLoadFailure(compiler.getLastError().format() + "\n" + diagnostics.str());
             return false;
         }

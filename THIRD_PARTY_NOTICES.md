@@ -10,3 +10,7 @@ Ange Yaghi created the original Engine Simulator. The original copyright and com
 | GoogleTest | Build-time test framework with its own BSD-style license. [GoogleTest](https://github.com/google/googletest) |
 
 Review the provenance and applicable terms of each runtime file before redistributing it, including recordings, fonts, binary libraries and files from optional integrations.
+
+The runtime asset allowlist records the identity, origin and disposition of each selected file. The standard impulse recordings have upstream repository provenance; separate recording redistribution clearance has not been established. Private validation uses their original bytes and declared gains. The redistribution installer enforces this unresolved gate, and explicitly private staging marks its output as local validation only.
+
+The legacy desktop uses Jason Kottke's original unmodified Silkscreen regular font. Its complete font-specific license accompanies that file. The Delta shaders retain Delta Studio's MIT license. Parser builds include Piranha's MIT license, the FlexLexer notice and Boost's license. GoogleTest and optional video/Discord components are excluded from runtime installation.

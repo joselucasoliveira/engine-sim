@@ -1,0 +1,11 @@
+if ("@APPLE@" AND "@ENGINE_SIM_BUILD_DESKTOP@")
+    set(engine_sim_bundle_cli "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/EngineSim.app/Contents/MacOS/engine-sim-app")
+    file(REMOVE "${engine_sim_bundle_cli}")
+    file(CREATE_LINK EngineSim "${engine_sim_bundle_cli}" SYMBOLIC)
+endif ()
+execute_process(COMMAND "@Python3_EXECUTABLE@" -B "${engine_sim_stage_tool}" ${engine_sim_stage_arguments}
+    --destination "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}" ${engine_sim_stage_flags} --inventory
+    RESULT_VARIABLE engine_sim_stage_result)
+if (NOT engine_sim_stage_result EQUAL 0)
+    message(FATAL_ERROR "Runtime inventory generation failed")
+endif ()

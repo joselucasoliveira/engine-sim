@@ -96,12 +96,12 @@ inline void stressThread(const std::filesystem::path &out) {
 inline void stressLifecycle(const std::filesystem::path &resources, const std::filesystem::path &out,
         const EngineSession::ImpulseReader &reader) {
     es_script::Compiler compiler;
-    compiler.initialize({(resources / "es").string(), (resources / "assets").string()});
+    compiler.initialize({(resources / "es").u8string(), (resources / "assets").u8string()});
     std::ofstream inputs(out / "inputs.txt");
     inputs.exceptions(std::ios::badbit | std::ios::failbit);
     const auto invalidEntry = out / "stress-invalid.mr";
     { std::ofstream file(invalidEntry); file << "import \"engine_sim.mr\"\nset_engine(engine())\n"; }
-    inputs << invalidEntry.string() << '\n';
+    inputs << invalidEntry.u8string() << '\n';
     std::unique_ptr<EngineSession> active;
     int frames = 0;
     for (int cycle = 0; cycle < 10; ++cycle) {
@@ -114,7 +114,7 @@ inline void stressLifecycle(const std::filesystem::path &resources, const std::f
         }
         std::vector<std::string> modules;
         std::ostringstream diagnostics;
-        stressRequire(compiler.compile(entry.string(), diagnostics, &modules), "lifecycle compile failed");
+        stressRequire(compiler.compile(entry.u8string(), diagnostics, &modules), "lifecycle compile failed");
         for (const auto &module : modules) inputs << module << '\n';
         auto candidate = EngineSession::prepare(compiler.execute(), [&](const ImpulseResponse &response) {
             inputs << response.getFilename() << '\n';
@@ -136,7 +136,7 @@ inline void stressLifecycle(const std::filesystem::path &resources, const std::f
         stressRequire(count > 0, "lifecycle produced no PCM");
         frames += count;
         auto *original = active.get();
-        stressRequire(compiler.compile(invalidEntry.string()), "negative lifecycle fixture failed to compile");
+        stressRequire(compiler.compile(invalidEntry.u8string()), "negative lifecycle fixture failed to compile");
         bool rejected = false;
         try { auto invalid = EngineSession::prepare(compiler.execute(), reader); active.swap(invalid); }
         catch (const EngineLoadError &) { rejected = true; }

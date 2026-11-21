@@ -23,6 +23,7 @@
 #include "application_settings.h"
 #include "transmission.h"
 #include "engine_session.h"
+#include "resource_paths.h"
 
 #include "delta.h"
 #include "dtv.h"
@@ -48,7 +49,8 @@ class EngineSimApplication {
 
         static std::string getBuildVersion() { return s_buildVersion; }
 
-        void initialize(void *instance, ysContextObject::DeviceAPI api);
+        void initialize(void *instance, ysContextObject::DeviceAPI api,
+                        const engine_sim::ResourceOptions &resources = {});
         void run();
         void destroy();
 
@@ -133,6 +135,7 @@ class EngineSimApplication {
         dbasic::AssetManager m_assetManager;
 
         std::string m_assetPath;
+        engine_sim::ResourcePaths m_resources;
 
         ysRenderTarget *m_mainRenderTarget;
         ysGPUBuffer *m_geometryVertexBuffer;

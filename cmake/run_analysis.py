@@ -23,7 +23,7 @@ def main():
     output.mkdir(parents=True, exist_ok=True)
     run = Path(tempfile.mkdtemp(prefix="analysis-", dir=output))
     selected = {source / name for name in ("src/audio_buffer.cpp", "src/convolution_filter.cpp",
-                "src/synthesizer.cpp", "src/engine.cpp", "scripting/src/compiler.cpp", "src/wave_reader.cpp")}
+                "src/synthesizer.cpp", "src/engine.cpp", "scripting/src/compiler.cpp", "src/wave_reader.cpp", "src/resource_paths.cpp", "src/compiled_scene.cpp")}
     baseline = json.loads((source / "cmake/analysis-baseline.json").read_text())
     records = []
     for entry in json.loads(options.database.read_text()):

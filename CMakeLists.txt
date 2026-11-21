@@ -73,6 +73,7 @@ add_library(engine-sim STATIC
     src/camshaft.cpp
     src/crankshaft.cpp
     src/combustion_chamber.cpp
+    src/compiled_scene.cpp
     src/connecting_rod.cpp
     src/convolution_filter.cpp
     src/cylinder_bank.cpp
@@ -99,6 +100,7 @@ add_library(engine-sim STATIC
     src/part.cpp
     src/piston.cpp
     src/piston_engine_simulator.cpp
+    src/resource_paths.cpp
     src/simulator.cpp
     src/standard_valvetrain.cpp
     src/starter_motor.cpp
@@ -118,6 +120,7 @@ add_library(engine-sim STATIC
     include/camshaft.h
     include/crankshaft.h
     include/combustion_chamber.h
+    include/compiled_scene.h
     include/connecting_rod.h
     include/convolution_filter.h
     include/cylinder_bank.h
@@ -144,6 +147,7 @@ add_library(engine-sim STATIC
     include/part.h
     include/piston.h
     include/piston_engine_simulator.h
+    include/resource_paths.h
     include/simulator.h
     include/standard_valvetrain.h
     include/starter_motor.h
@@ -162,6 +166,9 @@ add_library(engine-sim STATIC
 find_package(Threads REQUIRED)
 target_link_libraries(engine-sim PUBLIC simple-2d-constraint-solver PRIVATE Threads::Threads)
 target_compile_features(engine-sim PUBLIC cxx_std_17)
+if (WIN32)
+    target_link_libraries(engine-sim PRIVATE shell32)
+endif ()
 
 target_include_directories(engine-sim PUBLIC include dependencies/submodules)
 
@@ -227,6 +234,7 @@ endif ()
 
 if (ENGINE_SIM_BUILD_DESKTOP)
     add_executable(engine-sim-app WIN32
+        src/app.manifest
         # Source files
         src/main.cpp
         src/engine_sim_application.cpp
@@ -359,6 +367,12 @@ if (BUILD_TESTING)
     gtest_discover_tests(engine-sim-wave-test
         DISCOVERY_TIMEOUT 30 WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/wave-working"
         PROPERTIES LABELS impulse TIMEOUT 90 ENVIRONMENT "ENGINE_SIM_TEST_SOURCE=${PROJECT_SOURCE_DIR}")
+    add_executable(engine-sim-resource-test test/resource_tests.cpp)
+    target_link_libraries(engine-sim-resource-test PRIVATE gtest_main engine-sim)
+    file(MAKE_DIRECTORY "${PROJECT_BINARY_DIR}/resources-working")
+    gtest_discover_tests(engine-sim-resource-test
+        DISCOVERY_TIMEOUT 30 WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/resources-working"
+        PROPERTIES LABELS resources TIMEOUT 90 ENVIRONMENT "ENGINE_SIM_TEST_SOURCE=${PROJECT_SOURCE_DIR}")
     if (PIRANHA_ENABLED)
         find_package(Python3 3.9 COMPONENTS Interpreter REQUIRED)
         add_test(NAME ImpulseReference
@@ -378,7 +392,7 @@ endif ()
 
 foreach(target IN ITEMS engine-sim engine-sim-script-interpreter engine-sim-app engine-sim-test
         engine-sim-threaded-test engine-sim-script-test engine-sim-lifecycle-test
-        engine-sim-displacement-test engine-sim-load-test engine-sim-wave-test engine-sim-capture)
+        engine-sim-displacement-test engine-sim-load-test engine-sim-wave-test engine-sim-resource-test engine-sim-capture)
     engine_sim_diagnose("${target}" TRUE)
 endforeach ()
 foreach(target IN ITEMS simple-2d-constraint-solver piranha csv-io gtest gtest_main delta-core delta-basic)
@@ -396,3 +410,5 @@ if (PIRANHA_ENABLED AND CMAKE_EXPORT_COMPILE_COMMANDS AND NOT MSVC)
             VERBATIM)
     endif ()
 endif ()
+
+include(cmake/RuntimeInstall.cmake)

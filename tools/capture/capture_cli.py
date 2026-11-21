@@ -43,9 +43,13 @@ def absolute(value):
     return path.resolve()
 
 
-def fresh_output(path, source):
-    if path.is_relative_to(source):
-        raise ValueError(f"output must be outside the source checkout: {path}")
+def fresh_output(path, source, *protected):
+    for root in (source, *protected):
+        if path.is_relative_to(root):
+            raise ValueError(f"output must be outside the source/resource/installation tree: {path}")
+    for root in (path, *path.parents):
+        if (root / ".git").exists() and (root / "include/engine.h").is_file() and (root / "tools/capture/capture_cli.py").is_file():
+            raise ValueError(f"output must be outside the Engine Simulator checkout: {path}")
     path.mkdir(parents=True, exist_ok=True)
     if next(path.iterdir(), None) is not None:
         raise ValueError(f"output directory is not empty: {path}")
@@ -65,12 +69,13 @@ def parse_count(value):
     return count
 
 
-def arguments(argv):
+def arguments(argv, default_resources=None):
     parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     actions = parser.add_subparsers(dest="action", required=True)
     run = actions.add_parser("run", allow_abbrev=False)
     run.add_argument("--suite", choices=SUITES, required=True)
-    run.add_argument("--resources", required=True, type=absolute)
+    run.add_argument("--resources", required=default_resources is None, default=default_resources, type=absolute)
+    run.add_argument("--script", type=absolute, help="custom entry for the LOAD case")
     run.add_argument("--out", required=True, type=absolute)
     run.add_argument("--seed", required=True, type=parse_uint)
     run.add_argument("--repetitions", required=True, type=parse_count)
@@ -130,7 +135,7 @@ def source_metadata(binary, metadata):
     }
 
 
-def input_hashes(output, root, expected_failure):
+def input_hashes(output, root, expected_failure, explicit_entry=None):
     record = output / "inputs.txt"
     if not record.exists():
         return {}
@@ -141,6 +146,8 @@ def input_hashes(output, root, expected_failure):
             key = "fixture/" + path.relative_to(output).as_posix()
         elif path.is_relative_to(root):
             key = "resources/" + path.relative_to(root).as_posix()
+        elif explicit_entry is not None:
+            key = "external/" + path.as_posix()
         else:
             raise ValueError(f"resolved input is outside the explicit resources or fixture root: {path}")
         if expected_failure and not path.is_file():
@@ -181,7 +188,7 @@ def execute_worker(binary, request, directory, seed, spectra):
             raise ValueError(f"child exited {event['exit']}: {diagnostic.strip()}")
         else:
             validate_artifacts(directory, request.name, spectra, event)
-        event["fixtures"] = input_hashes(directory, request.resources, request.diagnostic is not None)
+        event["fixtures"] = input_hashes(directory, request.resources, request.diagnostic is not None, request.entry)
         if request.entry is not None and request.entry.is_file():
             event["fixtures"]["fixture/input.mr"] = digest(request.entry)
         event["status"] = "pass"
@@ -245,13 +252,17 @@ def validate_artifacts(directory, name, spectra, event):
 def run_cases(options, binary, metadata, source):
     resources = options.resources
     if not all((resources / name).is_dir() for name in ("assets", "es")):
-        raise ValueError("resources must contain assets and es directories")
+        raise ValueError(f"resources must contain assets and es directories: {resources}")
     pool = SUITES[options.suite]
     if options.case is not None and options.case not in pool:
         raise ValueError(f"case {options.case!r} is outside suite {options.suite!r}")
     cases = (options.case,) if options.case else pool
-    fresh_output(options.out, source)
+    if options.script is not None and cases != ("LOAD",):
+        raise ValueError("--script requires --suite reference --case LOAD")
+    fresh_output(options.out, source, resources)
     fixtures = prepare_load_cases(resources, options.out / "load-fixtures") if "LOAD" in cases else None
+    if fixtures is not None and options.script is not None:
+        fixtures["valid"].entry = options.script
     run = {
         "version": 1, "selection": list(cases), "suite": options.suite, "mode": options.mode,
         "resources": str(resources), "seed": options.seed, "repetitions": options.repetitions,
@@ -467,23 +478,23 @@ def self_test():
 
 
 def main():
-    binary, metadata, source = (Path(value).resolve() for value in sys.argv[1:4])
-    argv = sys.argv[4:]
+    binary, metadata, source, default_resources = (Path(value).resolve() for value in sys.argv[1:5])
+    argv = sys.argv[5:]
     if argv == ["--self-test"]:
         self_test()
     elif argv == ["--quick-test"]:
         with tempfile.TemporaryDirectory(prefix="engine-capture-quick-", dir=metadata.parent) as scratch:
-            options = arguments(["run", "--suite", "quick", "--resources", str(source),
+            options = arguments(["run", "--suite", "quick", "--resources", str(default_resources),
                                  "--out", scratch, "--seed", "1", "--repetitions", "1", "--mode", "sync"])
             run_cases(options, binary, metadata, source)
     elif argv == ["--stress-test"]:
         scratch = tempfile.mkdtemp(prefix="engine-capture-stress-", dir=metadata.parent)
         print(f"stress artifacts: {scratch}", flush=True)
-        options = arguments(["run", "--suite", "stress", "--resources", str(source),
+        options = arguments(["run", "--suite", "stress", "--resources", str(default_resources),
                              "--out", scratch, "--seed", "1", "--repetitions", "1", "--mode", "sync"])
         run_cases(options, binary, metadata, source)
     else:
-        options = arguments(argv)
+        options = arguments(argv, default_resources)
         if options.action == "run":
             run_cases(options, binary, metadata, source)
         elif options.action == "calibrate":

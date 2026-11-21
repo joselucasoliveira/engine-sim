@@ -15,7 +15,13 @@ int WINAPI WinMain(
     EngineSimApplication application;
     int result = 0;
     try {
-        application.initialize((void *)&hInstance, ysContextObject::DeviceAPI::DirectX11);
+        const auto arguments = engine_sim::processArguments(0, nullptr);
+        if (arguments.size() == 2 && arguments[1] == "--help") {
+            std::cout << "Engine Simulator [--resources ROOT] [--script FILE]\n";
+            return 0;
+        }
+        const auto resources = engine_sim::parseResourceOptions(arguments);
+        application.initialize((void *)&hInstance, ysContextObject::DeviceAPI::DirectX11, resources);
         application.run();
     }
     catch (const std::exception &error) {

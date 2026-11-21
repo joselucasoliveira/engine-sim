@@ -1,0 +1,738 @@
+{
+  "schema": 1,
+  "origins": {
+    "project": "https://github.com/ange-yaghi/engine-sim at 85f7c3b959a908ed5232ede4f1a4ac7eafe6b630 for inherited data; fork notices remain current",
+    "delta": "https://github.com/ange-yaghi/delta-studio at b7d0a046733b924d12706baf1e5e59ba427aa7b1"
+  },
+  "files": [
+    {
+      "source": "project",
+      "path": "assets/engines/atg-video-1/01_honda_trx520.mr",
+      "destination": "assets/engines/atg-video-1/01_honda_trx520.mr",
+      "sha256": "63546d57f1792c29e4eb1e8898e3b6c691ff1b244c9c9037d82339c24c27a6a0",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/atg-video-1/02_kohler_ch750.mr",
+      "destination": "assets/engines/atg-video-1/02_kohler_ch750.mr",
+      "sha256": "88bf9d5a8c1a4fb8b45fda1fc8633b03155f09e35a3ce068e83c4cde541b30a8",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/atg-video-1/03_harley_davidson_shovelhead.mr",
+      "destination": "assets/engines/atg-video-1/03_harley_davidson_shovelhead.mr",
+      "sha256": "7f21e09146adb08692553dbbda8e497ad3a0ae6d57034e6c17538556cb1c9f04",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/atg-video-1/04_hayabusa.mr",
+      "destination": "assets/engines/atg-video-1/04_hayabusa.mr",
+      "sha256": "b55704d59a9dd7003227831d851407aebf95659a808bdcf0aa62edaf54273d99",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/atg-video-1/05_honda_vtec.mr",
+      "destination": "assets/engines/atg-video-1/05_honda_vtec.mr",
+      "sha256": "602b02e44b97e7b9a3b50a5569cf6f8f0fbd0373a68f3058b449b93503a167c6",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/atg-video-1/06_subaru_ej25.mr",
+      "destination": "assets/engines/atg-video-1/06_subaru_ej25.mr",
+      "sha256": "5f649ee9eaeae800309f4fecb7fef4eaa404d491b2113573c5e7399f33bab546",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/atg-video-1/07_audi_i5.mr",
+      "destination": "assets/engines/atg-video-1/07_audi_i5.mr",
+      "sha256": "329cea51613679ace19d6465d92cd8342d4b3acf7ab8b5ecfb915a37cd54658a",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/atg-video-1/08_radial_5.mr",
+      "destination": "assets/engines/atg-video-1/08_radial_5.mr",
+      "sha256": "a15d01f9d80374b0dd47ba933d4442d7acff4816f8a614f90336c93b2099a010",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/atg-video-1/README.md",
+      "destination": "assets/engines/atg-video-1/README.md",
+      "sha256": "58b517ceef8b93b7361afd2a559bd2a66dd950cef7b0ce5af62d185acd6d3a45",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/atg-video-1/radial.mr",
+      "destination": "assets/engines/atg-video-1/radial.mr",
+      "sha256": "4729f4ae881ab1a04750f333b176ec1d94ea0b166d36f9fe74e1433e858bba59",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/atg-video-2/01_subaru_ej25_eh.mr",
+      "destination": "assets/engines/atg-video-2/01_subaru_ej25_eh.mr",
+      "sha256": "04eba9d5e0f8fa2d1b2d6bfc89ee09cd1a414ecbd81d2b39f6cfd6c04fcdcb5a",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/atg-video-2/02_subaru_ej25_uh.mr",
+      "destination": "assets/engines/atg-video-2/02_subaru_ej25_uh.mr",
+      "sha256": "9f3e0c1355b2851f8a22c1adb0f8d9f06531017c5af046d281b205d71ed9f1b2",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/atg-video-2/03_2jz.mr",
+      "destination": "assets/engines/atg-video-2/03_2jz.mr",
+      "sha256": "15c013c726f5a2461817296fec6ab97bd8510ed23a9d0c85b9e72b5228ad5f54",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/atg-video-2/04_60_degree_v6.mr",
+      "destination": "assets/engines/atg-video-2/04_60_degree_v6.mr",
+      "sha256": "18c335f3bdd40f02d6f02e2afb4900247be7e8382e6aa558bc80e7e279a7c2aa",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/atg-video-2/05_odd_fire_v6.mr",
+      "destination": "assets/engines/atg-video-2/05_odd_fire_v6.mr",
+      "sha256": "cb3d761a7aff3ff8ba7d41af694251494c12e04a081030cce7bbf2462de43f96",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/atg-video-2/06_even_fire_v6.mr",
+      "destination": "assets/engines/atg-video-2/06_even_fire_v6.mr",
+      "sha256": "4e08a7c58c16c6a815445bfb2f63567d6438683bbde04271a342d9af494e2a66",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/atg-video-2/07_gm_ls.mr",
+      "destination": "assets/engines/atg-video-2/07_gm_ls.mr",
+      "sha256": "bbef3ac6280243833393367736eafda6281fd772e5183910cc0464c423fcb1df",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/atg-video-2/08_ferrari_f136_v8.mr",
+      "destination": "assets/engines/atg-video-2/08_ferrari_f136_v8.mr",
+      "sha256": "3281838e387d27cb72f0002422055ddf8cc5800ae906cc122ab971cc180307b3",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/atg-video-2/09_radial_9.mr",
+      "destination": "assets/engines/atg-video-2/09_radial_9.mr",
+      "sha256": "b80ae9107f2ba97f2deecec3904389a1c02101c2c7ae192aadecb134cb44120d",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/atg-video-2/10_lfa_v10.mr",
+      "destination": "assets/engines/atg-video-2/10_lfa_v10.mr",
+      "sha256": "c446c4644bae13c5763c20721d60ec37d36725d7da2b8646fb720cf3bb267491",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/atg-video-2/11_merlin_v12.mr",
+      "destination": "assets/engines/atg-video-2/11_merlin_v12.mr",
+      "sha256": "50a389da82f287cc48786bd7cc3e2b075733398e401f34c7ad196067511c25d0",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/atg-video-2/12_ferrari_412_t2.mr",
+      "destination": "assets/engines/atg-video-2/12_ferrari_412_t2.mr",
+      "sha256": "677e1d526c5259e519e08975e6b18d39489eab223786714cf2c5de2b47062bdd",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/atg-video-2/README.md",
+      "destination": "assets/engines/atg-video-2/README.md",
+      "sha256": "aec90ac06a5bc42efff5e296588ca9c442af6d8d21f8ad9d0ead3cdbeb76f328",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/atg-video-2/radial.mr",
+      "destination": "assets/engines/atg-video-2/radial.mr",
+      "sha256": "4729f4ae881ab1a04750f333b176ec1d94ea0b166d36f9fe74e1433e858bba59",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/audi/i5.mr",
+      "destination": "assets/engines/audi/i5.mr",
+      "sha256": "780fc0804fafaae52bbc5b112f48ba750901aa03024a69eadad0f35985e89fc8",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/bmw/M52B28.mr",
+      "destination": "assets/engines/bmw/M52B28.mr",
+      "sha256": "d562bf5d75d960d2fe53a8d2e10fd70c6f0e5657753f0814b70a12f31e36ba20",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/chevrolet/chev_truck_454.mr",
+      "destination": "assets/engines/chevrolet/chev_truck_454.mr",
+      "sha256": "95cec6f2feb5a0fece909805af4e172d2feaf12d316eb42c48f4cf49858b2304",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/chevrolet/engine_03_for_e1.mr",
+      "destination": "assets/engines/chevrolet/engine_03_for_e1.mr",
+      "sha256": "b971ecb29b42184c34c62ece74aa59341ce747463985d09b16bd525730f1bec5",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/kohler/kohler_ch750.mr",
+      "destination": "assets/engines/kohler/kohler_ch750.mr",
+      "sha256": "551866178b9323b0dff6f83e10bd520a4ccff346f2421d2ab9725c2a02d43917",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "assets/main.mr",
+      "destination": "assets/main.mr",
+      "sha256": "47f01cf32db4ffc49d78d5b8e887843e2fd5c253107edf76f98f22d9f1de0a35",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "assets/part-library/part_library.mr",
+      "destination": "assets/part-library/part_library.mr",
+      "sha256": "ee5f46958e0481608b5d34edd6b6a22274acefe5c09459acf70d239e2c38888f",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "assets/part-library/parts/cam_lobes.mr",
+      "destination": "assets/part-library/parts/cam_lobes.mr",
+      "sha256": "2495f2e6f49000eeb14adbd492e5b71d9e29e8d8bd7af32d86c81f2a45c8747a",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "assets/part-library/parts/camshafts.mr",
+      "destination": "assets/part-library/parts/camshafts.mr",
+      "sha256": "572e8b00760783798dd25e14d07313d9806b4a9cef89447cbc55158b48e48fe5",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "assets/part-library/parts/heads.mr",
+      "destination": "assets/part-library/parts/heads.mr",
+      "sha256": "960ecd2e1f4e44e12382e5eb08f47ec73243a2428cbbcf451dc08a71f1f84d90",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "assets/part-library/parts/ignition_modules.mr",
+      "destination": "assets/part-library/parts/ignition_modules.mr",
+      "sha256": "1b4688c4af1ce322cb37a0aa0ea48a4d63d0fb089a96f1824165d8da322decae",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "assets/part-library/parts/intakes.mr",
+      "destination": "assets/part-library/parts/intakes.mr",
+      "sha256": "f2331225d54ec56da44b5b658cfd51b859eb77c9bc5700a8dcace7513f5f8b1e",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "assets/themes/amateur.mr",
+      "destination": "assets/themes/amateur.mr",
+      "sha256": "ddb0c39a031532f91f1e58423052347b44d5b1e8ca28f23ba292387098b6cdc0",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "assets/themes/bubble_gum.mr",
+      "destination": "assets/themes/bubble_gum.mr",
+      "sha256": "e3618a23794e1f5d5f536bf92cdc80bd701d720e9b0a3635301ad72900cec843",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "assets/themes/default.mr",
+      "destination": "assets/themes/default.mr",
+      "sha256": "6efc8ae4baa34af3775ea211d500e0ac1eb394bb07d008bab09d3daf10ff48b7",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "assets/themes/minimalistic.mr",
+      "destination": "assets/themes/minimalistic.mr",
+      "sha256": "ea4253be782e1d38e35de4fdaf15d39493932667dc50ef7db109358d5c758f98",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "assets/themes/night_vision.mr",
+      "destination": "assets/themes/night_vision.mr",
+      "sha256": "1b8a03a4414dc8e4f590134570035d197142b9aaf35559a46aecf239c841d044",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "assets/themes/paper.mr",
+      "destination": "assets/themes/paper.mr",
+      "sha256": "6d08269675c046033e5244075447cf14dbccc8e594a1c8efba71ed7a41f64551",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "es/actions/actions.mr",
+      "destination": "es/actions/actions.mr",
+      "sha256": "95510e0e7e9252a28c02a2f07da9e31e9ffcadd5e32666f5e1170c0932e33d49",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "es/constants/constants.mr",
+      "destination": "es/constants/constants.mr",
+      "sha256": "d95f82158aaea275abe5ff79d1d59c53f33bdaf68dd22602ee7eaeaae3ab1665",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "es/constants/units.mr",
+      "destination": "es/constants/units.mr",
+      "sha256": "98ef4c60a833d00380a73442cd31de2596b4aa2d75674bb757b81785e637e89b",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "es/engine_sim.mr",
+      "destination": "es/engine_sim.mr",
+      "sha256": "699fdf93f3424854cdc14308bcf4358810ee12ec9fd6f3630cf27ad4090882e0",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "es/infrastructure/infrastructure.mr",
+      "destination": "es/infrastructure/infrastructure.mr",
+      "sha256": "4988985564c1b2b489e3b1ca66e73aa331d89adafbd554116832475efede6e5d",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "es/objects/objects.mr",
+      "destination": "es/objects/objects.mr",
+      "sha256": "608bcdbd47d2f3c57ad141608ce966f817765ca71b9861f31a9189de58459e0d",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "es/part-library/part_library.mr",
+      "destination": "es/part-library/part_library.mr",
+      "sha256": "ee5f46958e0481608b5d34edd6b6a22274acefe5c09459acf70d239e2c38888f",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "es/part-library/parts/cam_lobes.mr",
+      "destination": "es/part-library/parts/cam_lobes.mr",
+      "sha256": "2495f2e6f49000eeb14adbd492e5b71d9e29e8d8bd7af32d86c81f2a45c8747a",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "es/part-library/parts/camshafts.mr",
+      "destination": "es/part-library/parts/camshafts.mr",
+      "sha256": "221bf3b4a4fbf160bad0f07f9f3976d781e4517b6facfab7b203d6164d629291",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "es/part-library/parts/heads.mr",
+      "destination": "es/part-library/parts/heads.mr",
+      "sha256": "0cc883c53713615e62326281ec231c1bbd397083198a29e24c390dc857a53b97",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "es/part-library/parts/ignition_modules.mr",
+      "destination": "es/part-library/parts/ignition_modules.mr",
+      "sha256": "50163f63bb5c99775899a2f30e883eff3cb4b5dd7ae5d51f8bbf63c2017de49a",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "es/part-library/parts/intakes.mr",
+      "destination": "es/part-library/parts/intakes.mr",
+      "sha256": "f2331225d54ec56da44b5b658cfd51b859eb77c9bc5700a8dcace7513f5f8b1e",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "es/settings/application_settings.mr",
+      "destination": "es/settings/application_settings.mr",
+      "sha256": "43ee0fd9556223336cf9d6a26f6ce6dea5007c396355599aec6b4ffa38262cb0",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "es/sound-library/impulse_responses.mr",
+      "destination": "es/sound-library/impulse_responses.mr",
+      "sha256": "950c218503510a516cf7766cc5a9125409ed37eb8fb3519b1a4535dfdb7e2df8",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "es/types/atomic_types.mr",
+      "destination": "es/types/atomic_types.mr",
+      "sha256": "6b7e85d514eb62506b2c8b83af198cdfaf9e9987f93e7393f164e92cdc8ffc7e",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "es/types/conversions.mr",
+      "destination": "es/types/conversions.mr",
+      "sha256": "f42e170fba81db25a5c7ce05d9a1de31bd52c6d74c2224c836225b96a692726a",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "es/types/operations.mr",
+      "destination": "es/types/operations.mr",
+      "sha256": "e82e413b4159b7e59e541014f714f2b9f2e61cf76c2b293ab3993353971a57a8",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "es/utilities/utilities.mr",
+      "destination": "es/utilities/utilities.mr",
+      "sha256": "d07e34efcd8c9b20b27f4533501dabd37af03ad9b84772d22be09efd4aa03157",
+      "license": "Project MIT, retained upstream example attribution",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "assets/assets.ysce",
+      "destination": "assets/assets.ysce",
+      "sha256": "450e5c44a83f5b36a432df97a6e63ae2f682654270a3a6df2afc4c7e93b1196e",
+      "license": "Project MIT, compiled upstream scene",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "es/sound-library/smooth/smooth_39.wav",
+      "destination": "es/sound-library/smooth/smooth_39.wav",
+      "sha256": "75de9db47063395665d36b6d4232f477aae385feaa9ba158353fbdaf122db5cc",
+      "license": "Recording provenance retained; separate redistribution clearance unresolved",
+      "distribution": "local-validation-only",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "es/sound-library/archive/test_engine_14_eq_adjusted_16.wav",
+      "destination": "es/sound-library/archive/test_engine_14_eq_adjusted_16.wav",
+      "sha256": "dddbf4c01d0584c0a3660266add4b7517b32a2d688c2f890ff448b3909447553",
+      "license": "Recording provenance retained; separate redistribution clearance unresolved",
+      "distribution": "local-validation-only",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "es/sound-library/archive/test_engine_15_eq_adjusted_16.wav",
+      "destination": "es/sound-library/archive/test_engine_15_eq_adjusted_16.wav",
+      "sha256": "06975e66f7f0ac71b53709510215b1cbaecd206ac81b0bc6eecf063423342281",
+      "license": "Recording provenance retained; separate redistribution clearance unresolved",
+      "distribution": "local-validation-only",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "es/sound-library/archive/test_engine_16_eq_adjusted_16.wav",
+      "destination": "es/sound-library/archive/test_engine_16_eq_adjusted_16.wav",
+      "sha256": "44ce5af25a55efdf996c7e5026271f80949625b95fbdc1c4b83863b6e991b152",
+      "license": "Recording provenance retained; separate redistribution clearance unresolved",
+      "distribution": "local-validation-only",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "es/sound-library/sharp/sharp_01.wav",
+      "destination": "es/sound-library/sharp/sharp_01.wav",
+      "sha256": "16024d4f5ddd4f7961f59e4e0c9e04227a8b393656b9b41ee9253e94e8f684f5",
+      "license": "Recording provenance retained; separate redistribution clearance unresolved",
+      "distribution": "local-validation-only",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "es/sound-library/new/mild_exhaust.wav",
+      "destination": "es/sound-library/new/mild_exhaust.wav",
+      "sha256": "f2875947eba2ed98a15f45a5d62f6ae7b607b0a56389bad5882d75748ad374b9",
+      "license": "Recording provenance retained; separate redistribution clearance unresolved",
+      "distribution": "local-validation-only",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "es/sound-library/new/mild_exhaust_reverb.wav",
+      "destination": "es/sound-library/new/mild_exhaust_reverb.wav",
+      "sha256": "d671405710a1b776f7e25f4aa227c647d593a5b71e440964e98b1f33f26cb7b9",
+      "license": "Recording provenance retained; separate redistribution clearance unresolved",
+      "distribution": "local-validation-only",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "es/sound-library/new/minimal_muffling_01.wav",
+      "destination": "es/sound-library/new/minimal_muffling_01.wav",
+      "sha256": "0d736bb7065686ae527c8487ef7850762c0381c91125e555228cf4599e4ff68c",
+      "license": "Recording provenance retained; separate redistribution clearance unresolved",
+      "distribution": "local-validation-only",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "es/sound-library/new/minimal_muffling_02.wav",
+      "destination": "es/sound-library/new/minimal_muffling_02.wav",
+      "sha256": "df0b8be829d28ae64e5b2818a1942a3b3e5733186bdf262cad4c2af038995d48",
+      "license": "Recording provenance retained; separate redistribution clearance unresolved",
+      "distribution": "local-validation-only",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "es/sound-library/new/minimal_muffling_03.wav",
+      "destination": "es/sound-library/new/minimal_muffling_03.wav",
+      "sha256": "16024d4f5ddd4f7961f59e4e0c9e04227a8b393656b9b41ee9253e94e8f684f5",
+      "license": "Recording provenance retained; separate redistribution clearance unresolved",
+      "distribution": "local-validation-only",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "LICENSE",
+      "destination": "licenses/engine-sim-MIT.txt",
+      "sha256": "9f64449d4ef2db6b57d6af9d36e5eca5b6de3ece2db14a847ae71d4e0dcbff15",
+      "license": "MIT",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "project",
+      "path": "THIRD_PARTY_NOTICES.md",
+      "destination": "licenses/THIRD_PARTY_NOTICES.md",
+      "sha256": "e064a69a6d5bf588688f9a427e5ec75f076db962c1637651548c58c60b77fbf0",
+      "license": "Project notices",
+      "distribution": "permitted",
+      "component": "base"
+    },
+    {
+      "source": "delta",
+      "path": "LICENSE",
+      "destination": "licenses/delta-studio.txt",
+      "sha256": "5eef0f1c19cfaad07d84dd9ac129cd439a9057bfd4b8cb8e59b02a7fe1850349",
+      "license": "Delta Studio MIT",
+      "distribution": "permitted",
+      "component": "desktop"
+    },
+    {
+      "source": "delta",
+      "path": "engines/basic/fonts/Silkscreen/slkscr.ttf",
+      "destination": "delta/fonts/Silkscreen/slkscr.ttf",
+      "sha256": "201df110e8dd8f19da40e5ad953b25bcac34dcb1bd14c7b8e02c9ce0b5ac0ca3",
+      "license": "Original Silkscreen custom license; unmodified file",
+      "distribution": "permitted",
+      "component": "desktop"
+    },
+    {
+      "source": "delta",
+      "path": "engines/basic/fonts/Silkscreen/Kottke Silkscreen License.txt",
+      "destination": "delta/fonts/Silkscreen/Kottke Silkscreen License.txt",
+      "sha256": "80a34fc68913c469af72872ee0e4e0b3ef101597740677fdcdcdfcb3606f9bea",
+      "license": "Original Silkscreen custom license; unmodified file",
+      "distribution": "permitted",
+      "component": "desktop"
+    },
+    {
+      "source": "delta",
+      "path": "engines/basic/fonts/Silkscreen/Kottke Silkscreen License.txt",
+      "destination": "licenses/Silkscreen.txt",
+      "sha256": "80a34fc68913c469af72872ee0e4e0b3ef101597740677fdcdcdfcb3606f9bea",
+      "license": "Original Silkscreen custom license",
+      "distribution": "permitted",
+      "component": "desktop"
+    },
+    {
+      "source": "delta",
+      "path": "engines/basic/shaders/hlsl/delta_console_shader.fx",
+      "destination": "delta/shaders/hlsl/delta_console_shader.fx",
+      "sha256": "1a314d46e1aa6c728e809fbda5bd024cc72a5fd7491db378271700f1e1c6cf4f",
+      "license": "Delta Studio MIT",
+      "distribution": "permitted",
+      "component": "desktop",
+      "platforms": [
+        "Windows"
+      ]
+    },
+    {
+      "source": "delta",
+      "path": "engines/basic/shaders/hlsl/delta_engine_shader.fx",
+      "destination": "delta/shaders/hlsl/delta_engine_shader.fx",
+      "sha256": "f5a2f7d7b5498df417049e92e04609fa88a4f858d808ad642b742c2bdbdd9570",
+      "license": "Delta Studio MIT",
+      "distribution": "permitted",
+      "component": "desktop",
+      "platforms": [
+        "Windows"
+      ]
+    },
+    {
+      "source": "delta",
+      "path": "engines/basic/shaders/hlsl/delta_saq_shader.fx",
+      "destination": "delta/shaders/hlsl/delta_saq_shader.fx",
+      "sha256": "983f59399c5eb90dcfa27d4c6e201900c9066cb615eb50e4f183a5c84721c5e3",
+      "license": "Delta Studio MIT",
+      "distribution": "permitted",
+      "component": "desktop",
+      "platforms": [
+        "Windows"
+      ]
+    }
+  ]
+}

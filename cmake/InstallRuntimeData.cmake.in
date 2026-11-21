@@ -1,0 +1,42 @@
+set(engine_sim_stage_mode redistributable)
+if ("@DTV@" OR "@DISCORD_ENABLED@")
+    message(FATAL_ERROR "Runtime installation requires the optional video and Discord integrations to be disabled")
+endif ()
+@engine_sim_extra_input_checks@
+if ("@ENGINE_SIM_LOCAL_RESOURCE_STAGE@")
+    set(engine_sim_stage_mode local-validation)
+endif ()
+if (DEFINED ENV{ENGINE_SIM_STAGE_MODE})
+    set(engine_sim_stage_mode "$ENV{ENGINE_SIM_STAGE_MODE}")
+endif ()
+if (NOT engine_sim_stage_mode MATCHES "^(redistributable|local-validation)$")
+    message(FATAL_ERROR "ENGINE_SIM_STAGE_MODE must be redistributable or local-validation")
+endif ()
+set(engine_sim_stage_flags @engine_sim_stage_desktop@)
+if (engine_sim_stage_mode STREQUAL local-validation)
+    list(APPEND engine_sim_stage_flags --local-validation)
+endif ()
+set(engine_sim_stage_tool "@PROJECT_SOURCE_DIR@/tools/stage_resources.py")
+set(engine_sim_stage_arguments --source "@PROJECT_SOURCE_DIR@" --delta "@ENGINE_SIM_DELTA_ASSET_SOURCE@"
+    --manifest "@PROJECT_SOURCE_DIR@/cmake/runtime-assets.json" --platform "@CMAKE_SYSTEM_NAME@")
+set(engine_sim_stage_destination "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/share/engine-sim")
+execute_process(COMMAND "@Python3_EXECUTABLE@" -B "${engine_sim_stage_tool}" ${engine_sim_stage_arguments}
+    --destination "${engine_sim_stage_destination}" ${engine_sim_stage_flags} --check-only
+    RESULT_VARIABLE engine_sim_stage_result)
+if (NOT engine_sim_stage_result EQUAL 0)
+    message(FATAL_ERROR "Runtime input/rights preflight failed; no runtime files were installed")
+endif ()
+execute_process(COMMAND "@Python3_EXECUTABLE@" -B "${engine_sim_stage_tool}" ${engine_sim_stage_arguments}
+    --destination "${engine_sim_stage_destination}" ${engine_sim_stage_flags}
+    RESULT_VARIABLE engine_sim_stage_result)
+if (NOT engine_sim_stage_result EQUAL 0)
+    message(FATAL_ERROR "Runtime data copy failed")
+endif ()
+if ("@APPLE@" AND "@ENGINE_SIM_BUILD_DESKTOP@")
+    execute_process(COMMAND "@Python3_EXECUTABLE@" -B "${engine_sim_stage_tool}" ${engine_sim_stage_arguments}
+        --destination "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/EngineSim.app/Contents/Resources" ${engine_sim_stage_flags}
+        RESULT_VARIABLE engine_sim_stage_result)
+    if (NOT engine_sim_stage_result EQUAL 0)
+        message(FATAL_ERROR "Bundle runtime data copy failed")
+    endif ()
+endif ()

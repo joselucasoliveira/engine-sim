@@ -43,7 +43,7 @@ double microsecondsSince(Clock::time_point start) {
 
 std::ofstream openOutput(const fs::path &path) {
     std::ofstream stream(path, std::ios::binary);
-    if (!stream) throw std::runtime_error("cannot write " + path.string());
+    if (!stream) throw std::runtime_error("cannot write " + path.u8string());
     stream.exceptions(std::ios::badbit | std::ios::failbit);
     stream << std::setprecision(17);
     return stream;
@@ -246,13 +246,13 @@ void runEngine(const fs::path &resources, const fs::path &out, std::string_view 
 
     const auto parseStart = Clock::now();
     es_script::Compiler compiler;
-    compiler.initialize({(resources / "es").string(), (resources / "assets").string()});
+    compiler.initialize({(resources / "es").u8string(), (resources / "assets").u8string()});
     std::vector<std::string> scriptPaths;
-    const bool compiled = compiler.compile(entry.string(), std::cerr, &scriptPaths);
+    const bool compiled = compiler.compile(entry.u8string(), std::cerr, &scriptPaths);
     auto parsed = compiled ? compiler.execute() : es_script::Compiler::Output{};
     compiler.destroy();
     const auto parseTime = microsecondsSince(parseStart);
-    if (!compiled) throw std::runtime_error("script compile failed: " + entry.string());
+    if (!compiled) throw std::runtime_error("script compile failed: " + entry.u8string());
 
     std::unique_ptr<Engine, decltype(&freeEngine)> engine(parsed.engine.release(), freeEngine);
     std::unique_ptr<Vehicle> vehicle(std::move(parsed.vehicle));
@@ -260,7 +260,7 @@ void runEngine(const fs::path &resources, const fs::path &out, std::string_view 
     if (!engine || !vehicle || !transmission || engine->getCylinderCount() != scenario.cylinders
         || engine->getExhaustSystemCount() != scenario.exhausts
         || engine->getSimulationFrequency() != scenario.frequency) {
-        throw std::runtime_error("unexpected or unsupported engine graph: " + entry.string());
+        throw std::runtime_error("unexpected or unsupported engine graph: " + entry.u8string());
     }
 
     auto inputs = openOutput(out / "inputs.txt");
@@ -273,8 +273,8 @@ void runEngine(const fs::path &resources, const fs::path &out, std::string_view 
     for (int i = 0; i < scenario.exhausts; ++i) {
         auto *impulse = engine->getExhaustSystem(i)->getImpulseResponse();
         if (impulse == nullptr) throw std::runtime_error("missing impulse response on exhaust " + std::to_string(i));
-        const fs::path file = impulse->getFilename();
-        inputs << file.string() << '\n';
+        const fs::path file = fs::u8path(impulse->getFilename());
+        inputs << file.u8string() << '\n';
         impulses.push_back({readImpulse(file), static_cast<float>(impulse->getVolume())});
     }
 
@@ -366,8 +366,8 @@ int captureWorker(int argc, char **argv) {
     try {
         if (argc < 6 || argc > 7) throw std::runtime_error("invalid worker arguments");
         const std::string_view name = argv[2];
-        const fs::path resources = argv[3];
-        const fs::path out = argv[4];
+        const fs::path resources = fs::u8path(argv[3]);
+        const fs::path out = fs::u8path(argv[4]);
         std::srand(static_cast<unsigned int>(std::stoul(argv[5])));
         if (name == "FIR") runFir(out);
         else if (name == "GAS") runGas(out);
@@ -375,9 +375,9 @@ int captureWorker(int argc, char **argv) {
         else if (name == "QUEUE") engine_sim_capture::stressQueue(out);
         else if (name == "THREAD") engine_sim_capture::stressThread(out);
         else if (name == "LIFECYCLE") engine_sim_capture::stressLifecycle(resources, out,
-            [](const ImpulseResponse &response) { return readImpulse(response.getFilename()); });
+            [](const ImpulseResponse &response) { return readImpulse(fs::u8path(response.getFilename())); });
         else if (name == "KOHLER" || name == "LS" || name == "EJ25" || name == "LOAD") {
-            runEngine(resources, out, name, argc == 7 ? fs::path(argv[6]) : fs::path());
+            runEngine(resources, out, name, argc == 7 ? fs::u8path(argv[6]) : fs::path());
         }
         else throw std::runtime_error("unsupported capture workload " + std::string(name));
         recordProcessUsage(out);

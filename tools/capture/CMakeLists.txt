@@ -8,7 +8,6 @@ execute_process(COMMAND "${GIT_EXECUTABLE}" --no-optional-locks diff --binary HE
     OUTPUT_VARIABLE source_delta)
 string(SHA256 patch_hash "${source_delta}")
 
-configure_file(capture_config.h.in capture_config.h @ONLY)
 configure_file(capture_cli.py capture_cli.py COPYONLY)
 configure_file(capture_metrics.py capture_metrics.py COPYONLY)
 file(CONFIGURE OUTPUT build.txt CONTENT
@@ -16,6 +15,9 @@ file(CONFIGURE OUTPUT build.txt CONTENT
     @ONLY)
 
 add_executable(engine-sim-capture launcher.cpp worker.cpp)
+if (WIN32)
+    target_sources(engine-sim-capture PRIVATE "${PROJECT_SOURCE_DIR}/src/app.manifest")
+endif ()
 target_include_directories(engine-sim-capture PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 target_link_libraries(engine-sim-capture PRIVATE engine-sim-script-interpreter)
 foreach(configuration IN ITEMS Debug Release RelWithDebInfo MinSizeRel)
@@ -28,15 +30,20 @@ if (BUILD_TESTING)
     add_test(NAME CaptureComparator
         COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_BINARY_DIR}/capture_cli.py"
         "$<TARGET_FILE:engine-sim-capture>" "${CMAKE_CURRENT_BINARY_DIR}/build.txt"
-        "${PROJECT_SOURCE_DIR}" --self-test)
+        "${PROJECT_SOURCE_DIR}" "${PROJECT_SOURCE_DIR}" --self-test)
     add_test(NAME CaptureQuick
         COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_BINARY_DIR}/capture_cli.py"
         "$<TARGET_FILE:engine-sim-capture>" "${CMAKE_CURRENT_BINARY_DIR}/build.txt"
-        "${PROJECT_SOURCE_DIR}" --quick-test)
+        "${PROJECT_SOURCE_DIR}" "${PROJECT_SOURCE_DIR}" --quick-test)
     set_tests_properties(CaptureComparator CaptureQuick PROPERTIES LABELS characterization TIMEOUT 90)
     add_test(NAME CaptureStress
         COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_BINARY_DIR}/capture_cli.py"
         "$<TARGET_FILE:engine-sim-capture>" "${CMAKE_CURRENT_BINARY_DIR}/build.txt"
-        "${PROJECT_SOURCE_DIR}" --stress-test)
+        "${PROJECT_SOURCE_DIR}" "${PROJECT_SOURCE_DIR}" --stress-test)
     set_tests_properties(CaptureStress PROPERTIES LABELS "stress" TIMEOUT 240)
+    add_test(NAME StagedResources
+        COMMAND "${Python3_EXECUTABLE}" -B "${PROJECT_SOURCE_DIR}/test/staged_resources.py"
+        --cmake "${CMAKE_COMMAND}" --build "${PROJECT_BINARY_DIR}"
+        --source "${PROJECT_SOURCE_DIR}" --config "$<CONFIG>")
+    set_tests_properties(StagedResources PROPERTIES LABELS resources TIMEOUT 240)
 endif ()

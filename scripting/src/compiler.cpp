@@ -2,6 +2,7 @@
 
 #include <iostream>
 #include "../include/model_validation.h"
+#include "../../include/resource_paths.h"
 #include <set>
 
 #include <piranha-portable/include/ir_import_statement.h>
@@ -29,7 +30,10 @@ es_script::Compiler::Output *es_script::Compiler::output() {
     return s_output;
 }
 
-void es_script::Compiler::initialize() { initialize({"../../es/", "../es/", "es/"}); }
+void es_script::Compiler::initialize() {
+    const auto paths = engine_sim::ResourcePaths::resolve(engine_sim::executablePath(), {});
+    initialize({paths.library.u8string(), paths.assets.u8string()});
+}
 
 void es_script::Compiler::initialize(const std::vector<piranha::IrPath> &libraryRoots) {
     resetCompilation();
