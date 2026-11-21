@@ -10,11 +10,11 @@ Clone this fork, including its pinned dependencies. Run this command in a termin
 git clone --recurse-submodules https://github.com/joselucasoliveira/engine-sim.git
 ```
 
-The inherited application starts through a Windows desktop entry point. Native Windows, Linux and macOS support for this fork is under validation. A platform claim requires a tested configuration and feature list. Source builds are the delivery path described here.
+The Linux desktop runs the existing engine views and controls through SDL 3, Vulkan and SDL audio. The Windows adapter retains Win32, Direct3D and DirectSound. The macOS Metal/CoreAudio path is implemented but awaits a native run. Read the [build instructions](BUILDING.md), [tests](TESTING.md) and [feature-by-feature platform status](docs/platforms.md). Source builds and explicitly private validation installs are the current delivery path.
 
 ## Driving the simulator
 
-The supplied entry script selects a Subaru EJ25 equal-length-header example and the default theme. The engine definitions in the two compilation-video folders expose a node named `main`. To select another one in a writable configuration, edit the engine import in `assets/main.mr`, retaining the engine library import, the theme call and the call to `main()`. [Entry script](assets/main.mr) · [First preset collection](assets/engines/atg-video-1/README.md) · [Second preset collection](assets/engines/atg-video-2/README.md)
+The supplied entry script selects a Subaru EJ25 equal-length-header example and the default theme. The engine definitions in the two compilation-video folders expose a node named `main`. To select another engine, copy that entry to a writable location outside the checkout/install, change its engine import, retain the theme import/call and `main()`, and launch the installed app with `--script ABSOLUTE_ENTRY_PATH`. For example, `engines/atg-video-2/09_radial_9.mr` selects the nine-cylinder radial. Keep the packaged resource tree intact; installation verifies its allowlisted hashes. [Entry script](assets/main.mr) · [First preset collection](assets/engines/atg-video-1/README.md) · [Second preset collection](assets/engines/atg-video-2/README.md)
 
 | Input | Action |
 | --- | --- |
@@ -34,4 +34,6 @@ Engage the dynamometer with D after enabling hold with H. Read the target on the
 
 ## Credit and contributions
 
-Ange Yaghi created the original simulator. The original copyright and license accompany this fork. See the contribution guide for reproducing a problem and proposing a change. [License](LICENSE) · [Contributing](CONTRIBUTING.md)
+Ange Yaghi created the original simulator. The original copyright and license accompany this fork. See the contribution guide for reproducing a problem and proposing a change. [License](LICENSE) · [Third-party notices](THIRD_PARTY_NOTICES.md) · [Contributing](CONTRIBUTING.md)
+
+The original impulse recordings retain their upstream provenance. Separate recording redistribution clearance is unresolved; the default installer blocks a distributable stage. See [private staging and resource layout](BUILDING.md). Physical playback, listening and complete native Windows/macOS qualification remain pending.
