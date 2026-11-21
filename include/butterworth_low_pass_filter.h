@@ -19,6 +19,8 @@ public:
     }
 
     void resetHistory() {
+        m_y.clear();
+        m_x.clear();
         for (int i = 0; i < 4; ++i) {
             m_y.write(0);
             m_x.write(0);

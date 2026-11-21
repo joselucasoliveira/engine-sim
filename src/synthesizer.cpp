@@ -7,6 +7,8 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <limits>
+#include <stdexcept>
 
 Synthesizer::Synthesizer() {
     m_inputChannels = nullptr;
@@ -33,7 +35,16 @@ Synthesizer::~Synthesizer() {
 }
 
 void Synthesizer::initialize(const Parameters &p) {
+    if (p.inputChannelCount <= 0 || p.inputBufferSize <= 0 || p.audioBufferSize <= 0
+        || !std::isfinite(p.inputSampleRate) || p.inputSampleRate <= 0
+        || !std::isfinite(p.audioSampleRate) || p.audioSampleRate <= 0
+        || static_cast<double>(p.audioSampleRate) / p.inputSampleRate > std::numeric_limits<int>::max()) {
+        throw std::invalid_argument("Synthesizer requires positive capacities, channels and finite sample rates");
+    }
     destroy();
+    m_nextInputSample = 0;
+    m_nextInputFraction = 0;
+    m_droppedInputSamples = m_droppedOutputSamples = 0;
     m_inputChannelCount = p.inputChannelCount;
     m_inputBufferSize = p.inputBufferSize;
     m_inputWriteOffset = p.inputBufferSize;
@@ -82,9 +93,8 @@ void Synthesizer::initialize(const Parameters &p) {
     m_levelingFilter.p_minLevel = m_audioParameters.levelerMinGain;
     m_antialiasing.setCutoffFrequency(m_audioSampleRate * 0.45f, m_audioSampleRate);
 
-    for (int i = 0; i < m_audioBufferSize; ++i) {
-        m_audioBuffer.write(0);
-    }
+    // The legacy whole-ring zero prefill left equal cursors and no available output.
+    // Storage is initialized, while the queue starts empty.
 }
 
 void Synthesizer::initializeImpulseResponse(
@@ -93,6 +103,12 @@ void Synthesizer::initializeImpulseResponse(
     float volume,
     int index)
 {
+    if (index < 0 || index >= m_inputChannelCount || m_filters == nullptr) {
+        throw std::out_of_range("Impulse response channel is outside the initialized synthesizer");
+    }
+    if ((samples != 0 && impulseResponse == nullptr) || !std::isfinite(volume)) {
+        throw std::invalid_argument("Invalid impulse response data or volume");
+    }
     unsigned int clippedLength = 0;
     for (unsigned int i = 0; i < samples; ++i) {
         if (std::abs(impulseResponse[i]) > 100) {
@@ -110,8 +126,16 @@ void Synthesizer::initializeImpulseResponse(
 
 void Synthesizer::startAudioRenderingThread() {
     if (m_thread != nullptr) return;
+    if (m_inputChannelCount == 0) throw std::logic_error("Initialize synthesis before starting its worker");
     m_run = true;
-    m_thread = new std::thread(&Synthesizer::audioRenderingThread, this);
+    m_workerRunning = true;
+    try {
+        m_thread = new std::thread(&Synthesizer::audioRenderingThread, this);
+    }
+    catch (...) {
+        m_workerRunning = false;
+        throw;
+    }
 }
 
 void Synthesizer::endAudioRenderingThread() {
@@ -126,6 +150,7 @@ void Synthesizer::endAudioRenderingThread() {
         delete m_thread;
 
         m_thread = nullptr;
+        m_workerRunning = false;
     }
 }
 
@@ -154,6 +179,10 @@ void Synthesizer::destroy() {
 }
 
 int Synthesizer::readAudioOutput(int samples, int16_t *buffer) {
+    if (samples < 0 || (samples != 0 && buffer == nullptr)) {
+        throw std::invalid_argument("Audio output requires a nonnegative destination extent");
+    }
+    if (samples == 0) return 0;
     std::lock_guard<std::mutex> lock(m_lock0);
 
     const int newDataLength = m_audioBuffer.size();
@@ -181,31 +210,42 @@ void Synthesizer::waitProcessed() {
 }
 
 void Synthesizer::writeInput(const double *data) {
-    m_inputWriteOffset += (double)m_audioSampleRate / m_inputSampleRate;
-    if (m_inputWriteOffset >= (double)m_inputBufferSize) {
-        m_inputWriteOffset -= (double)m_inputBufferSize;
-    }
-
+    if (m_inputChannelCount == 0 || data == nullptr) throw std::invalid_argument("Missing synthesis input");
     for (int i = 0; i < m_inputChannelCount; ++i) {
-        RingBuffer<float> &buffer = m_inputChannels[i].data;
-        const double lastInputSample = m_inputChannels[i].lastInputSample;
-        const size_t baseIndex = buffer.writeIndex();
-        const double distance =
-            inputDistance(m_inputWriteOffset, m_lastInputSampleOffset);
-        double s =
-            inputDistance(baseIndex, m_lastInputSampleOffset);
-        for (; s <= distance; s += 1.0) {
-            if (s >= m_inputBufferSize) s -= m_inputBufferSize;
-
-            const double f = s / distance;
-            const double sample = lastInputSample * (1 - f) + data[i] * f;
-
-            buffer.write(m_filters[i].antialiasing.fast_f(static_cast<float>(sample)));
-        }
-
-        m_inputChannels[i].lastInputSample = data[i];
+        if (!std::isfinite(data[i])) throw std::invalid_argument("Nonfinite synthesis input");
     }
+    const double step = static_cast<double>(m_audioSampleRate) / m_inputSampleRate;
+    m_inputWriteOffset += step;
+    if (m_inputWriteOffset >= m_inputBufferSize) {
+        m_inputWriteOffset = step < m_inputBufferSize
+            ? m_inputWriteOffset - m_inputBufferSize
+            : std::fmod(m_inputWriteOffset, m_inputBufferSize);
+    }
+    const double distance = step < m_inputBufferSize
+        ? inputDistance(m_inputWriteOffset, m_lastInputSampleOffset) : step;
+    const double first = step < m_inputBufferSize
+        ? inputDistance(m_nextInputSample, m_lastInputSampleOffset) : m_nextInputFraction;
+    const size_t count = distance > 0 && first <= distance
+        ? static_cast<size_t>(std::floor(distance - first)) + 1 : 0;
+    const bool accepted = count <= m_inputChannels[0].data.capacity() - m_inputChannels[0].data.size();
 
+    // Discard the newest complete resampled block when it cannot fit. Its phase
+    // still advances, so a later accepted block resumes at the correct time.
+    if (!accepted) m_droppedInputSamples += count;
+    for (int i = 0; i < m_inputChannelCount; ++i) {
+        auto &channel = m_inputChannels[i];
+        if (accepted) {
+            double position = first;
+            for (size_t sampleIndex = 0; sampleIndex < count; ++sampleIndex, position += 1.0) {
+                const double fraction = position / distance;
+                const double sample = channel.lastInputSample * (1 - fraction) + data[i] * fraction;
+                channel.data.write(m_filters[i].antialiasing.fast_f(static_cast<float>(sample)));
+            }
+        }
+        channel.lastInputSample = data[i];
+    }
+    m_nextInputSample = (m_nextInputSample + count) % m_inputBufferSize;
+    m_nextInputFraction = first + count - distance;
     m_lastInputSampleOffset = m_inputWriteOffset;
 }
 
@@ -236,16 +276,20 @@ void Synthesizer::audioRenderingThread() {
 #undef max
 void Synthesizer::renderAudio() {
     std::unique_lock<std::mutex> lk0(m_lock0);
+    if (m_inputChannelCount == 0) return;
 
-    m_cv0.wait(lk0, [this] {
-        const bool inputAvailable =
-            m_inputChannels[0].data.size() > 0
-            && m_audioBuffer.size() < 2000;
+    const auto ready = [this] {
+        const bool inputAvailable = m_inputChannelCount > 0
+            && m_inputChannels[0].data.size() > 0
+            && m_audioBuffer.size() < std::min(2000, m_audioBufferSize);
         return !m_run || (inputAvailable && !m_processed);
-    });
+    };
+    // A synchronous empty/full render cannot wait for its own caller.
+    if (!m_workerRunning && !ready()) return;
+    m_cv0.wait(lk0, ready);
 
     const int n = std::min(
-        std::max(0, 2000 - (int)m_audioBuffer.size()),
+        std::max(0, std::min(2000, m_audioBufferSize) - (int)m_audioBuffer.size()),
         (int)m_inputChannels[0].data.size());
 
     for (int i = 0; i < m_inputChannelCount; ++i) {
@@ -264,7 +308,7 @@ void Synthesizer::renderAudio() {
     }
 
     for (int i = 0; i < n; ++i) {
-        m_audioBuffer.write(renderAudio(i));
+        if (!m_audioBuffer.write(renderAudio(i))) ++m_droppedOutputSamples;
     }
 
     m_cv0.notify_one();
@@ -287,6 +331,10 @@ double Synthesizer::inputDistance(double s1, double s0) const {
 }
 
 void Synthesizer::setInputSampleRate(double sampleRate) {
+    if (!std::isfinite(sampleRate) || sampleRate <= 0 || sampleRate > std::numeric_limits<float>::max()
+        || static_cast<double>(m_audioSampleRate) / sampleRate > std::numeric_limits<int>::max()) {
+        throw std::invalid_argument("Input sample rate must be positive and finite");
+    }
     if (sampleRate != m_inputSampleRate) {
         std::lock_guard<std::mutex> lock(m_lock0);
         m_inputSampleRate = sampleRate;
@@ -337,15 +385,10 @@ int16_t Synthesizer::renderAudio(int inputSample) {
     if (m_nonFiniteCaptureCount != nullptr && !std::isfinite(v_leveled)) {
         ++*m_nonFiniteCaptureCount;
     }
-    int r_int = std::lround(v_leveled);
-    if (r_int > INT16_MAX) {
-        r_int = INT16_MAX;
-    }
-    else if (r_int < INT16_MIN) {
-        r_int = INT16_MIN;
-    }
-
-    return static_cast<int16_t>(r_int);
+    if (!std::isfinite(v_leveled)) return 0;
+    if (v_leveled >= INT16_MAX) return INT16_MAX;
+    if (v_leveled <= INT16_MIN) return INT16_MIN;
+    return static_cast<int16_t>(std::lround(v_leveled));
 }
 
 double Synthesizer::getLevelerGain() {

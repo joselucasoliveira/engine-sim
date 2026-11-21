@@ -12,10 +12,12 @@ AudioBuffer::AudioBuffer() {
 }
 
 AudioBuffer::~AudioBuffer() {
-    assert(m_samples == nullptr);
+    destroy();
 }
 
 void AudioBuffer::initialize(int sampleRate, int bufferSize) {
+    if (sampleRate <= 0 || bufferSize <= 0) throw std::invalid_argument("Audio buffer rate and capacity must be positive");
+    destroy();
     m_writePointer = 0;
     m_sampleRate = sampleRate;
     m_samples = new int16_t[bufferSize];
@@ -29,6 +31,9 @@ void AudioBuffer::destroy() {
 
     m_samples = nullptr;
     m_bufferSize = 0;
+    m_writePointer = 0;
+    m_sampleRate = 0;
+    m_offsetToSeconds = 0;
 }
 
 bool AudioBuffer::checkForDiscontinuitiy(int threshold) const {

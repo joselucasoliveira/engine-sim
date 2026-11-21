@@ -1,6 +1,6 @@
 #include "../include/convolution_filter.h"
 
-#include <assert.h>
+#include <stdexcept>
 #include <string.h>
 
 ConvolutionFilter::ConvolutionFilter() {
@@ -16,7 +16,9 @@ ConvolutionFilter::~ConvolutionFilter() {
 }
 
 void ConvolutionFilter::initialize(int samples) {
+    if (samples < 0) throw std::invalid_argument("Convolution length must be nonnegative");
     destroy();
+    if (samples == 0) return;
     m_sampleCount = samples;
     m_shiftOffset = 0;
     m_shiftRegister = new float[samples];
@@ -37,6 +39,8 @@ void ConvolutionFilter::destroy() {
 }
 
 float ConvolutionFilter::f(float sample) {
+    // An absent or fully trimmed response contributes no wet signal.
+    if (m_sampleCount == 0) return 0;
     m_shiftRegister[m_shiftOffset] = sample;
 
     float result = 0;

@@ -70,7 +70,12 @@ class Synthesizer {
         void endAudioRenderingThread();
         void destroy();
 
+        // buffer must hold samples elements. The return value excludes zero padding.
         int readAudioOutput(int samples, int16_t *buffer);
+
+        // Counts discarded resampled frames, once per frame across all channels.
+        std::uint64_t getDroppedInputSamples() const { return m_droppedInputSamples; }
+        std::uint64_t getDroppedOutputSamples() const { return m_droppedOutputSamples; }
 
         void writeInput(const double *data);
         void endInputBlock();
@@ -124,6 +129,11 @@ class Synthesizer {
 
     private:
         friend struct engine_sim_capture::FrameAccess;
+        size_t m_nextInputSample = 0;
+        double m_nextInputFraction = 0;
+        std::uint64_t m_droppedInputSamples = 0;
+        std::uint64_t m_droppedOutputSamples = 0;
+        std::atomic<bool> m_workerRunning{false};
         std::uint64_t *m_nonFiniteCaptureCount = nullptr;
 };
 

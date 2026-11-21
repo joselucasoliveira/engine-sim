@@ -1,7 +1,9 @@
 #ifndef ATG_ENGINE_SIM_AUDIO_BUFFER_H
 #define ATG_ENGINE_SIM_AUDIO_BUFFER_H
 
+#include <algorithm>
 #include <cstddef>
+#include <stdexcept>
 #include <cstring>
 #include <stdint.h>
 
@@ -46,25 +48,25 @@ class AudioBuffer {
         }
 
         inline void commitBlock(int length) {
+            if (length < 0 || length > m_bufferSize) throw std::out_of_range("Audio commit exceeds buffer capacity");
             m_writePointer = getBufferIndex(m_writePointer, length);
         }
 
         inline int getBufferIndex(int offset, int index = 0) const {
-            return (((offset + index) % m_bufferSize) + m_bufferSize) % m_bufferSize;
+            if (m_bufferSize <= 0) throw std::logic_error("Audio buffer is not initialized");
+            const auto position = static_cast<long long>(offset) + index;
+            return static_cast<int>((position % m_bufferSize + m_bufferSize) % m_bufferSize);
         }
 
+        // The destination must hold length samples, including a full ring.
         inline void copyBuffer(int16_t *dest, int offset, int length) {
-            const int start = getBufferIndex(offset, 0);
-            const int end = getBufferIndex(offset, length);
-
-            if (start == end) return;
-            else if (start < end) {
-                std::memcpy(dest, m_samples + start, length * sizeof(int16_t));
-            }
-            else {
-                std::memcpy(dest, m_samples + start, (static_cast<std::size_t>(m_bufferSize) - start) * sizeof(int16_t));
-                std::memcpy(dest + m_bufferSize - start, m_samples, end * sizeof(int16_t));
-            }
+            if (length < 0 || length > m_bufferSize) throw std::out_of_range("Audio copy exceeds buffer capacity");
+            if (length == 0) return;
+            if (dest == nullptr) throw std::invalid_argument("Missing audio destination");
+            const int start = getBufferIndex(offset);
+            const int first = std::min(length, m_bufferSize - start);
+            std::memcpy(dest, m_samples + start, first * sizeof(int16_t));
+            std::memcpy(dest + first, m_samples, (length - first) * sizeof(int16_t));
         }
 
         bool checkForDiscontinuitiy(int threshold) const;
