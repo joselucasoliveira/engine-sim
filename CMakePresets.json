@@ -62,7 +62,13 @@
         "BUILD_TESTING": true,
         "PIRANHA_ENABLED": true,
         "ENGINE_SIM_BUILD_DESKTOP": true
-      },
+      }
+    },
+    {
+      "name": "desktop-windows",
+      "inherits": "desktop",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
       "condition": {
         "type": "allOf",
         "conditions": [
@@ -77,9 +83,7 @@
             "rhs": ""
           }
         ]
-      },
-      "generator": "Visual Studio 17 2022",
-      "architecture": "x64"
+      }
     },
     {
       "name": "asan",
@@ -115,7 +119,7 @@
     },
     {
       "name": "win-asan",
-      "inherits": "desktop",
+      "inherits": "desktop-windows",
       "cacheVariables": {
         "CMAKE_CONFIGURATION_TYPES": "RelWithDebInfo",
         "ENGINE_SIM_SANITIZER": "address",
@@ -142,6 +146,11 @@
     {
       "name": "desktop",
       "configurePreset": "desktop",
+      "configuration": "Release"
+    },
+    {
+      "name": "desktop-windows",
+      "configurePreset": "desktop-windows",
       "configuration": "Release"
     },
     {
@@ -200,6 +209,18 @@
     {
       "name": "desktop",
       "configurePreset": "desktop",
+      "configuration": "Release",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error",
+        "timeout": 90
+      }
+    },
+    {
+      "name": "desktop-windows",
+      "configurePreset": "desktop-windows",
       "configuration": "Release",
       "output": {
         "outputOnFailure": true

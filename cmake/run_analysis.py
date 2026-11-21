@@ -16,6 +16,7 @@ def main():
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--compiler", required=True)
     parser.add_argument("--frontend", action="store_true")
+    parser.add_argument("--sdl-window", action="store_true")
     options = parser.parse_args()
     source = Path(__file__).resolve().parent.parent
     output = options.out.resolve()
@@ -28,6 +29,8 @@ def main():
     if options.frontend:
         selected.update(source / name for name in ("src/desktop_math.cpp", "src/desktop_host.cpp", "src/shaders.cpp",
                         "src/engine_sim_application.cpp", "src/geometry_generator.cpp", "src/oscilloscope.cpp"))
+    if options.sdl_window:
+        selected.add(source / "src/sdl_window.cpp")
     baseline = json.loads((source / "cmake/analysis-baseline.json").read_text())
     records = []
     for entry in json.loads(options.database.read_text()):

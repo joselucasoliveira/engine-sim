@@ -657,7 +657,7 @@
       "source": "project",
       "path": "THIRD_PARTY_NOTICES.md",
       "destination": "licenses/THIRD_PARTY_NOTICES.md",
-      "sha256": "285405b1848c88963e0acbb7381f2ce4009f5ec220a94a6bb83203fef57dafcf",
+      "sha256": "1d7f97a779b12251748b71e3322511daca594b83d3623b096e15edfb346683d0",
       "license": "Project notices",
       "distribution": "permitted",
       "component": "base"

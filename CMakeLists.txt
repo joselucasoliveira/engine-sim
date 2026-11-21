@@ -33,10 +33,14 @@ option(BUILD_TESTING "Build and register the Engine Simulator tests" OFF)
 option(ENGINE_SIM_BUILD_CAPTURE "Build the offline signal characterization tool" OFF)
 include(cmake/Diagnostics.cmake)
 
-if (ENGINE_SIM_BUILD_DESKTOP AND NOT engine_sim_windows)
-    message(FATAL_ERROR "The current desktop backend requires Windows x64 with MSVC")
+if (ENGINE_SIM_BUILD_DESKTOP AND NOT engine_sim_windows
+        AND NOT CMAKE_SYSTEM_NAME MATCHES "^(Linux|Darwin)$")
+    message(FATAL_ERROR "Desktop adapters require Windows x64 with MSVC, Linux, or macOS")
 endif ()
-if ((DTV OR DISCORD_ENABLED) AND NOT ENGINE_SIM_BUILD_DESKTOP)
+if (ENGINE_SIM_BUILD_DESKTOP AND NOT PIRANHA_ENABLED)
+    message(FATAL_ERROR "Desktop adapters require PIRANHA_ENABLED")
+endif ()
+if ((DTV OR DISCORD_ENABLED) AND (NOT ENGINE_SIM_BUILD_DESKTOP OR NOT engine_sim_windows))
     message(FATAL_ERROR "DTV and DISCORD_ENABLED require the Windows desktop app")
 endif ()
 
@@ -282,7 +286,7 @@ if (PIRANHA_ENABLED AND (BUILD_TESTING OR ENGINE_SIM_BUILD_DESKTOP))
     endif ()
 endif ()
 
-if (ENGINE_SIM_BUILD_DESKTOP)
+if (ENGINE_SIM_BUILD_DESKTOP AND engine_sim_windows)
     add_executable(engine-sim-app WIN32 src/main.cpp src/app.manifest src/windows_host.cpp)
 
     target_link_libraries(engine-sim-app PRIVATE engine-sim-frontend delta-basic)
@@ -320,6 +324,10 @@ if (ENGINE_SIM_BUILD_DESKTOP)
     endif ()
 
     target_include_directories(engine-sim-app PRIVATE dependencies/submodules)
+endif ()
+
+if (ENGINE_SIM_BUILD_DESKTOP AND NOT WIN32)
+    include(cmake/Sdl.cmake)
 endif ()
 
 if (BUILD_TESTING)
@@ -383,7 +391,7 @@ if (ENGINE_SIM_BUILD_CAPTURE)
     add_subdirectory(tools/capture)
 endif ()
 
-foreach(target IN ITEMS engine-sim engine-sim-host engine-sim-host-test engine-sim-host-application-test engine-sim-frontend engine-sim-script-interpreter engine-sim-app engine-sim-test
+foreach(target IN ITEMS engine-sim engine-sim-sdl-window engine-sim-sdl-window-test engine-sim-host engine-sim-host-test engine-sim-host-application-test engine-sim-frontend engine-sim-script-interpreter engine-sim-app engine-sim-test
         engine-sim-threaded-test engine-sim-script-test engine-sim-lifecycle-test
         engine-sim-displacement-test engine-sim-load-test engine-sim-wave-test engine-sim-resource-test engine-sim-capture)
     engine_sim_diagnose("${target}" TRUE)
@@ -399,6 +407,9 @@ if (PIRANHA_ENABLED AND CMAKE_EXPORT_COMPILE_COMMANDS AND NOT MSVC)
         set(engine_sim_analysis_frontend)
         if (TARGET engine-sim-frontend)
             set(engine_sim_analysis_frontend --frontend)
+        endif ()
+        if (TARGET engine-sim-sdl-window)
+            list(APPEND engine_sim_analysis_frontend --sdl-window)
         endif ()
         add_custom_target(engine-sim-analysis
             COMMAND "${Python3_EXECUTABLE}" -B "${PROJECT_SOURCE_DIR}/cmake/run_analysis.py"

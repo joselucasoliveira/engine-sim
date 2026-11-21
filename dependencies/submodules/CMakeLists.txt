@@ -47,7 +47,7 @@ if (PIRANHA_ENABLED)
     include("${PROJECT_SOURCE_DIR}/cmake/Piranha.cmake")
 endif ()
 
-if (ENGINE_SIM_BUILD_DESKTOP)
+if (ENGINE_SIM_BUILD_DESKTOP AND engine_sim_windows)
     engine_sim_locked_source(delta delta-studio)
     add_subdirectory("${delta}" delta-studio EXCLUDE_FROM_ALL)
     if (DTV)
