@@ -34,4 +34,9 @@ if (BUILD_TESTING)
         "$<TARGET_FILE:engine-sim-capture>" "${CMAKE_CURRENT_BINARY_DIR}/build.txt"
         "${PROJECT_SOURCE_DIR}" --quick-test)
     set_tests_properties(CaptureComparator CaptureQuick PROPERTIES LABELS characterization TIMEOUT 90)
+    add_test(NAME CaptureStress
+        COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_BINARY_DIR}/capture_cli.py"
+        "$<TARGET_FILE:engine-sim-capture>" "${CMAKE_CURRENT_BINARY_DIR}/build.txt"
+        "${PROJECT_SOURCE_DIR}" --stress-test)
+    set_tests_properties(CaptureStress PROPERTIES LABELS "stress" TIMEOUT 240)
 endif ()

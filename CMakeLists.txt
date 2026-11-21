@@ -31,6 +31,7 @@ option(DTV "Enable video output" OFF)
 option(DISCORD_ENABLED "Enable Discord Rich Presence (Windows x64)" OFF)
 option(BUILD_TESTING "Build and register the Engine Simulator tests" OFF)
 option(ENGINE_SIM_BUILD_CAPTURE "Build the offline signal characterization tool" OFF)
+include(cmake/Diagnostics.cmake)
 
 if (ENGINE_SIM_BUILD_DESKTOP AND NOT engine_sim_windows)
     message(FATAL_ERROR "The current desktop backend requires Windows x64 with MSVC")
@@ -357,4 +358,25 @@ endif ()
 
 if (ENGINE_SIM_BUILD_CAPTURE)
     add_subdirectory(tools/capture)
+endif ()
+
+foreach(target IN ITEMS engine-sim engine-sim-script-interpreter engine-sim-app engine-sim-test
+        engine-sim-threaded-test engine-sim-script-test engine-sim-lifecycle-test
+        engine-sim-displacement-test engine-sim-load-test engine-sim-capture)
+    engine_sim_diagnose("${target}" TRUE)
+endforeach ()
+foreach(target IN ITEMS simple-2d-constraint-solver piranha csv-io gtest gtest_main delta-core delta-basic)
+    engine_sim_diagnose("${target}" FALSE)
+endforeach ()
+
+if (PIRANHA_ENABLED AND CMAKE_EXPORT_COMPILE_COMMANDS AND NOT MSVC)
+    find_package(Python3 3.9 COMPONENTS Interpreter REQUIRED)
+    find_program(ENGINE_SIM_ANALYZER NAMES clang++-19 clang++-18 clang++)
+    if (ENGINE_SIM_ANALYZER)
+        add_custom_target(engine-sim-analysis
+            COMMAND "${Python3_EXECUTABLE}" -B "${PROJECT_SOURCE_DIR}/cmake/run_analysis.py"
+                --database "${PROJECT_BINARY_DIR}/compile_commands.json"
+                --out "${PROJECT_BINARY_DIR}/analysis" --compiler "${ENGINE_SIM_ANALYZER}"
+            VERBATIM)
+    endif ()
 endif ()

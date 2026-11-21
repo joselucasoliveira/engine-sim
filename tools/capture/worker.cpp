@@ -1,6 +1,7 @@
 #include "compiler.h"
 #include "simulator.h"
 #include "synthesizer.h"
+#include "stress.h"
 
 #include <algorithm>
 #include <array>
@@ -420,6 +421,10 @@ int captureWorker(int argc, char **argv) {
         if (name == "FIR") runFir(out);
         else if (name == "GAS") runGas(out);
         else if (name == "TONE" || name == "TONE-QUIET") runTone(out, name == "TONE-QUIET");
+        else if (name == "QUEUE") engine_sim_capture::stressQueue(out);
+        else if (name == "THREAD") engine_sim_capture::stressThread(out);
+        else if (name == "LIFECYCLE") engine_sim_capture::stressLifecycle(resources, out,
+            [](const ImpulseResponse &response) { return readImpulse(response.getFilename()); });
         else if (name == "KOHLER" || name == "LS" || name == "EJ25" || name == "LOAD") {
             runEngine(resources, out, name, argc == 7 ? fs::path(argv[6]) : fs::path());
         }

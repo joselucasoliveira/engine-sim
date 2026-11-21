@@ -1,0 +1,11 @@
+[
+  {
+    "file": "src/synthesizer.cpp",
+    "check": "deadcode.DeadStores",
+    "description": "Value stored to 'r_0' during its initialization is never read",
+    "source_line": "const float r_0 = 2.0 * ((double)rand() / RAND_MAX) - 1.0;",
+    "review": "The legacy discarded random draw is deliberate compatibility behavior. Removing it shifts every following random sample and the frozen PCM. This finding is retained in raw analyzer reports; no analyzer checker is disabled.",
+    "owner": "Synthesis signal compatibility",
+    "removal_condition": "Remove this entry only when the discarded draw is explicitly preserved without the dead store, or a separately reviewed RNG policy change passes its new frozen signal gates. Any different source line, file, diagnostic or new finding fails analysis."
+  }
+]

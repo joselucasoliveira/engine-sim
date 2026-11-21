@@ -134,7 +134,10 @@ TEST_F(Load, PartialAndRepeatedDefinitionsReleaseTheirOwners) {
 TEST_F(Load, GraphCyclesReferencesAndPrimitivesAreRejected) {
     std::ifstream file(resources / "assets/engines/atg-video-2/09_radial_9.mr");
     ASSERT_TRUE(file.good());
-    const std::string source((std::istreambuf_iterator<char>(file)), {});
+    std::ostringstream sourceStream;
+    sourceStream << file.rdbuf();
+    ASSERT_FALSE(sourceStream.str().empty());
+    const std::string source = sourceStream.str();
     const auto mutate = [&](const std::string &name, const std::string &from, const std::string &to) {
         auto text = source;
         const std::string localImport = "import \"radial.mr\"";

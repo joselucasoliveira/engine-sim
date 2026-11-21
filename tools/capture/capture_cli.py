@@ -164,7 +164,9 @@ def execute_worker(binary, request, directory, seed, spectra):
     start = time.monotonic()
     with output.open("wb") as stdout, error.open("wb") as stderr:
         try:
-            result = subprocess.run(command, cwd=directory, stdout=stdout, stderr=stderr, timeout=90)
+            timeout = 180 if request.name == "LIFECYCLE" else 90
+            event["timeout_seconds"] = timeout
+            result = subprocess.run(command, cwd=directory, stdout=stdout, stderr=stderr, timeout=timeout)
             event["exit"] = result.returncode
         except subprocess.TimeoutExpired:
             event["exit"] = 124
@@ -190,6 +192,19 @@ def execute_worker(binary, request, directory, seed, spectra):
 
 
 def validate_artifacts(directory, name, spectra, event):
+    if name in SUITES["stress"]:
+        report = read_json(directory / "stress.json")
+        expected = {"QUEUE": (4000, 1000), "LIFECYCLE": (10, 10), "THREAD": (1000, 50)}[name]
+        if (report.get("case") != name or report.get("valid") is not True
+                or (report.get("operations"), report.get("cycles")) != expected):
+            raise ValueError("incomplete stress workload or invariant report")
+        if name == "THREAD" and (report.get("frames") != 31001 or report.get("control_updates", 0) <= 0):
+            raise ValueError("threaded stress did not exercise controls or conserve frames")
+        if name == "LIFECYCLE" and (report.get("rejected") != 10 or report.get("frames", 0) <= 0):
+            raise ValueError("lifecycle stress did not reject failed replacements or produce PCM")
+        if name == "QUEUE" and report.get("rejected") != 1000:
+            raise ValueError("queue stress did not reject overflow")
+        event["stress"] = report
     raw = None
     if name == "FIR":
         raw = directory / "audio.f32le"
@@ -247,7 +262,7 @@ def run_cases(options, binary, metadata, source):
     for case in cases:
         transactions = []
         run["cases"][case] = transactions
-        if case in SUITES["stress"] or (case in PCM_CASES and options.mode == "threaded"):
+        if case in PCM_CASES and options.mode == "threaded":
             transactions.append({"status": "fail", "reason": f"{case} requires a qualified lifetime, buffer or worker path"})
             continue
         attempts = {"main": WorkerInput(case, resources)}
@@ -461,6 +476,12 @@ def main():
             options = arguments(["run", "--suite", "quick", "--resources", str(source),
                                  "--out", scratch, "--seed", "1", "--repetitions", "1", "--mode", "sync"])
             run_cases(options, binary, metadata, source)
+    elif argv == ["--stress-test"]:
+        scratch = tempfile.mkdtemp(prefix="engine-capture-stress-", dir=metadata.parent)
+        print(f"stress artifacts: {scratch}", flush=True)
+        options = arguments(["run", "--suite", "stress", "--resources", str(source),
+                             "--out", scratch, "--seed", "1", "--repetitions", "1", "--mode", "sync"])
+        run_cases(options, binary, metadata, source)
     else:
         options = arguments(argv)
         if options.action == "run":

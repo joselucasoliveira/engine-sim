@@ -1,0 +1,73 @@
+"""Analyze selected ownership and buffer sources using their actual compilation commands."""
+
+import argparse
+import json
+from pathlib import Path
+import plistlib
+import shlex
+import subprocess
+import sys
+import tempfile
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--database", type=Path, required=True)
+    parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--compiler", required=True)
+    options = parser.parse_args()
+    source = Path(__file__).resolve().parent.parent
+    output = options.out.resolve()
+    if not output.is_absolute() or output.is_relative_to(source):
+        parser.error("analysis output must be outside the source checkout")
+    output.mkdir(parents=True, exist_ok=True)
+    run = Path(tempfile.mkdtemp(prefix="analysis-", dir=output))
+    selected = {source / name for name in ("src/audio_buffer.cpp", "src/convolution_filter.cpp",
+                "src/synthesizer.cpp", "src/engine.cpp", "scripting/src/compiler.cpp")}
+    baseline = json.loads((source / "cmake/analysis-baseline.json").read_text())
+    records = []
+    for entry in json.loads(options.database.read_text()):
+        file = Path(entry["file"]).resolve()
+        if file not in selected:
+            continue
+        original = entry.get("arguments") or shlex.split(entry["command"])
+        args = [options.compiler]
+        skip = False
+        for arg in original[1:]:
+            if skip:
+                skip = False
+                continue
+            if arg in {"-o", "-MF", "-MT", "-MQ"}:
+                skip = True
+            elif arg not in {"-c", "-MD", "-MMD", "-MP"}:
+                args.append(arg)
+        report = run / (file.stem + ".plist")
+        args += ["--analyze", "-Xanalyzer", "-analyzer-checker=core,cplusplus,unix",
+                 "-Xanalyzer", "-analyzer-output=plist", "-o", str(report)]
+        log = run / (file.stem + ".log")
+        with log.open("w") as stream:
+            result = subprocess.run(args, cwd=entry["directory"], stdout=stream, stderr=subprocess.STDOUT, timeout=120)
+        diagnostics = plistlib.loads(report.read_bytes())["diagnostics"] if report.exists() else None
+        unexpected = []
+        for diagnostic in diagnostics or []:
+            location = diagnostic["location"]
+            fingerprint = {"file": str(file.relative_to(source)), "check": diagnostic["check_name"],
+                           "description": diagnostic["description"],
+                           "source_line": file.read_text().splitlines()[location["line"] - 1].strip()}
+            if not any(all(fingerprint[key] == known[key] for key in fingerprint) for known in baseline):
+                unexpected.append(diagnostic)
+        records.append({"file": str(file.relative_to(source)), "argv": args, "cwd": entry["directory"],
+                        "exit": result.returncode, "diagnostics": diagnostics, "unexpected": unexpected, "log": str(log)})
+    (run / "result.json").write_text(json.dumps(records, indent=2) + "\n")
+    print(f"analysis artifacts: {run}")
+    if len(records) != len(selected) or any(row["exit"] != 0 or row["diagnostics"] is None
+                                          or row["unexpected"] for row in records):
+        print("analysis failed or selected ownership sources disappeared", file=sys.stderr)
+        return 1
+    print(f"analyzed {len(records)} ownership and buffer sources; no new diagnostics; "
+          f"{sum(len(row['diagnostics']) for row in records)} reviewed legacy findings retained")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -80,6 +80,47 @@
       },
       "generator": "Visual Studio 17 2022",
       "architecture": "x64"
+    },
+    {
+      "name": "asan",
+      "inherits": "capture",
+      "generator": "Ninja",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      },
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "clang++",
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": true,
+        "ENGINE_SIM_SANITIZER": "address"
+      }
+    },
+    {
+      "name": "tsan",
+      "inherits": "capture",
+      "generator": "Ninja",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      },
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "g++",
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": true,
+        "ENGINE_SIM_SANITIZER": "thread"
+      }
+    },
+    {
+      "name": "win-asan",
+      "inherits": "desktop",
+      "cacheVariables": {
+        "CMAKE_CONFIGURATION_TYPES": "RelWithDebInfo",
+        "ENGINE_SIM_SANITIZER": "address",
+        "ENGINE_SIM_BUILD_CAPTURE": true
+      }
     }
   ],
   "buildPresets": [
@@ -102,6 +143,21 @@
       "name": "desktop",
       "configurePreset": "desktop",
       "configuration": "Release"
+    },
+    {
+      "name": "asan",
+      "configurePreset": "asan",
+      "configuration": "RelWithDebInfo"
+    },
+    {
+      "name": "tsan",
+      "configurePreset": "tsan",
+      "configuration": "RelWithDebInfo"
+    },
+    {
+      "name": "win-asan",
+      "configurePreset": "win-asan",
+      "configuration": "RelWithDebInfo"
     }
   ],
   "testPresets": [
@@ -151,6 +207,50 @@
       "execution": {
         "noTestsAction": "error",
         "timeout": 90
+      }
+    },
+    {
+      "name": "asan",
+      "configurePreset": "asan",
+      "configuration": "RelWithDebInfo",
+      "environment": {
+        "ASAN_OPTIONS": "detect_leaks=1:halt_on_error=1",
+        "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1"
+      },
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error",
+        "timeout": 600
+      }
+    },
+    {
+      "name": "tsan",
+      "configurePreset": "tsan",
+      "configuration": "RelWithDebInfo",
+      "environment": {
+        "TSAN_OPTIONS": "halt_on_error=1:exitcode=66"
+      },
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error",
+        "timeout": 600
+      }
+    },
+    {
+      "name": "win-asan",
+      "configurePreset": "win-asan",
+      "configuration": "RelWithDebInfo",
+      "environment": {},
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error",
+        "timeout": 600
       }
     }
   ]

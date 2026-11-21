@@ -78,9 +78,103 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
 
+  linux-sanitizers:
+    name: Linux ${{ matrix.preset }} ownership and worker diagnostics
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        preset: [asan, tsan]
+    env:
+      CMAKE_GENERATOR: Ninja
+      LC_ALL: C
+      TZ: UTC
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          submodules: recursive
+      - name: Instrument and exercise the selected paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ES_OUT="$RUNNER_TEMP/engine-sim-${{ matrix.preset }}"
+          mkdir -p "$ES_OUT/logs"
+          {
+            set -x
+            git rev-parse HEAD | tee "$ES_OUT/logs/revision.txt"
+            test "$(cat "$ES_OUT/logs/revision.txt")" = "$GITHUB_SHA"
+            printf 'ImageOS=%s\nImageVersion=%s\n' "${ImageOS:-unknown}" "${ImageVersion:-unknown}"
+            uname -srm
+            clang++ --version
+            g++ --version
+            cmake --version
+            flex --version
+            bison --version
+            export ASAN_SYMBOLIZER_PATH="$(command -v llvm-symbolizer)"
+            "$ASAN_SYMBOLIZER_PATH" --version
+            python3 tools/bootstrap.py --profile capture --tests --out "$ES_OUT"
+            cp "$ES_OUT/dependency-receipt.json" "$ES_OUT/logs/"
+            cmake --preset ${{ matrix.preset }}
+            ASAN_OPTIONS=detect_leaks=0 cmake --build --preset ${{ matrix.preset }}
+            if test '${{ matrix.preset }}' = asan; then
+              ctest --preset asan --no-tests=error --output-on-failure --output-junit "$ES_OUT/logs/tests.xml"
+              cmake --build --preset asan --target engine-sim-analysis
+              export ASAN_OPTIONS=detect_leaks=1:halt_on_error=1
+              export UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1
+            else
+              ctest --preset tsan -L threaded --no-tests=error --output-on-failure --output-junit "$ES_OUT/logs/tests.xml"
+              export TSAN_OPTIONS=halt_on_error=1:exitcode=66
+            fi
+            python3 - "$ES_OUT/logs/tests.xml" '${{ matrix.preset }}' <<'PY'
+          import sys
+          from xml.etree import ElementTree
+          cases = list(ElementTree.parse(sys.argv[1]).getroot().iter("testcase"))
+          names = {case.attrib["name"] for case in cases}
+          assert len(cases) == len(names) == (64 if sys.argv[2] == "asan" else 7)
+          assert sum(name.startswith("ThreadedSynthesis.") for name in names) == 5
+          assert {"Load.FailedCandidatePreservesRunningSession",
+                  "Load.RepeatedReplacementRetainsSignalAndCleanup"} <= names
+          if sys.argv[2] == "asan":
+              assert sum(name.startswith("Load.") for name in names) == 8
+              assert sum(name.startswith("Lifecycle.") for name in names) == 5
+              assert {"CaptureQuick", "CaptureComparator", "CaptureStress"} <= names
+          assert all(case.find("skipped") is None and case.find("failure") is None for case in cases)
+          PY
+            if test '${{ matrix.preset }}' = asan; then
+              "$ES_OUT/asan/bin/engine-sim-capture" run --suite stress --resources "$GITHUB_WORKSPACE" \
+                --out "$ES_OUT/logs/stress" --seed 1 --repetitions 1 --mode sync
+            else
+              "$ES_OUT/tsan/bin/engine-sim-capture" run --suite stress --case THREAD --resources "$GITHUB_WORKSPACE" \
+                --out "$ES_OUT/logs/stress" --seed 1 --repetitions 1 --mode sync
+            fi
+          } 2>&1 | tee "$ES_OUT/logs/sanitizers.log"
+      - name: Preserve diagnostics and digests
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/engine-sim-${{ matrix.preset }}"
+          mkdir -p "$root/logs"
+          test ! -d "$root/${{ matrix.preset }}/analysis" || cp -R "$root/${{ matrix.preset }}/analysis" "$root/logs/analysis"
+          test ! -d "$root/${{ matrix.preset }}/Testing" || cp -R "$root/${{ matrix.preset }}/Testing" "$root/logs/Testing"
+          (cd "$root/logs" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 -r sha256sum) > "$root/logs/SHA256SUMS"
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        if: always()
+        with:
+          name: linux-${{ matrix.preset }}-diagnostics
+          path: ${{ runner.temp }}/engine-sim-${{ matrix.preset }}/logs/
+          retention-days: 7
+          if-no-files-found: warn
+
   windows-build:
-    name: Windows x64 desktop Release build
+    name: Windows x64 ${{ matrix.preset }} build and diagnostics
     runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        preset: [desktop, win-asan]
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
@@ -91,7 +185,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $env:ES_OUT = Join-Path $env:RUNNER_TEMP 'engine-sim-windows'
+          $env:ES_OUT = Join-Path $env:RUNNER_TEMP 'engine-sim-windows-${{ matrix.preset }}'
           $logs = Join-Path $env:ES_OUT 'logs'
           New-Item -ItemType Directory -Path $logs -Force | Out-Null
 
@@ -122,8 +216,18 @@ jobs:
             Invoke-Checked 'cmake' @('--version')
             Invoke-Checked 'py' @('-3', 'tools/bootstrap.py', '--profile', 'desktop', '--tests', '--out', $env:ES_OUT)
             Copy-Item (Join-Path $env:ES_OUT 'dependency-receipt.json') $logs
-            Invoke-Checked 'cmake' @('--preset', 'desktop')
-            Invoke-Checked 'cmake' @('--build', '--preset', 'desktop', '--config', 'Release', '--target', 'engine-sim-app')
+            $preset = '${{ matrix.preset }}'
+            $config = if ($preset -eq 'win-asan') { 'RelWithDebInfo' } else { 'Release' }
+            Invoke-Checked 'cmake' @('--preset', $preset)
+            Invoke-Checked 'cmake' @('--build', '--preset', $preset, '--config', $config)
+            if ($preset -eq 'win-asan') {
+              $env:ASAN_OPTIONS = 'halt_on_error=1'
+              $xml = Join-Path $logs 'tests.xml'
+              Invoke-Checked 'ctest' @('--preset', $preset, '-C', $config, '--no-tests=error', '--output-on-failure', '--output-junit', $xml)
+              [xml]$results = Get-Content $xml
+              $cases = @($results.SelectNodes('//testcase'))
+              if ($cases.Count -ne 64 -or @($results.SelectNodes('//skipped | //failure')).Count -ne 0) { throw 'Missing or failed sanitizer tests' }
+            }
           } finally {
             Stop-Transcript
             Get-ChildItem $logs -File | Sort-Object Name | ForEach-Object {
@@ -134,7 +238,7 @@ jobs:
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         if: always()
         with:
-          name: windows-desktop-build-logs
-          path: ${{ runner.temp }}/engine-sim-windows/logs/
+          name: windows-${{ matrix.preset }}-build-logs
+          path: ${{ runner.temp }}/engine-sim-windows-${{ matrix.preset }}/logs/
           retention-days: 7
           if-no-files-found: warn

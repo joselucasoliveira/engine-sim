@@ -48,3 +48,6 @@ gtest_discover_tests(engine-sim-load-test
     WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/load-working"
     DISCOVERY_TIMEOUT 30
     PROPERTIES LABELS load TIMEOUT 600 ENVIRONMENT "ENGINE_SIM_TEST_RESOURCES=${PROJECT_SOURCE_DIR}")
+
+configure_file(discovered_properties.cmake.in discovered_properties.cmake @ONLY)
+set_property(DIRECTORY APPEND PROPERTY TEST_INCLUDE_FILES "${CMAKE_CURRENT_BINARY_DIR}/discovered_properties.cmake")
