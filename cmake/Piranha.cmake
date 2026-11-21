@@ -1,13 +1,26 @@
-engine_sim_locked_source(piranha_source piranha)
+engine_sim_locked_source(piranha_original piranha)
+include("${PROJECT_SOURCE_DIR}/cmake/PiranhaPortability.cmake")
+set(piranha_source "${CMAKE_CURRENT_BINARY_DIR}/vendor/piranha-portable")
+engine_sim_project_piranha("${piranha_original}" "${piranha_source}")
 
-find_package(FLEX 2.6 REQUIRED)
+find_package(FLEX 2.6.4 REQUIRED)
 find_package(BISON 3.2 REQUIRED)
 set(Boost_USE_STATIC_LIBS ON)
 set(Boost_USE_MULTITHREADED ON)
 set(Boost_USE_STATIC_RUNTIME OFF)
+if (POLICY CMP0167)
+    cmake_policy(SET CMP0167 OLD)
+endif ()
 find_package(Boost 1.78.0 EXACT REQUIRED COMPONENTS filesystem)
 
-set(generated "${CMAKE_CURRENT_BINARY_DIR}/piranha")
+if (NOT FLEX_INCLUDE_DIR)
+    set(FLEX_INCLUDE_DIR "${piranha_original}/dependencies/libraries/flex/include")
+endif ()
+if (NOT EXISTS "${FLEX_INCLUDE_DIR}/FlexLexer.h")
+    message(FATAL_ERROR "FlexLexer.h is missing for Flex ${FLEX_VERSION}. Set FLEX_INCLUDE_DIR to the matching headers.")
+endif ()
+
+set(generated "${CMAKE_CURRENT_BINARY_DIR}/generated/piranha")
 file(MAKE_DIRECTORY "${generated}")
 flex_target(lexer "${piranha_source}/flex-bison/scanner.l" "${generated}/scanner.auto.cpp"
     DEFINES_FILE "${generated}/scanner.auto.h")
@@ -55,7 +68,7 @@ add_library(piranha STATIC
     ${BISON_parser_OUTPUTS}
 )
 target_include_directories(piranha
-    PUBLIC "${piranha_source}/include"
-    PRIVATE "${generated}" ${FLEX_INCLUDE_DIRS}
+    PUBLIC "${CMAKE_CURRENT_BINARY_DIR}/vendor"
+    PRIVATE "${piranha_source}/include" "${generated}" "${FLEX_INCLUDE_DIR}"
 )
 target_link_libraries(piranha PUBLIC Boost::filesystem)

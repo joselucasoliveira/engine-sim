@@ -6,6 +6,7 @@
 #include "engine_sim.h"
 #include "piranha.h"
 
+#include <iosfwd>
 #include <vector>
 
 namespace es_script {
@@ -32,12 +33,14 @@ namespace es_script {
         static Output *output();
 
         void initialize();
+        void initialize(const std::vector<piranha::IrPath> &libraryRoots);
         bool compile(const piranha::IrPath &path);
+        bool compile(const piranha::IrPath &path, std::ostream &diagnostics);
         Output execute();
         void destroy();
 
     private:
-        void printError(const piranha::CompilationError *err, std::ofstream &file) const;
+        void printError(const piranha::CompilationError *err, std::ostream &diagnostics) const;
 
     private:
         LanguageRules m_rules;

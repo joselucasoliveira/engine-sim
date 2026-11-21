@@ -44,6 +44,16 @@
       }
     },
     {
+      "name": "capture",
+      "inherits": "external",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_TESTING": true,
+        "PIRANHA_ENABLED": true,
+        "ENGINE_SIM_BUILD_DESKTOP": false
+      }
+    },
+    {
       "name": "desktop",
       "inherits": "external",
       "cacheVariables": {
@@ -83,6 +93,11 @@
       "configuration": "Release"
     },
     {
+      "name": "capture",
+      "configurePreset": "capture",
+      "configuration": "Release"
+    },
+    {
       "name": "desktop",
       "configurePreset": "desktop",
       "configuration": "Release"
@@ -104,6 +119,18 @@
     {
       "name": "core-release",
       "configurePreset": "core-release",
+      "configuration": "Release",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error",
+        "timeout": 90
+      }
+    },
+    {
+      "name": "capture",
+      "configurePreset": "capture",
       "configuration": "Release",
       "output": {
         "outputOnFailure": true

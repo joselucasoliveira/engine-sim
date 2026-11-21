@@ -198,8 +198,7 @@ if (PIRANHA_ENABLED)
         scripting/include/vehicle_node.h
     )
 
-    target_include_directories(engine-sim-script-interpreter
-        PUBLIC dependencies/submodules)
+    target_include_directories(engine-sim-script-interpreter PUBLIC scripting/include)
 
     target_link_libraries(engine-sim-script-interpreter PUBLIC engine-sim piranha)
     target_compile_definitions(engine-sim-script-interpreter PUBLIC ATG_ENGINE_SIM_PIRANHA_ENABLED)
@@ -340,4 +339,7 @@ if (BUILD_TESTING)
 
     include(GoogleTest)
     gtest_discover_tests(engine-sim-test DISCOVERY_TIMEOUT 30)
+    if (PIRANHA_ENABLED)
+        add_subdirectory(test/script)
+    endif ()
 endif ()

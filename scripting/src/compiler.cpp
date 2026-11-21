@@ -1,5 +1,7 @@
 #include "../include/compiler.h"
 
+#include <fstream>
+
 es_script::Compiler::Output *es_script::Compiler::s_output = nullptr;
 
 es_script::Compiler::Compiler() {
@@ -19,23 +21,29 @@ es_script::Compiler::Output *es_script::Compiler::output() {
 }
 
 void es_script::Compiler::initialize() {
+    initialize({"../../es/", "../es/", "es/"});
+}
+
+void es_script::Compiler::initialize(const std::vector<piranha::IrPath> &libraryRoots) {
     m_compiler = new piranha::Compiler(&m_rules);
     m_compiler->setFileExtension(".mr");
-
-    m_compiler->addSearchPath("../../es/");
-    m_compiler->addSearchPath("../es/");
-    m_compiler->addSearchPath("es/");
+    for (const auto &root : libraryRoots) {
+        m_compiler->addSearchPath(root);
+    }
 
     m_rules.initialize();
 }
 
 bool es_script::Compiler::compile(const piranha::IrPath &path) {
-    bool successful = false;
+    std::ofstream diagnostics("error_log.log", std::ios::out);
+    return compile(path, diagnostics);
+}
 
-    std::ofstream file("error_log.log", std::ios::out);
+bool es_script::Compiler::compile(const piranha::IrPath &path, std::ostream &diagnostics) {
+    bool successful = false;
     piranha::IrCompilationUnit *unit = m_compiler->compile(path);
     if (unit == nullptr) {
-        file << "Can't find file: " << path.toString() << "\n";
+        diagnostics << "Can't find file: " << path.toString() << "\n";
     }
     else {
         const piranha::ErrorList *errors = m_compiler->getErrorList();
@@ -48,12 +56,10 @@ bool es_script::Compiler::compile(const piranha::IrPath &path) {
         }
         else {
             for (int i = 0; i < errors->getErrorCount(); ++i) {
-                printError(errors->getCompilationError(i), file);
+                printError(errors->getCompilationError(i), diagnostics);
             }
         }
     }
-
-    file.close();
 
     return successful;
 }
@@ -78,10 +84,10 @@ void es_script::Compiler::destroy() {
 
 void es_script::Compiler::printError(
     const piranha::CompilationError *err,
-    std::ofstream &file) const
+    std::ostream &diagnostics) const
 {
     const piranha::ErrorCode_struct &errorCode = err->getErrorCode();
-    file << err->getCompilationUnit()->getPath().getStem()
+    diagnostics << err->getCompilationUnit()->getPath().getStem()
         << "(" << err->getErrorLocation()->lineStart << "): error "
         << errorCode.stage << errorCode.code << ": " << errorCode.info << std::endl;
 
@@ -97,7 +103,7 @@ void es_script::Compiler::printError(
                 ? "<unnamed> " + definitionName
                 : instanceName + " " + definitionName;
 
-            file
+            diagnostics
                 << "       While instantiating: "
                 << instance->getParentUnit()->getPath().getStem()
                 << "(" << instance->getSummaryToken()->lineStart << "): "

@@ -1,0 +1,26 @@
+add_executable(engine-sim-script-test script_tests.cpp)
+target_link_libraries(engine-sim-script-test PRIVATE engine-sim-script-interpreter gtest_main)
+
+set(fixtures "${CMAKE_CURRENT_BINARY_DIR}/input scripts")
+file(GENERATE OUTPUT "${fixtures}/library.mr" CONTENT [=[
+import "nested/inner.mr"
+]=])
+file(GENERATE OUTPUT "${fixtures}/nested/inner.mr" CONTENT [=[
+import "engine_sim.mr"
+]=])
+file(GENERATE OUTPUT "${fixtures}/unknown-node.mr" CONTENT [=[
+import "engine_sim.mr"
+nonexistent_test_node()
+]=])
+file(GENERATE OUTPUT "${fixtures}/missing-import.mr" CONTENT [=[
+import "nonexistent_module_test.mr"
+]=])
+
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/working")
+gtest_discover_tests(engine-sim-script-test
+    WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/working"
+    DISCOVERY_TIMEOUT 30
+    PROPERTIES
+        LABELS script
+        ENVIRONMENT "ENGINE_SIM_TEST_RESOURCES=${PROJECT_SOURCE_DIR}\;ENGINE_SIM_TEST_SCRIPTS=${fixtures}"
+)
