@@ -344,6 +344,12 @@ if (BUILD_TESTING)
 
     include(GoogleTest)
     gtest_discover_tests(engine-sim-test DISCOVERY_TIMEOUT 30)
+    add_executable(engine-sim-threaded-test test/threaded_synthesizer_tests.cpp)
+    target_link_libraries(engine-sim-threaded-test PRIVATE gtest_main engine-sim)
+    gtest_discover_tests(engine-sim-threaded-test
+        DISCOVERY_TIMEOUT 30
+        WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+        PROPERTIES LABELS "threaded" TIMEOUT 30)
     if (PIRANHA_ENABLED)
         add_subdirectory(test/script)
     endif ()

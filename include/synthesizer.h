@@ -14,6 +14,7 @@
 #include <mutex>
 #include <atomic>
 #include <condition_variable>
+#include <vector>
 
 namespace engine_sim_capture { struct FrameAccess; }
 
@@ -73,9 +74,15 @@ class Synthesizer {
         // buffer must hold samples elements. The return value excludes zero padding.
         int readAudioOutput(int samples, int16_t *buffer);
 
-        // Counts discarded resampled frames, once per frame across all channels.
-        std::uint64_t getDroppedInputSamples() const { return m_droppedInputSamples; }
-        std::uint64_t getDroppedOutputSamples() const { return m_droppedOutputSamples; }
+        struct BufferStatistics {
+            std::uint64_t droppedInput, droppedOutput, zeroFilledOutput;
+            std::uint64_t rendered, delivered, submittedGeneration, completedGeneration;
+            size_t stagedInput, pendingInput, activeInput, queuedOutput;
+            bool rendering;
+        };
+        BufferStatistics getBufferStatistics() const;
+        std::uint64_t getDroppedInputSamples() const;
+        std::uint64_t getDroppedOutputSamples() const;
 
         void writeInput(const double *data);
         void endInputBlock();
@@ -91,7 +98,7 @@ class Synthesizer {
         double inputDistance(double s1, double s0) const;
 
         void setInputSampleRate(double sampleRate);
-        double getInputSampleRate() const { return m_inputSampleRate; }
+        double getInputSampleRate() const;
 
         int16_t renderAudio(int inputOffset);
 
@@ -106,8 +113,6 @@ class Synthesizer {
         AudioParameters m_audioParameters;
         int m_inputChannelCount;
         int m_inputBufferSize;
-        int m_inputSamplesRead;
-        int m_latency;
         double m_inputWriteOffset;
         double m_lastInputSampleOffset;
 
@@ -119,16 +124,23 @@ class Synthesizer {
 
         std::thread *m_thread;
         std::atomic<bool> m_run;
-        bool m_processed;
 
-        std::mutex m_inputLock;
-        std::mutex m_lock0;
+        mutable std::mutex m_lock0;
         std::condition_variable m_cv0;
 
         ProcessingFilters *m_filters;
 
     private:
         friend struct engine_sim_capture::FrameAccess;
+        bool processBlock(bool waitForWork);
+        std::vector<std::vector<float>> m_pendingInput;
+        std::vector<int16_t> m_renderedAudio;
+        AudioParameters m_pendingParameters, m_renderParameters;
+        size_t m_stagedFrames = 0, m_pendingFrames = 0, m_activeFrames = 0;
+        std::uint64_t m_submittedGeneration = 0, m_completedGeneration = 0, m_pendingGeneration = 0;
+        std::uint64_t m_zeroFilledOutput = 0, m_renderedSamples = 0, m_deliveredSamples = 0;
+        bool m_rendering = false;
+        double m_publishedGain = 1;
         size_t m_nextInputSample = 0;
         double m_nextInputFraction = 0;
         std::uint64_t m_droppedInputSamples = 0;

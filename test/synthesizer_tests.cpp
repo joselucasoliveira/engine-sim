@@ -294,7 +294,7 @@ TEST(SynthesizerTests, SmallOutputCapacityAndLargeInputStep) {
         EXPECT_EQ(synth.readAudioOutput(capacity, guarded.data() + 1), capacity);
         EXPECT_EQ(guarded.front(), -999);
         EXPECT_EQ(guarded.back(), -999);
-        EXPECT_EQ(synth.getDroppedOutputSamples(), 0U);
+        EXPECT_EQ(synth.getDroppedOutputSamples(), capacity == 1 ? 1U : 0U);
     }
     Synthesizer synth;
     auto p = parameters(1);

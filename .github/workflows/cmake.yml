@@ -1,4 +1,4 @@
-name: Build and numerical tests
+name: Build and core tests
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   linux-numerical:
-    name: Linux x86_64 gas and function tests
+    name: Linux x86_64 core and audio tests
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
@@ -23,11 +23,11 @@ jobs:
         with:
           persist-credentials: false
           submodules: recursive
-      - name: Build the core and run the gas and function tests
+      - name: Build the core and run all fast regressions
         shell: bash
         run: |
           set -euo pipefail
-          export ES_OUT="$RUNNER_TEMP/engine-sim-numerical"
+          export ES_OUT="$RUNNER_TEMP/engine-sim-core"
           mkdir -p "$ES_OUT/logs"
           {
             set -x
@@ -43,34 +43,38 @@ jobs:
             cp "$ES_OUT/dependency-receipt.json" "$ES_OUT/logs/"
             cmake --preset core
             cmake --build --preset core
-            # The legacy multiblock synthesis cases remain registered and have open crash regressions.
-            ctest --preset core -R 'GasSystemTests|FunctionTests' --no-tests=error --output-on-failure \
-              --output-junit "$ES_OUT/logs/numerical.xml"
-            python3 - "$ES_OUT/logs/numerical.xml" <<'PY'
+            ctest --preset core --no-tests=error --output-on-failure \
+              --output-junit "$ES_OUT/logs/core.xml"
+            python3 - "$ES_OUT/logs/core.xml" <<'PY'
           import sys
           from xml.etree import ElementTree
           cases = list(ElementTree.parse(sys.argv[1]).getroot().iter("testcase"))
           names = {case.attrib["name"] for case in cases}
-          assert len(cases) == len(names) == 24
-          assert sum(name.startswith("GasSystemTests.") for name in names) == 19
-          assert sum(name.startswith("FunctionTests.") for name in names) == 5
+          expected = {"GasSystemTests": 19, "FunctionTests": 5, "SynthesizerTests": 7,
+                      "RingBuffer": 3, "Convolution": 2, "ThreadedSynthesis": 5}
+          assert len(cases) == len(names) == sum(expected.values())
+          for suite, count in expected.items():
+              assert sum(name.startswith(suite + ".") for name in names) == count
+          assert {"SynthesizerTests.SynthesizerSanityCheck",
+                  "SynthesizerTests.SynthesizerSystemTestSingleThread",
+                  "SynthesizerTests.SynthesizerSystemTest"} <= names
           assert all(case.find("skipped") is None and case.find("failure") is None for case in cases)
           PY
-          } 2>&1 | tee "$ES_OUT/logs/numerical.log"
+          } 2>&1 | tee "$ES_OUT/logs/core.log"
       - name: Record evidence digests
         if: always()
         shell: bash
         run: |
           set -euo pipefail
-          logs="$RUNNER_TEMP/engine-sim-numerical/logs"
+          logs="$RUNNER_TEMP/engine-sim-core/logs"
           if test -d "$logs"; then
             (cd "$logs" && find . -maxdepth 1 -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 -r sha256sum) > "$logs/SHA256SUMS"
           fi
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         if: always()
         with:
-          name: linux-numerical-logs
-          path: ${{ runner.temp }}/engine-sim-numerical/logs/
+          name: linux-core-logs
+          path: ${{ runner.temp }}/engine-sim-core/logs/
           retention-days: 7
           if-no-files-found: warn
 

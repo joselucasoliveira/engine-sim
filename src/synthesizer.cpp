@@ -15,8 +15,6 @@ Synthesizer::Synthesizer() {
     m_inputChannelCount = 0;
     m_inputBufferSize = 0;
     m_inputWriteOffset = 0.0;
-    m_inputSamplesRead = 0;
-    m_latency = 0;
 
     m_audioBufferSize = 0;
 
@@ -52,15 +50,18 @@ void Synthesizer::initialize(const Parameters &p) {
     m_inputSampleRate = p.inputSampleRate;
     m_audioSampleRate = p.audioSampleRate;
     m_audioParameters = p.initialAudioParameters;
-
-    m_inputSamplesRead = 0;
-
+    m_pendingParameters = m_renderParameters = m_audioParameters;
+    m_stagedFrames = m_pendingFrames = m_activeFrames = 0;
+    m_submittedGeneration = m_completedGeneration = m_pendingGeneration = 0;
+    m_zeroFilledOutput = m_renderedSamples = m_deliveredSamples = 0;
+    m_rendering = false;
+    m_pendingInput.assign(p.inputChannelCount, std::vector<float>(p.inputBufferSize));
+    m_renderedAudio.resize(p.inputBufferSize);
     m_inputWriteOffset = 0;
     m_lastInputSampleOffset = 0;
-    m_latency = 0;
     m_run = true;
-    m_processed = true;
     m_levelingFilter = LevelingFilter();
+    m_publishedGain = m_levelingFilter.getAttenuation();
     m_antialiasing.resetHistory();
 
     m_audioBuffer.initialize(p.audioBufferSize);
@@ -103,6 +104,10 @@ void Synthesizer::initializeImpulseResponse(
     float volume,
     int index)
 {
+    std::lock_guard<std::mutex> lock(m_lock0);
+    if (m_workerRunning || m_rendering || m_pendingFrames != 0) {
+        throw std::logic_error("Stop and drain synthesis before replacing an impulse response");
+    }
     if (index < 0 || index >= m_inputChannelCount || m_filters == nullptr) {
         throw std::out_of_range("Impulse response channel is outside the initialized synthesizer");
     }
@@ -125,32 +130,28 @@ void Synthesizer::initializeImpulseResponse(
 }
 
 void Synthesizer::startAudioRenderingThread() {
+    std::lock_guard<std::mutex> lock(m_lock0);
     if (m_thread != nullptr) return;
     if (m_inputChannelCount == 0) throw std::logic_error("Initialize synthesis before starting its worker");
     m_run = true;
     m_workerRunning = true;
-    try {
-        m_thread = new std::thread(&Synthesizer::audioRenderingThread, this);
-    }
-    catch (...) {
-        m_workerRunning = false;
-        throw;
-    }
+    try { m_thread = new std::thread(&Synthesizer::audioRenderingThread, this); }
+    catch (...) { m_workerRunning = false; throw; }
 }
 
 void Synthesizer::endAudioRenderingThread() {
-    if (m_thread != nullptr) {
-        {
-            std::lock_guard<std::mutex> lock(m_lock0);
-            m_run = false;
-        }
-        m_cv0.notify_all();
-
-        m_thread->join();
-        delete m_thread;
-
+    std::thread *worker;
+    {
+        std::lock_guard<std::mutex> lock(m_lock0);
+        m_run = false;
+        worker = m_thread;
+    }
+    m_cv0.notify_all();
+    if (worker != nullptr) {
+        worker->join();
+        delete worker;
+        std::lock_guard<std::mutex> lock(m_lock0);
         m_thread = nullptr;
-        m_workerRunning = false;
     }
 }
 
@@ -173,8 +174,9 @@ void Synthesizer::destroy() {
     m_filters = nullptr;
 
     m_inputChannelCount = 0;
-    m_latency = 0;
-    m_inputSamplesRead = 0;
+    std::vector<std::vector<float>>().swap(m_pendingInput);
+    std::vector<int16_t>().swap(m_renderedAudio);
+    m_stagedFrames = m_pendingFrames = m_activeFrames = 0;
     m_nonFiniteCaptureCount = nullptr;
 }
 
@@ -183,7 +185,7 @@ int Synthesizer::readAudioOutput(int samples, int16_t *buffer) {
         throw std::invalid_argument("Audio output requires a nonnegative destination extent");
     }
     if (samples == 0) return 0;
-    std::lock_guard<std::mutex> lock(m_lock0);
+    std::unique_lock<std::mutex> lock(m_lock0);
 
     const int newDataLength = m_audioBuffer.size();
     if (newDataLength >= samples) {
@@ -199,14 +201,21 @@ int Synthesizer::readAudioOutput(int samples, int16_t *buffer) {
     
     const int samplesConsumed = std::min(samples, newDataLength);
 
+    m_zeroFilledOutput += samples - samplesConsumed;
+    m_deliveredSamples += samplesConsumed;
+    lock.unlock();
+    m_cv0.notify_all();
     return samplesConsumed;
 }
 
 void Synthesizer::waitProcessed() {
-    {
-        std::unique_lock<std::mutex> lk(m_lock0);
-        m_cv0.wait(lk, [this] { return m_processed; });
+    if (!m_workerRunning) {
+        renderAudio();
+        return;
     }
+    std::unique_lock<std::mutex> lock(m_lock0);
+    const auto target = m_submittedGeneration;
+    m_cv0.wait(lock, [this, target] { return m_completedGeneration >= target; });
 }
 
 void Synthesizer::writeInput(const double *data) {
@@ -214,7 +223,7 @@ void Synthesizer::writeInput(const double *data) {
     for (int i = 0; i < m_inputChannelCount; ++i) {
         if (!std::isfinite(data[i])) throw std::invalid_argument("Nonfinite synthesis input");
     }
-    const double step = static_cast<double>(m_audioSampleRate) / m_inputSampleRate;
+    const double step = static_cast<double>(m_audioSampleRate) / getInputSampleRate();
     m_inputWriteOffset += step;
     if (m_inputWriteOffset >= m_inputBufferSize) {
         m_inputWriteOffset = step < m_inputBufferSize
@@ -231,7 +240,11 @@ void Synthesizer::writeInput(const double *data) {
 
     // Discard the newest complete resampled block when it cannot fit. Its phase
     // still advances, so a later accepted block resumes at the correct time.
-    if (!accepted) m_droppedInputSamples += count;
+    {
+        std::lock_guard<std::mutex> lock(m_lock0);
+        if (!accepted) m_droppedInputSamples += count;
+        else m_stagedFrames += count;
+    }
     for (int i = 0; i < m_inputChannelCount; ++i) {
         auto &channel = m_inputChannels[i];
         if (accepted) {
@@ -250,72 +263,114 @@ void Synthesizer::writeInput(const double *data) {
 }
 
 void Synthesizer::endInputBlock() {
-    std::unique_lock<std::mutex> lk(m_inputLock); 
-
-    for (int i = 0; i < m_inputChannelCount; ++i) {
-        m_inputChannels[i].data.removeBeginning(m_inputSamplesRead);
+    std::unique_lock<std::mutex> lock(m_lock0);
+    if (m_stagedFrames == 0) return;
+    const size_t count = m_stagedFrames;
+    if (m_pendingFrames != 0 || (!m_run && m_thread != nullptr)) {
+        // Keep the already published block immutable. Reject this newest block.
+        m_droppedInputSamples += count;
+        for (int i = 0; i < m_inputChannelCount; ++i) m_inputChannels[i].data.removeBeginning(count);
     }
-
-    if (m_inputChannelCount != 0) {
-        m_latency = m_inputChannels[0].data.size();
+    else {
+        for (int i = 0; i < m_inputChannelCount; ++i) {
+            m_inputChannels[i].data.readAndRemove(count, m_pendingInput[i].data());
+        }
+        m_pendingFrames = count;
+        m_pendingParameters = m_audioParameters;
+        m_pendingGeneration = ++m_submittedGeneration;
     }
-    
-    m_inputSamplesRead = 0;
-    m_processed = false;
-
-    lk.unlock();
-    m_cv0.notify_one();
+    m_stagedFrames = 0;
+    lock.unlock();
+    m_cv0.notify_all();
 }
 
 void Synthesizer::audioRenderingThread() {
-    while (m_run) {
-        renderAudio();
+    while (processBlock(true)) {}
+    {
+        std::lock_guard<std::mutex> lock(m_lock0);
+        m_workerRunning = false;
     }
+    m_cv0.notify_all();
 }
 
-#undef max
 void Synthesizer::renderAudio() {
-    std::unique_lock<std::mutex> lk0(m_lock0);
-    if (m_inputChannelCount == 0) return;
+    if (m_workerRunning) throw std::logic_error("Synchronous rendering requires a stopped worker");
+    processBlock(false);
+}
 
-    const auto ready = [this] {
-        const bool inputAvailable = m_inputChannelCount > 0
-            && m_inputChannels[0].data.size() > 0
-            && m_audioBuffer.size() < std::min(2000, m_audioBufferSize);
-        return !m_run || (inputAvailable && !m_processed);
-    };
-    // A synchronous empty/full render cannot wait for its own caller.
-    if (!m_workerRunning && !ready()) return;
-    m_cv0.wait(lk0, ready);
-
-    const int n = std::min(
-        std::max(0, std::min(2000, m_audioBufferSize) - (int)m_audioBuffer.size()),
-        (int)m_inputChannels[0].data.size());
-
+bool Synthesizer::processBlock(bool waitForWork) {
+    std::unique_lock<std::mutex> lock(m_lock0);
+    if (waitForWork) m_cv0.wait(lock, [this] { return m_pendingFrames != 0 || !m_run; });
+    if (m_pendingFrames == 0) return false;
+    if (m_rendering) throw std::logic_error("Concurrent synthesis renderers are unsupported");
+    const size_t count = m_pendingFrames;
+    const auto generation = m_pendingGeneration;
+    m_renderParameters = m_pendingParameters;
     for (int i = 0; i < m_inputChannelCount; ++i) {
-        m_inputChannels[i].data.read(n, m_inputChannels[i].transferBuffer);
+        std::copy_n(m_pendingInput[i].data(), count, m_inputChannels[i].transferBuffer);
     }
-    
-    m_inputSamplesRead = n;
-    m_processed = true;
+    m_pendingFrames = 0;
+    m_activeFrames = count;
+    m_rendering = true;
+    lock.unlock();
 
-    lk0.unlock();
-
+    // The worker owns DSP histories and scratch. Producer/device locks are free.
     for (int i = 0; i < m_inputChannelCount; ++i) {
         m_filters[i].airNoiseLowPass.setCutoffFrequency(
-            static_cast<float>(m_audioParameters.airNoiseFrequencyCutoff), m_audioSampleRate);
-        m_filters[i].jitterFilter.setJitterScale(m_audioParameters.inputSampleNoise);
+            m_renderParameters.airNoiseFrequencyCutoff, m_audioSampleRate);
+        m_filters[i].jitterFilter.setJitterScale(m_renderParameters.inputSampleNoise);
     }
+    for (size_t i = 0; i < count; ++i) m_renderedAudio[i] = renderAudio(static_cast<int>(i));
 
-    for (int i = 0; i < n; ++i) {
-        if (!m_audioBuffer.write(renderAudio(i))) ++m_droppedOutputSamples;
+    lock.lock();
+    m_renderedSamples += count;
+    size_t published = 0;
+    while (published < count) {
+        const size_t available = m_audioBuffer.capacity() - m_audioBuffer.size();
+        if (available == 0) {
+            if (!waitForWork || !m_run) {
+                // Stopping never waits for a paused consumer. Previously visible
+                // output remains readable, while the unpublished suffix is counted.
+                m_droppedOutputSamples += count - published;
+                break;
+            }
+            m_cv0.wait(lock, [this] { return !m_run || m_audioBuffer.size() < m_audioBuffer.capacity(); });
+            continue;
+        }
+        const size_t length = std::min(available, count - published);
+        for (size_t i = 0; i < length; ++i) m_audioBuffer.write(m_renderedAudio[published + i]);
+        published += length;
+        m_activeFrames = count - published;
+        m_cv0.notify_all();
     }
-
-    m_cv0.notify_one();
+    m_activeFrames = 0;
+    m_publishedGain = m_levelingFilter.getAttenuation();
+    m_completedGeneration = generation;
+    m_rendering = false;
+    lock.unlock();
+    m_cv0.notify_all();
+    return true;
 }
 
 double Synthesizer::getLatency() const {
-    return (double)m_latency / m_audioSampleRate;
+    std::lock_guard<std::mutex> lock(m_lock0);
+    return m_audioSampleRate > 0
+        ? static_cast<double>(m_stagedFrames + m_pendingFrames + m_activeFrames) / m_audioSampleRate : 0;
+}
+
+Synthesizer::BufferStatistics Synthesizer::getBufferStatistics() const {
+    std::lock_guard<std::mutex> lock(m_lock0);
+    return {m_droppedInputSamples, m_droppedOutputSamples, m_zeroFilledOutput,
+        m_renderedSamples, m_deliveredSamples, m_submittedGeneration, m_completedGeneration,
+        m_stagedFrames, m_pendingFrames, m_activeFrames, m_audioBuffer.size(), m_rendering};
+}
+
+std::uint64_t Synthesizer::getDroppedInputSamples() const { return getBufferStatistics().droppedInput; }
+std::uint64_t Synthesizer::getDroppedOutputSamples() const { return getBufferStatistics().droppedOutput; }
+
+double Synthesizer::getInputSampleRate() const {
+    std::lock_guard<std::mutex> lock(m_lock0);
+    return m_inputSampleRate;
 }
 
 int Synthesizer::inputDelta(int s1, int s0) const {
@@ -335,16 +390,14 @@ void Synthesizer::setInputSampleRate(double sampleRate) {
         || static_cast<double>(m_audioSampleRate) / sampleRate > std::numeric_limits<int>::max()) {
         throw std::invalid_argument("Input sample rate must be positive and finite");
     }
-    if (sampleRate != m_inputSampleRate) {
-        std::lock_guard<std::mutex> lock(m_lock0);
-        m_inputSampleRate = sampleRate;
-    }
+    std::lock_guard<std::mutex> lock(m_lock0);
+    m_inputSampleRate = static_cast<float>(sampleRate);
 }
 
 int16_t Synthesizer::renderAudio(int inputSample) {
-    const float airNoise = m_audioParameters.airNoise;
-    const float dF_F_mix = m_audioParameters.dF_F_mix;
-    const float convAmount = m_audioParameters.convolution;
+    const float airNoise = m_renderParameters.airNoise;
+    const float dF_F_mix = m_renderParameters.dF_F_mix;
+    const float convAmount = m_renderParameters.convolution;
 
     float signal = 0;
     for (int i = 0; i < m_inputChannelCount; ++i) {
@@ -380,8 +433,8 @@ int16_t Synthesizer::renderAudio(int inputSample) {
 
     signal = m_antialiasing.fast_f(signal);
 
-    m_levelingFilter.p_target = m_audioParameters.levelerTarget;
-    const float v_leveled = m_levelingFilter.f(signal) * m_audioParameters.volume;
+    m_levelingFilter.p_target = m_renderParameters.levelerTarget;
+    const float v_leveled = m_levelingFilter.f(signal) * m_renderParameters.volume;
     if (m_nonFiniteCaptureCount != nullptr && !std::isfinite(v_leveled)) {
         ++*m_nonFiniteCaptureCount;
     }
@@ -393,7 +446,7 @@ int16_t Synthesizer::renderAudio(int inputSample) {
 
 double Synthesizer::getLevelerGain() {
     std::lock_guard<std::mutex> lock(m_lock0);
-    return m_levelingFilter.getAttenuation();
+    return m_publishedGain;
 }
 
 Synthesizer::AudioParameters Synthesizer::getAudioParameters() {

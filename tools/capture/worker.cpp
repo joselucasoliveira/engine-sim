@@ -176,11 +176,13 @@ void runGas(const fs::path &out) {
     }
 }
 
-int renderAndWrite(Synthesizer &synth, std::ostream &output) {
-    if (synth.m_inputChannels[0].data.size() == 0) return 0;
+int renderAndWrite(Synthesizer &synth, std::ostream &output, size_t &inputWindow) {
+    // The trace retains the published input window before acknowledgement.
+    // Producer staging may already be empty after handing off that window.
+    inputWindow = synth.getBufferStatistics().pendingInput;
     synth.renderAudio();
     std::array<std::int16_t, 4096> buffer{};
-    const int available = static_cast<int>(synth.m_audioBuffer.size());
+    const int available = static_cast<int>(synth.getBufferStatistics().queuedOutput);
     if (available > static_cast<int>(buffer.size())) throw std::runtime_error("capture buffer is too small");
     const int frames = synth.readAudioOutput(available, buffer.data());
     if (frames != available) throw std::runtime_error("audio drain count differs from queue count");
@@ -215,10 +217,11 @@ void runTone(const fs::path &out, bool quiet) {
         }
         synth.endInputBlock();
         const auto start = Clock::now();
-        const int frames = renderAndWrite(synth, pcm);
+        size_t inputWindow = 0;
+        const int frames = renderAndWrite(synth, pcm, inputWindow);
         total += frames;
         trace << block << ",100," << frames << ',' << synth.m_inputWriteOffset << ','
-              << synth.m_inputChannels[0].data.size() << ',' << microsecondsSince(start) << '\n';
+              << inputWindow << ',' << microsecondsSince(start) << '\n';
     }
     synth.destroy();
     openOutput(out / "quantizer.txt") << nonFinite << '\n';
@@ -378,7 +381,8 @@ void runEngine(const fs::path &resources, const fs::path &out, std::string_view 
         simulator->endFrame();
         const double simulationTime = microsecondsSince(simulationStart);
         const auto synthesisStart = Clock::now();
-        const int frames = renderAndWrite(synth, pcm);
+        size_t inputWindow = 0;
+        const int frames = renderAndWrite(synth, pcm, inputWindow);
         const double synthesisTime = microsecondsSince(synthesisStart);
         totalTicks += ticks;
         totalFrames += frames;
@@ -398,7 +402,7 @@ void runEngine(const fs::path &resources, const fs::path &out, std::string_view 
               << ',' << simulator->m_dyno.m_enabled << ',' << simulator->m_dyno.m_rotationSpeed << ',' << synth.m_inputWriteOffset
               << ',' << ranges.pressure.min << ',' << ranges.pressure.max << ',' << ranges.moles.min << ',' << ranges.moles.max
               << ',' << ranges.volume.min << ',' << ranges.volume.max << ',' << ranges.manifold.min << ',' << ranges.manifold.max
-              << ',' << valid << ',' << synth.m_inputChannels[0].data.size() << '\n';
+              << ',' << valid << ',' << inputWindow << '\n';
         if (!valid) throw std::runtime_error("nonfinite or nonphysical state in block " + std::to_string(block));
     }
     openOutput(out / "quantizer.txt") << nonFinite << '\n';
