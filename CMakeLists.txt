@@ -336,7 +336,7 @@ if (BUILD_TESTING)
         test/synthesizer_tests.cpp
     )
 
-    target_link_libraries(engine-sim-test PRIVATE gtest_main engine-sim csv-io)
+    target_link_libraries(engine-sim-test PRIVATE gtest_main engine-sim)
 
     include(GoogleTest)
     gtest_discover_tests(engine-sim-test DISCOVERY_TIMEOUT 30)

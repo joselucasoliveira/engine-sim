@@ -2,7 +2,9 @@
 
 #include "../include/function.h"
 
-#include <stdlib.h>
+#include <cmath>
+#include <cstdlib>
+#include <limits>
 
 TEST(FunctionTests, FunctionSanityCheck) {
     Function f;
@@ -57,24 +59,53 @@ TEST(FunctionTests, FunctionRandomAddTest) {
 }
 
 TEST(FunctionTests, FunctionGaussianTest) {
-    Function f;
+    constexpr double samples[] = {1.0, 1.0, 1.0, 5.0, 9.0, 10.0};
+    constexpr double radius = 3.0;
+    constexpr double step = radius / (1024 - 32);
+    // The compact kernel subtracts its value at the boundary. In its support,
+    // |d² exp(-x²)/dx²| <= 2, so linear interpolation perturbs each weight
+    // by at most 2 * step² / 8.
+    constexpr double weightError = step * step / 4.0;
+    const double cutoff = std::exp(-radius * radius);
+
+    Function f, flat;
     f.initialize(0, 1.0);
-    f.addSample(0.0, 1.0);
-    f.addSample(2.0, 1.0);
-    f.addSample(3.0, 5.0);
-    f.addSample(1.0, 1.0);
-    f.addSample(5.0, 10.0);
-    f.addSample(4.0, 9.0);
-
-    EXPECT_NEAR(f.sampleGaussian(2.0), 1.0, 0.1);
-    EXPECT_NEAR(f.sampleGaussian(4.0), 9.0, 0.3);
-    EXPECT_NEAR(f.sampleGaussian(100.0), 10.0, 1E-3);
-    EXPECT_NEAR(f.sampleGaussian(-100.0), 1.0, 1E-3);
-
-    for (double s = 2.0; s <= 3.0; s += 0.001) {
-        const double v = f.sampleGaussian(s);
-        std::cerr << v << "\n";
+    flat.initialize(0, 1.0);
+    for (int i : {0, 2, 3, 1, 5, 4}) {
+        f.addSample(i, samples[i]);
+        flat.addSample(i, 7.0);
     }
 
+    for (double x : {2.0, 2.25, 4.0}) {
+        double totalWeight = 0.0;
+        double total = 0.0;
+        int neighbors = 0;
+        for (int i = 0; i < 6; ++i) {
+            const double distance = i - x;
+            if (std::abs(distance) > radius) continue;
+            const double weight = std::exp(-distance * distance) - cutoff;
+            totalWeight += weight;
+            total += weight * samples[i];
+            ++neighbors;
+        }
+        ASSERT_GT(totalWeight, neighbors * weightError);
+        const double expected = total / totalWeight;
+        double residual = 0.0;
+        for (int i = 0; i < 6; ++i) {
+            if (std::abs(i - x) <= radius) residual += std::abs(samples[i] - expected);
+        }
+        const double normalizedError = residual * weightError / (totalWeight - neighbors * weightError);
+        const double rounding = 16 * std::numeric_limits<double>::epsilon() * expected;
+        EXPECT_NEAR(f.sampleGaussian(x), expected, normalizedError + rounding) << x;
+        EXPECT_DOUBLE_EQ(flat.sampleGaussian(x), 7.0) << x;
+    }
+    EXPECT_DOUBLE_EQ(f.sampleGaussian(100.0), samples[5]);
+    EXPECT_DOUBLE_EQ(f.sampleGaussian(-100.0), samples[0]);
+
+    GaussianFilter kernel;
+    kernel.initialize(1.0, radius);
+    EXPECT_DOUBLE_EQ(kernel.evaluate(0.42), kernel.evaluate(-0.42));
+    EXPECT_DOUBLE_EQ(kernel.evaluate(radius), 0.0);
+    flat.destroy();
     f.destroy();
 }

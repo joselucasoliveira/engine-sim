@@ -2,9 +2,37 @@
 
 #include "../include/gas_system.h"
 #include "../include/units.h"
-#include "../include/csv_io.h"
+#include <cmath>
 
-#include <sstream>
+namespace {
+void expectFiniteGas(const GasSystem &gas) {
+    EXPECT_GT(gas.volume(), 0.0);
+    EXPECT_GT(gas.pressure(), 0.0);
+    EXPECT_GT(gas.temperature(), 0.0);
+    EXPECT_GT(gas.n(), 0.0);
+    EXPECT_TRUE(std::isfinite(gas.volume()));
+    EXPECT_TRUE(std::isfinite(gas.pressure()));
+    EXPECT_TRUE(std::isfinite(gas.temperature()));
+    EXPECT_TRUE(std::isfinite(gas.n()));
+    EXPECT_TRUE(std::isfinite(gas.totalEnergy()));
+    EXPECT_TRUE(std::isfinite(gas.velocity_x()));
+    EXPECT_TRUE(std::isfinite(gas.velocity_y()));
+}
+
+void transferAtEquilibrium(GasSystem &donor, GasSystem &recipient, double moles) {
+    const double initialMoles = donor.n() + recipient.n();
+    const double initialEnergy = donor.totalEnergy() + recipient.totalEnergy();
+    const double energyPerMole = donor.kineticEnergyPerMol();
+    const auto mix = donor.mix();
+
+    donor.loseN(moles, energyPerMole);
+    recipient.gainN(moles, energyPerMole, mix);
+
+    EXPECT_NEAR(donor.pressure(), recipient.pressure(), 1E-6);
+    EXPECT_NEAR(donor.n() + recipient.n(), initialMoles, 1E-6);
+    EXPECT_NEAR(donor.totalEnergy() + recipient.totalEnergy(), initialEnergy, 1E-4);
+}
+}
 
 TEST(GasSystemTests, GasSystemSanity) {
     GasSystem system;
@@ -105,20 +133,13 @@ TEST(GasSystemTests, PressureEquilibriumMaxFlow) {
     );
 
     const double maxFlowIn = system1.pressureEquilibriumMaxFlow(&system2);
-
-    system1.loseN(maxFlowIn, system1.kineticEnergyPerMol());
-    system2.gainN(maxFlowIn, system1.kineticEnergyPerMol(), system1.mix());
-
-    EXPECT_NEAR(system1.pressure(), system2.pressure(), 1E-6);
+    ASSERT_LT(maxFlowIn, 0.0);
+    transferAtEquilibrium(system2, system1, -maxFlowIn);
 
     system1.changePressure(units::pressure(100.0, units::atm));
-
     const double maxFlowOut = system1.pressureEquilibriumMaxFlow(&system2);
-
-    system1.loseN(maxFlowIn, system1.kineticEnergyPerMol());
-    system2.gainN(maxFlowIn, system1.kineticEnergyPerMol(), system1.mix());
-
-    EXPECT_NEAR(system1.pressure(), system2.pressure(), 1E-6);
+    ASSERT_GT(maxFlowOut, 0.0);
+    transferAtEquilibrium(system1, system2, maxFlowOut);
 }
 
 TEST(GasSystemTests, PressureEquilibriumMaxFlowInfinite) {
@@ -135,7 +156,8 @@ TEST(GasSystemTests, PressureEquilibriumMaxFlowInfinite) {
     const double maxFlow = system1.pressureEquilibriumMaxFlow(P_env, T_env);
     const double E_k_per_mol = GasSystem::kineticEnergyPerMol(T_env, system1.degreesOfFreedom());
 
-    system1.gainN(maxFlow, E_k_per_mol);
+    ASSERT_LT(maxFlow, 0.0);
+    system1.gainN(-maxFlow, E_k_per_mol);
 
     EXPECT_NEAR(system1.pressure(), P_env, 1E-6);
 }
@@ -153,7 +175,8 @@ TEST(GasSystemTests, PressureEquilibriumMaxFlowInfiniteOverpressure) {
 
     const double maxFlow = system1.pressureEquilibriumMaxFlow(P_env, T_env);
 
-    system1.loseN(maxFlow, GasSystem::kineticEnergyPerMol(T_env, 5));
+    ASSERT_GT(maxFlow, 0.0);
+    system1.loseN(maxFlow, system1.kineticEnergyPerMol());
 
     EXPECT_NEAR(system1.pressure(), P_env, 1E-6);
 }
@@ -166,20 +189,23 @@ TEST(GasSystemTests, FlowVariableVolume) {
         units::celcius(25.0)
     );
 
-    constexpr double P_env = units::pressure(2.0, units::atm);
-    constexpr double T_env = units::celcius(25.0);
-
-    const double maxFlow = system1.pressureEquilibriumMaxFlow(P_env, T_env);
-
-    constexpr double dV = units::volume(1000000.0, units::cc) / 100;
-    for (int i = 0; i < 100; ++i) {
-        const double flowRate0 = system1.flow(0.01, 1/60.0, units::pressure(0.1, units::atm), units::celcius(25.0));
-        const double flowRate1 = system1.flow(0.01, 1 / 60.0, units::pressure(0.2, units::atm), units::celcius(25.0));
+    constexpr double dV = units::volume(1.0, units::m3) / 100;
+    constexpr double dt = 1.0 / 60.0;
+    // Leave one increment of positive volume at the end of the stroke.
+    for (int i = 0; i < 99; ++i) {
+        SCOPED_TRACE(i);
+        for (double pressure : {units::pressure(0.1, units::atm), units::pressure(0.2, units::atm)}) {
+            const double pressureDifference = system1.pressure() - pressure;
+            const double molesBefore = system1.n();
+            const double flow = system1.flow(0.01, dt, pressure, units::celcius(25.0));
+            EXPECT_GE(flow * pressureDifference, 0.0);
+            EXPECT_NEAR(system1.n(), molesBefore - flow, 1E-6);
+        }
         system1.changeVolume(-dV);
         system1.changeTemperature(100);
-
-        std::cerr << flowRate0 << ", " << flowRate1 << "\n";
+        expectFiniteGas(system1);
     }
+    EXPECT_NEAR(system1.volume(), dV, 1E-12);
 }
 
 TEST(GasSystemTests, PowerStrokeTest) {
@@ -190,18 +216,19 @@ TEST(GasSystemTests, PowerStrokeTest) {
         units::celcius(2000.0)
     );
 
-    constexpr double dV = units::volume(1000000.0, units::cc) / 100;
+    constexpr double ambientPressure = units::pressure(1.0, units::atm);
+    const double initialMoles = system1.n();
+    double discharged = 0.0;
     for (int i = 0; i < 100; ++i) {
-        const double flowRate0 = system1.flow(1.0, 1 / 60.0, units::pressure(1.0, units::atm), units::celcius(25.0));
-        std::cerr << i << ", " << flowRate0 << ", " << system1.pressure() << "\n";
+        discharged += system1.flow(1.0, 1.0 / 60.0, ambientPressure, units::celcius(25.0));
+        expectFiniteGas(system1);
     }
+    EXPECT_GT(discharged, 0.0);
+    EXPECT_NEAR(system1.n(), initialMoles - discharged, 1E-6);
+    EXPECT_NEAR(system1.pressure(), ambientPressure, 1E-6);
 }
 
 TEST(GasSystemTests, IntakeStrokeTest) {
-    atg_csv::CsvData csv;
-    csv.initialize();
-    csv.m_columns = 3;
-
     GasSystem system1, system2;
     system1.initialize(
         units::pressure(1.0, units::atm),
@@ -214,38 +241,25 @@ TEST(GasSystemTests, IntakeStrokeTest) {
         units::celcius(25.0)
     );
 
-    csv.write("t");
-    csv.write("n");
-    csv.write("theoretical");
-
-    constexpr double dV = units::volume(4.0, units::m3);
     constexpr double dt = 0.01;
-    system2.changeVolume(dV * dt * 100);
-    for (int i = 0; i < 100; ++i) {
-        GasSystem::FlowParameters flowParams;
-        flowParams.crossSectionArea_0 = 1.0;
-        flowParams.crossSectionArea_1 = 1.0;
-        flowParams.direction_x = 1.0;
-        flowParams.direction_y = 0.0;
-        flowParams.dt = dt;
-        flowParams.k_flow = GasSystem::k_carb(100000.0);
-        flowParams.system_0 = &system1;
-        flowParams.system_1 = &system2;
+    system2.changeVolume(units::volume(4.0, units::m3));
+    const double initialPressure = system2.pressure();
+    const double initialCharge = system2.n();
+    const double initialMoles = system1.n() + system2.n();
+    const double initialEnergy = system1.totalEnergy() + system2.totalEnergy();
 
-        GasSystem::flow(flowParams);
-        //system2.changeVolume(dV * dt);
-        //system2.changeTemperature(units::celcius(25.0) - system2.temperature());
-
-        csv.write(std::to_string(i * dt).c_str());
-        csv.write(std::to_string(system2.n()).c_str());
-        csv.write(std::to_string(
-            units::pressure(1.0, units::atm) * system2.volume()
-            / (constants::R * units::celcius(25.0))).c_str());
+    const GasSystem::FlowParameters inlet{
+        GasSystem::k_carb(100000.0), dt, 1.0, 0.0, 1.0, 1.0, &system1, &system2
+    };
+    EXPECT_GT(GasSystem::flow(inlet), 0.0);
+    for (int i = 1; i < 100; ++i) {
+        GasSystem::flow(inlet);
+        expectFiniteGas(system2);
     }
-
-    csv.m_rows = 100 + 1;
-    csv.writeCsv("intake_stroke.csv");
-    csv.destroy();
+    EXPECT_GT(system2.pressure(), initialPressure);
+    EXPECT_GT(system2.n(), initialCharge);
+    EXPECT_NEAR(system1.n() + system2.n(), initialMoles, 1E-6);
+    EXPECT_NEAR(system1.totalEnergy() + system2.totalEnergy(), initialEnergy, 1E-4);
 }
 
 TEST(GasSystemTests, FlowLimit) {
@@ -415,10 +429,6 @@ TEST(GasSystemTests, FlowRateConstant) {
 }
 
 TEST(GasSystemTests, GasVelocityReducesStaticPressure) {
-    atg_csv::CsvData csv;
-    csv.initialize();
-    csv.m_columns = 6;
-
     GasSystem system1, system2;
     system1.initialize(
         units::pressure(15, units::psi),
@@ -447,61 +457,27 @@ TEST(GasSystemTests, GasVelocityReducesStaticPressure) {
     params.system_0 = &system1;
     params.system_1 = &system2;
 
-    csv.write("time");
-    csv.write("P_0");
-    csv.write("P_1");
-    csv.write("v_0");
-    csv.write("v_1");
-    csv.write("total_energy");
-
+    double peakVelocity = 0.0;
+    double peakDynamicPressure = 0.0;
     const int steps = 1000;
     for (int i = 1; i <= steps; ++i) {
-        const double staticPressure =
-            system2.pressure() + system2.dynamicPressure(0.0, 1.0);
-        const double totalPressure =
-            system2.pressure() + system2.dynamicPressure(1.0, 0.0);
-
-        const double systemEnergy = system1.totalEnergy() + system2.totalEnergy();
-        const double velocity_x_0 = system1.velocity_x();
-        const double velocity_x_1 = system2.velocity_x();
-
-        const double P_0 = system1.pressure();
-        const double P_1 = system2.pressure() + system2.dynamicPressure(-1.0, 0.0);
-
-        GasSystem::flow(params);
+        const double flow = GasSystem::flow(params);
+        if (i == 1) EXPECT_GT(flow, 0.0);
         system1.updateVelocity(params.dt);
         system2.updateVelocity(params.dt);
-
-        //system1.dissipateVelocity(params.dt, 0.01);
-        //system2.dissipateVelocity(params.dt, 0.01);
-
-        ++csv.m_rows;
-        csv.write(std::to_string(i * params.dt).c_str());
-        csv.write(std::to_string(P_0).c_str());
-        csv.write(std::to_string(P_1).c_str());
-        csv.write(std::to_string(velocity_x_0).c_str());
-        csv.write(std::to_string(velocity_x_1).c_str());
-        csv.write(std::to_string(systemEnergy).c_str());
+        expectFiniteGas(system1);
+        expectFiniteGas(system2);
+        peakVelocity = std::fmax(peakVelocity, system2.velocity_x());
+        peakDynamicPressure = std::fmax(peakDynamicPressure, system2.dynamicPressure(1.0, 0.0));
     }
 
-    const double finalSystemEnergy = system1.totalEnergy() + system2.totalEnergy();
-    const double finalMolecules = system1.n() + system2.n();
-
-    const double p0 = system1.pressure();
-    const double p1 = system2.pressure();
-
-    EXPECT_NEAR(finalMolecules, initialMolecules, 1E-6);
-    EXPECT_NEAR(finalSystemEnergy, initialSystemEnergy, 1E-4);
-
-    csv.writeCsv("gas_system_test_output.csv", nullptr, '\t');
-    csv.destroy();
+    EXPECT_GT(peakVelocity, 0.0);
+    EXPECT_GT(peakDynamicPressure, 0.0);
+    EXPECT_NEAR(system1.n() + system2.n(), initialMolecules, 1E-6);
+    EXPECT_NEAR(system1.totalEnergy() + system2.totalEnergy(), initialSystemEnergy, 1E-4);
 }
 
 TEST(GasSystemTests, GasVelocityProducesScavengingEffect) {
-    atg_csv::CsvData csv;
-    csv.initialize();
-    csv.m_columns = 7;
-
     constexpr double cylinderArea =
         constants::pi * units::distance(2.0, units::inch) * units::distance(2.0, units::inch);
     constexpr double tubeArea =
@@ -536,11 +512,9 @@ TEST(GasSystemTests, GasVelocityProducesScavengingEffect) {
         units::celcius(25.0)
     );
 
-    const double initialSystemEnergy =
-        system1.totalEnergy()
-        + system2.totalEnergy()
-        + atmosphere.totalEnergy();
-    const double initialMolecules = system1.n() + system2.n();
+    const double initialMoles = system1.n() + system2.n() + atmosphere.n();
+    const double initialCylinderMoles = system1.n();
+    const double initialAtmosphereMoles = atmosphere.n();
 
     const double atmosphereArea =
         1000.0;
@@ -553,32 +527,9 @@ TEST(GasSystemTests, GasVelocityProducesScavengingEffect) {
     params.system_0 = &system1;
     params.system_1 = &system2;
 
-    csv.write("iteration");
-    csv.write("time");
-    csv.write("static_cylinder_pressure");
-    csv.write("exhaust_pressure");
-    csv.write("v_0");
-    csv.write("v_1");
-    csv.write("exhaust_static_pressure");
-
+    double peakExhaustVelocity = 0.0;
     const int steps = 10000;
     for (int i = 1; i <= steps; ++i) {
-        const double staticPressure =
-            system2.pressure() + system2.dynamicPressure(0.0, 1.0);
-        const double totalPressure =
-            system2.pressure() + system2.dynamicPressure(1.0, 0.0);
-
-        const double systemEnergy0 =
-            system1.totalEnergy()
-            + system2.totalEnergy()
-            + atmosphere.totalEnergy();
-        const double velocity_x_0 = system1.velocity_x();
-        const double velocity_x_1 = system2.velocity_x();
-
-        const double P_0 = system1.pressure();
-        const double P_1 = system2.pressure() + system2.dynamicPressure(1.0, 0.0);
-        const double exhaustStaticPressure = system2.pressure();
-
         if (system1.volume() > units::volume(118.0, units::cc)) {
             system1.changeVolume(-units::volume(200000.0, units::cc) * params.dt);
         }
@@ -593,11 +544,6 @@ TEST(GasSystemTests, GasVelocityProducesScavengingEffect) {
         params.k_flow = GasSystem::k_28inH2O(230.0);
         GasSystem::flow(params);
 
-        const double systemEnergy1 =
-            system1.totalEnergy()
-            + system2.totalEnergy()
-            + atmosphere.totalEnergy();
-
         params.system_0 = &system2;
         params.system_1 = &atmosphere;
         params.crossSectionArea_0 = tubeArea;
@@ -605,35 +551,24 @@ TEST(GasSystemTests, GasVelocityProducesScavengingEffect) {
         params.k_flow = GasSystem::k_carb(1000);
         GasSystem::flow(params);
 
-        const double systemEnergy2 =
-            system1.totalEnergy()
-            + system2.totalEnergy()
-            + atmosphere.totalEnergy();
-
         system1.updateVelocity(params.dt);
         system2.updateVelocity(params.dt);
         system1.dissipateExcessVelocity();
         system2.dissipateExcessVelocity();
 
-        ++csv.m_rows;
-        csv.write(std::to_string(i).c_str());
-        csv.write(std::to_string(i * params.dt).c_str());
-        csv.write(std::to_string(P_0).c_str());
-        csv.write(std::to_string(P_1).c_str());
-        csv.write(std::to_string(velocity_x_0).c_str());
-        csv.write(std::to_string(velocity_x_1).c_str());
-        csv.write(std::to_string(exhaustStaticPressure).c_str());
+        expectFiniteGas(system1);
+        expectFiniteGas(system2);
+        peakExhaustVelocity = std::fmax(peakExhaustVelocity, system2.velocity_x());
     }
-
-    csv.writeCsv("gas_system_test_output.csv", nullptr, '\t');
-    csv.destroy();
+    expectFiniteGas(atmosphere);
+    EXPECT_GT(peakExhaustVelocity, 0.0);
+    EXPECT_LT(system1.n(), initialCylinderMoles);
+    EXPECT_GT(atmosphere.n(), initialAtmosphereMoles);
+    EXPECT_NEAR(system1.n() + system2.n() + atmosphere.n(), initialMoles, 1E-6);
 }
 
-TEST(GasSystemTests, GasVelocityProducesRamEffect) {
-    atg_csv::CsvData csv;
-    csv.initialize();
-    csv.m_columns = 9;
 
+TEST(GasSystemTests, GasVelocityProducesRamEffect) {
     constexpr double cylinderArea =
         constants::pi * units::distance(2.0, units::inch) * units::distance(2.0, units::inch);
     constexpr double runnerArea =
@@ -668,11 +603,8 @@ TEST(GasSystemTests, GasVelocityProducesRamEffect) {
         units::celcius(25.0)
     );
 
-    const double initialSystemEnergy =
-        cylinder.totalEnergy()
-        + runner.totalEnergy()
-        + atmosphere.totalEnergy();
-    const double initialMolecules = cylinder.n() + runner.n();
+    const double initialMoles = cylinder.n() + runner.n() + atmosphere.n();
+    const double initialCylinderMoles = cylinder.n();
 
     const double atmosphereArea =
         1000.0;
@@ -682,36 +614,13 @@ TEST(GasSystemTests, GasVelocityProducesRamEffect) {
     params.direction_x = 1.0;
     params.direction_y = 0.0;
 
-    csv.write("iteration");
-    csv.write("time");
-    csv.write("crank_angle");
-    csv.write("cylinder_volume");
-    csv.write("n_mol");
-    csv.write("cylinder_air_velocity");
-    csv.write("runner_air_velocity");
-    csv.write("cylinder_pressure");
-    csv.write("runner_pressure");
-
     constexpr double speed = 3000; // rpm
     constexpr double stroke = units::distance(4.0, units::inch);
 
-    double max_n = 0.0;
-    double max_n_angle = 0.0;
-
-    double max_v = 0.0;
-    double max_v_angle = 0.0;
-
-    double flow = 1.0;
-
+    double peakCharge = 0.0;
+    double peakRunnerVelocity = 0.0;
     const int steps = 10000;
     for (int i = 1; i <= steps; ++i) {
-        const double velocity_x_0 = cylinder.velocity_x();
-        const double velocity_x_1 = runner.velocity_x();
-
-        const double P_0 = cylinder.pressure();
-        const double P_1 = runner.pressure() + runner.dynamicPressure(1.0, 0.0);
-        const double exhaustStaticPressure = runner.pressure();
-
         const double t = i * params.dt;
         const double pistonHeight =
             units::distance(0.25, units::inch)
@@ -727,7 +636,7 @@ TEST(GasSystemTests, GasVelocityProducesRamEffect) {
         params.system_1 = &cylinder;
         params.crossSectionArea_0 = runnerArea;
         params.crossSectionArea_1 = cylinderArea;
-        params.k_flow = GasSystem::k_28inH2O(230.0) * flow;
+        params.k_flow = GasSystem::k_28inH2O(230.0);
         GasSystem::flow(params);
 
         params.system_0 = &atmosphere;
@@ -742,44 +651,19 @@ TEST(GasSystemTests, GasVelocityProducesRamEffect) {
         cylinder.dissipateExcessVelocity();
         runner.dissipateExcessVelocity();
 
-        const double angle = 360 * (t * (speed / 60));
-
-        if (cylinder.n() > max_n) {
-            max_n = cylinder.n();
-            max_n_angle = angle;
-        }
-
-        if (cylinder.volume() > max_v) {
-            max_v = cylinder.volume();
-            max_v_angle = angle;
-        }
-
-        ++csv.m_rows;
-        csv.write(std::to_string(i).c_str());
-        csv.write(std::to_string(i * params.dt).c_str());
-        csv.write(std::to_string(angle).c_str());
-        csv.write(std::to_string(cylinder.volume()).c_str());
-        csv.write(std::to_string(cylinder.n()).c_str());
-        csv.write(std::to_string(velocity_x_0).c_str());
-        csv.write(std::to_string(velocity_x_1).c_str());
-        csv.write(std::to_string(P_0).c_str());
-        csv.write(std::to_string(P_1).c_str());
+        expectFiniteGas(cylinder);
+        expectFiniteGas(runner);
+        peakCharge = std::fmax(peakCharge, cylinder.n());
+        peakRunnerVelocity = std::fmax(peakRunnerVelocity, runner.velocity_x());
     }
-
-    csv.writeCsv("gas_system_test_output.csv", nullptr, '\t');
-    csv.destroy();
-
-    const double delay = max_n_angle - max_v_angle;
-    const double m_n = max_n;
-
-    int a = 0;
+    expectFiniteGas(atmosphere);
+    EXPECT_GT(peakCharge, initialCylinderMoles);
+    EXPECT_GT(peakRunnerVelocity, 0.0);
+    EXPECT_NEAR(cylinder.n() + runner.n() + atmosphere.n(), initialMoles, 1E-6);
 }
 
-TEST(GasSystemTests, GasVelocityStabilizesInClosedSystem) {
-    atg_csv::CsvData csv;
-    csv.initialize();
-    csv.m_columns = 2;
 
+TEST(GasSystemTests, GasVelocityStabilizesInClosedSystem) {
     GasSystem system1;
     system1.initialize(
         units::pressure(100, units::psi),
@@ -795,19 +679,14 @@ TEST(GasSystemTests, GasVelocityStabilizesInClosedSystem) {
     const double initialSystemEnergy = system1.totalEnergy();
     const double initialMolecules = system1.n();
 
-    csv.write("time");
-    csv.write("velocity");
-
     const int steps = 10000;
     const double dt = 1 / 10000.0;
     for (int i = 1; i <= steps; ++i) {
         system1.updateVelocity(dt);
-
-        ++csv.m_rows;
-        csv.write(std::to_string(i * dt).c_str());
-        csv.write(std::to_string(system1.velocity_x()).c_str());
+        EXPECT_DOUBLE_EQ(system1.velocity_x(), 0.0);
+        EXPECT_DOUBLE_EQ(system1.velocity_y(), 0.0);
     }
-
-    csv.writeCsv("gas_system_test_output.csv", nullptr, '\t');
-    csv.destroy();
+    expectFiniteGas(system1);
+    EXPECT_DOUBLE_EQ(system1.totalEnergy(), initialSystemEnergy);
+    EXPECT_DOUBLE_EQ(system1.n(), initialMolecules);
 }
