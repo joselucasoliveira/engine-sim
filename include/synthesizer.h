@@ -15,6 +15,8 @@
 #include <atomic>
 #include <condition_variable>
 
+namespace engine_sim_capture { struct FrameAccess; }
+
 class Synthesizer {
     public:
         struct AudioParameters {
@@ -119,6 +121,10 @@ class Synthesizer {
         std::condition_variable m_cv0;
 
         ProcessingFilters *m_filters;
+
+    private:
+        friend struct engine_sim_capture::FrameAccess;
+        std::uint64_t *m_nonFiniteCaptureCount = nullptr;
 };
 
 #endif /* ATG_ENGINE_SIM_ENGINE_SYNTHESIZER_H */

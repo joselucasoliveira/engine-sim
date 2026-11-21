@@ -61,15 +61,27 @@ void Simulator::releaseSimulation() {
     destroy();
 }
 
-void Simulator::startFrame(double dt) {
+bool Simulator::beginFrame() {
     if (m_engine == nullptr) {
         m_steps = 0;
-        return;
+        return false;
     }
-
     m_simulationStart = std::chrono::steady_clock::now();
     m_currentIteration = 0;
     m_synthesizer.setInputSampleRate(m_simulationFrequency * m_simulationSpeed);
+    return true;
+}
+
+void Simulator::resetFrameFlows() {
+    if (m_steps > 0) {
+        for (int i = 0; i < m_engine->getIntakeCount(); ++i) {
+            m_engine->getIntake(i)->m_flowRate = 0;
+        }
+    }
+}
+
+void Simulator::startFrame(double dt) {
+    if (!beginFrame()) return;
 
     const double timestep = getTimestep();
     m_steps = (int)std::round((dt * m_simulationSpeed) / timestep);
@@ -84,12 +96,14 @@ void Simulator::startFrame(double dt) {
             m_steps = 0;
         }
     }
+    resetFrameFlows();
+}
 
-    if (m_steps > 0) {
-        for (int i = 0; i < m_engine->getIntakeCount(); ++i) {
-            m_engine->getIntake(i)->m_flowRate = 0;
-        }
-    }
+void Simulator::beginExactFrame(int ticks) {
+    assert(ticks > 0);
+    if (!beginFrame()) return;
+    m_steps = ticks;
+    resetFrameFlows();
 }
 
 bool Simulator::simulateStep() {

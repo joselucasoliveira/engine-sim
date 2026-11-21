@@ -50,7 +50,8 @@
         "CMAKE_BUILD_TYPE": "Release",
         "BUILD_TESTING": true,
         "PIRANHA_ENABLED": true,
-        "ENGINE_SIM_BUILD_DESKTOP": false
+        "ENGINE_SIM_BUILD_DESKTOP": false,
+        "ENGINE_SIM_BUILD_CAPTURE": true
       }
     },
     {

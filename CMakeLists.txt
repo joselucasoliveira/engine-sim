@@ -30,12 +30,17 @@ option(PIRANHA_ENABLED "Enable the engine script interpreter" ${ENGINE_SIM_BUILD
 option(DTV "Enable video output" OFF)
 option(DISCORD_ENABLED "Enable Discord Rich Presence (Windows x64)" OFF)
 option(BUILD_TESTING "Build and register the Engine Simulator tests" OFF)
+option(ENGINE_SIM_BUILD_CAPTURE "Build the offline signal characterization tool" OFF)
 
 if (ENGINE_SIM_BUILD_DESKTOP AND NOT engine_sim_windows)
     message(FATAL_ERROR "The current desktop backend requires Windows x64 with MSVC")
 endif ()
 if ((DTV OR DISCORD_ENABLED) AND NOT ENGINE_SIM_BUILD_DESKTOP)
     message(FATAL_ERROR "DTV and DISCORD_ENABLED require the Windows desktop app")
+endif ()
+
+if (ENGINE_SIM_BUILD_CAPTURE AND NOT PIRANHA_ENABLED)
+    message(FATAL_ERROR "The capture tool requires PIRANHA_ENABLED")
 endif ()
 
 if (BUILD_TESTING OR PIRANHA_ENABLED OR ENGINE_SIM_BUILD_DESKTOP)
@@ -342,4 +347,8 @@ if (BUILD_TESTING)
     if (PIRANHA_ENABLED)
         add_subdirectory(test/script)
     endif ()
+endif ()
+
+if (ENGINE_SIM_BUILD_CAPTURE)
+    add_subdirectory(tools/capture)
 endif ()

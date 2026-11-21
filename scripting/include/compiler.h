@@ -35,7 +35,8 @@ namespace es_script {
         void initialize();
         void initialize(const std::vector<piranha::IrPath> &libraryRoots);
         bool compile(const piranha::IrPath &path);
-        bool compile(const piranha::IrPath &path, std::ostream &diagnostics);
+        bool compile(const piranha::IrPath &path, std::ostream &diagnostics,
+            std::vector<std::string> *resolvedScripts = nullptr);
         Output execute();
         void destroy();
 

@@ -1,0 +1,6 @@
+#pragma once
+
+constexpr const char *capturePython = R"capture(@Python3_EXECUTABLE@)capture";
+constexpr const char *captureScript = R"capture(@CMAKE_CURRENT_BINARY_DIR@/capture_cli.py)capture";
+constexpr const char *captureMetadata = R"capture(@CMAKE_CURRENT_BINARY_DIR@/build.txt)capture";
+constexpr const char *captureSource = R"capture(@PROJECT_SOURCE_DIR@)capture";

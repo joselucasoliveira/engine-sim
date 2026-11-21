@@ -14,6 +14,8 @@
 
 #include <chrono>
 
+namespace engine_sim_capture { struct FrameAccess; }
+
 class Simulator {
 public:
     enum class SystemType {
@@ -88,6 +90,10 @@ protected:
     atg_scs::RigidBodySystem *m_system;
 
 private:
+    friend struct engine_sim_capture::FrameAccess;
+    bool beginFrame();
+    void resetFrameFlows();
+    void beginExactFrame(int ticks);
     void updateFilteredEngineSpeed(double dt);
 
 private:

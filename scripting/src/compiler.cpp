@@ -1,6 +1,21 @@
 #include "../include/compiler.h"
 
 #include <fstream>
+#include <set>
+
+#include <piranha-portable/include/ir_import_statement.h>
+
+namespace {
+void collectScripts(const piranha::IrCompilationUnit &unit,
+        std::set<const piranha::IrCompilationUnit *> &visited, std::vector<std::string> &paths) {
+    if (!visited.insert(&unit).second) return;
+    paths.push_back(unit.getPath().toString());
+    for (int i = 0; i < unit.getImportStatementCount(); ++i) {
+        const auto *dependency = unit.getImportStatement(i)->getUnit();
+        if (dependency != nullptr) collectScripts(*dependency, visited, paths);
+    }
+}
+}
 
 es_script::Compiler::Output *es_script::Compiler::s_output = nullptr;
 
@@ -39,7 +54,9 @@ bool es_script::Compiler::compile(const piranha::IrPath &path) {
     return compile(path, diagnostics);
 }
 
-bool es_script::Compiler::compile(const piranha::IrPath &path, std::ostream &diagnostics) {
+bool es_script::Compiler::compile(const piranha::IrPath &path, std::ostream &diagnostics,
+        std::vector<std::string> *resolvedScripts) {
+    if (resolvedScripts != nullptr) resolvedScripts->clear();
     bool successful = false;
     piranha::IrCompilationUnit *unit = m_compiler->compile(path);
     if (unit == nullptr) {
@@ -48,6 +65,10 @@ bool es_script::Compiler::compile(const piranha::IrPath &path, std::ostream &dia
     else {
         const piranha::ErrorList *errors = m_compiler->getErrorList();
         if (errors->getErrorCount() == 0) {
+            if (resolvedScripts != nullptr) {
+                std::set<const piranha::IrCompilationUnit *> visited;
+                collectScripts(*unit, visited, *resolvedScripts);
+            }
             unit->build(&m_program);
 
             m_program.initialize();

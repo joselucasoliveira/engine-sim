@@ -318,6 +318,9 @@ int16_t Synthesizer::renderAudio(int inputSample) {
 
     m_levelingFilter.p_target = m_audioParameters.levelerTarget;
     const float v_leveled = m_levelingFilter.f(signal) * m_audioParameters.volume;
+    if (m_nonFiniteCaptureCount != nullptr && !std::isfinite(v_leveled)) {
+        ++*m_nonFiniteCaptureCount;
+    }
     int r_int = std::lround(v_leveled);
     if (r_int > INT16_MAX) {
         r_int = INT16_MAX;
