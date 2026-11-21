@@ -110,6 +110,7 @@ add_library(engine-sim STATIC
     src/vehicle.cpp
     src/vehicle_drag_constraint.cpp
     src/vtec_valvetrain.cpp
+    src/wave_reader.cpp
 
     # Include files
     include/audio_buffer.h
@@ -155,6 +156,7 @@ add_library(engine-sim STATIC
     include/vehicle.h
     include/vehicle_drag_constraint.h
     include/vtec_valvetrain.h
+    include/wave_reader.h
 )
 
 find_package(Threads REQUIRED)
@@ -351,6 +353,20 @@ if (BUILD_TESTING)
         DISCOVERY_TIMEOUT 30
         WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
         PROPERTIES LABELS "threaded" TIMEOUT 30)
+    add_executable(engine-sim-wave-test test/wave_reader_tests.cpp)
+    target_link_libraries(engine-sim-wave-test PRIVATE gtest engine-sim)
+    file(MAKE_DIRECTORY "${PROJECT_BINARY_DIR}/wave-working")
+    gtest_discover_tests(engine-sim-wave-test
+        DISCOVERY_TIMEOUT 30 WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/wave-working"
+        PROPERTIES LABELS impulse TIMEOUT 90 ENVIRONMENT "ENGINE_SIM_TEST_SOURCE=${PROJECT_SOURCE_DIR}")
+    if (PIRANHA_ENABLED)
+        find_package(Python3 3.9 COMPONENTS Interpreter REQUIRED)
+        add_test(NAME ImpulseReference
+            COMMAND "${Python3_EXECUTABLE}" -B "${PROJECT_SOURCE_DIR}/test/impulse_reference.py"
+                "$<TARGET_FILE:engine-sim-wave-test>" "${PROJECT_SOURCE_DIR}")
+        set_tests_properties(ImpulseReference PROPERTIES LABELS impulse TIMEOUT 180
+            WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/wave-working")
+    endif ()
     if (PIRANHA_ENABLED)
         add_subdirectory(test/script)
     endif ()
@@ -362,7 +378,7 @@ endif ()
 
 foreach(target IN ITEMS engine-sim engine-sim-script-interpreter engine-sim-app engine-sim-test
         engine-sim-threaded-test engine-sim-script-test engine-sim-lifecycle-test
-        engine-sim-displacement-test engine-sim-load-test engine-sim-capture)
+        engine-sim-displacement-test engine-sim-load-test engine-sim-wave-test engine-sim-capture)
     engine_sim_diagnose("${target}" TRUE)
 endforeach ()
 foreach(target IN ITEMS simple-2d-constraint-solver piranha csv-io gtest gtest_main delta-core delta-basic)

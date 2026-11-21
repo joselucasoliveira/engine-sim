@@ -12,6 +12,7 @@
 #include "../include/exhaust_system.h"
 #include "../include/feedback_comb_filter.h"
 #include "../include/utilities.h"
+#include "../include/wave_reader.h"
 
 #ifdef ATG_ENGINE_SIM_PIRANHA_ENABLED
 #include "../scripting/include/compiler.h"
@@ -44,27 +45,11 @@ T *appendObject(std::vector<SimulationObject *> &objects, EngineSimApplication *
     return candidate.release();
 }
 
-std::vector<int16_t> readWindowsImpulse(const ImpulseResponse &response) {
-    const auto path = response.getFilename();
-    ysWindowsAudioWaveFile wave;
-    if (wave.OpenFile(path.c_str()) != ysAudioFile::Error::None) {
-        throw EngineLoadError({"resources", path, "Could not open impulse response"});
+std::vector<int16_t> readSessionImpulse(const ImpulseResponse &response) {
+    try { return engine_sim::readImpulseWave(std::filesystem::u8path(response.getFilename())); }
+    catch (const engine_sim::WaveError &error) {
+        throw EngineLoadError({"resources", error.path.u8string(), error.reason});
     }
-    const auto *format = wave.GetAudioParameters();
-    if (format->m_channelCount != 1 || format->m_bitsPerSample != 16 || format->m_sampleRate != 44100) {
-        throw EngineLoadError({"resources", path, "Impulse response must be mono PCM16 at 44100 Hz"});
-    }
-    const auto count = wave.GetSampleCount();
-    if (wave.InitializeInternalBuffer(count) != ysAudioFile::Error::None
-        || wave.FillBuffer(0) != ysAudioFile::Error::None || wave.GetBuffer() == nullptr) {
-        throw EngineLoadError({"resources", path, "Could not read impulse response samples"});
-    }
-    std::vector<int16_t> samples(count);
-    std::memcpy(samples.data(), wave.GetBuffer(), samples.size() * sizeof(int16_t));
-    if (wave.CloseFile() != ysAudioFile::Error::None) {
-        throw EngineLoadError({"resources", path, "Could not close impulse response"});
-    }
-    return samples;
 }
 }
 
@@ -534,7 +519,7 @@ bool EngineSimApplication::loadEngine(EngineDefinition definition) {
     const auto path = definition.sourcePath;
     try {
         PendingSession candidate;
-        candidate.session = EngineSession::prepare(std::move(definition), readWindowsImpulse);
+        candidate.session = EngineSession::prepare(std::move(definition), readSessionImpulse);
         // Widget initialization reads the palette and units. Roll back those values
         // on any failure; window changes are deferred until the accepted swap.
         auto previousSettings = candidate.session->definition.applicationSettings;

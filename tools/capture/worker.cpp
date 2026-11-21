@@ -2,6 +2,7 @@
 #include "simulator.h"
 #include "synthesizer.h"
 #include "stress.h"
+#include "wave_reader.h"
 
 #include <algorithm>
 #include <array>
@@ -54,14 +55,6 @@ void writeLittleEndian(std::ostream &stream, std::uint32_t bits, int bytes) {
     }
 }
 
-std::size_t littleEndian(const std::vector<unsigned char> &data, std::size_t i, int bytes) {
-    std::size_t result = 0;
-    for (int j = 0; j < bytes; ++j) {
-        result |= static_cast<std::size_t>(data[i + j]) << (8 * j);
-    }
-    return result;
-}
-
 void recordProcessUsage(const fs::path &directory) {
 #if defined(__unix__) || defined(__APPLE__)
     struct rusage usage {};
@@ -80,50 +73,8 @@ void recordProcessUsage(const fs::path &directory) {
 #endif
 }
 
-bool chunkIs(const std::vector<unsigned char> &data, std::size_t i, std::string_view tag) {
-    return std::equal(tag.begin(), tag.end(), data.begin() + i);
-}
-
 std::vector<std::int16_t> readImpulse(const fs::path &path) {
-    const auto size = fs::file_size(path);
-    if (size < 12 || size > 64 * 1024 * 1024) throw std::runtime_error("invalid WAV size: " + path.string());
-    std::vector<unsigned char> data(static_cast<std::size_t>(size));
-    std::ifstream stream(path, std::ios::binary);
-    stream.read(reinterpret_cast<char *>(data.data()), static_cast<std::streamsize>(size));
-
-    const auto invalid = [&]() { return std::runtime_error("invalid PCM16 mono 44100 Hz WAV: " + path.string()); };
-    if (!stream || !chunkIs(data, 0, "RIFF") || !chunkIs(data, 8, "WAVE")
-        || littleEndian(data, 4, 4) != data.size() - 8) throw invalid();
-
-    bool format = false;
-    std::vector<std::int16_t> samples;
-    std::size_t offset = 12;
-    while (offset + 8 <= data.size()) {
-        const auto length = littleEndian(data, offset + 4, 4);
-        const auto payload = offset + 8;
-        if (length > data.size() - payload) throw invalid();
-
-        if (chunkIs(data, offset, "fmt ")) {
-            if (format || length < 16 || littleEndian(data, payload, 2) != 1
-                || littleEndian(data, payload + 2, 2) != 1
-                || littleEndian(data, payload + 4, 4) != sampleRate
-                || littleEndian(data, payload + 8, 4) != sampleRate * 2
-                || littleEndian(data, payload + 12, 2) != 2
-                || littleEndian(data, payload + 14, 2) != 16) throw invalid();
-            format = true;
-        }
-        else if (chunkIs(data, offset, "data")) {
-            if (!samples.empty() || length < 2 || length % 2 != 0) throw invalid();
-            samples.reserve(length / 2);
-            for (std::size_t i = payload; i < payload + length; i += 2) {
-                const int value = static_cast<int>(littleEndian(data, i, 2));
-                samples.push_back(static_cast<std::int16_t>(value < 32768 ? value : value - 65536));
-            }
-        }
-        offset = payload + length + length % 2;
-    }
-    if (offset != data.size() || !format || samples.empty()) throw invalid();
-    return samples;
+    return engine_sim::readImpulseWave(path);
 }
 
 void runFir(const fs::path &out) {
