@@ -22,7 +22,6 @@ gtest_discover_tests(engine-sim-script-test
     DISCOVERY_TIMEOUT 30
     PROPERTIES
         LABELS script
-        ENVIRONMENT "ENGINE_SIM_TEST_RESOURCES=${PROJECT_SOURCE_DIR}\;ENGINE_SIM_TEST_SCRIPTS=${fixtures}"
 )
 
 add_executable(engine-sim-lifecycle-test lifecycle_tests.cpp)
