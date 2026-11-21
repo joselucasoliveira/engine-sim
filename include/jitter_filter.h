@@ -19,7 +19,7 @@ public:
         float audioFrequency);
     virtual float f(float sample) override;
 
-    __forceinline float fast_f(float sample, float jitterScale = 1.0f) {
+    inline float fast_f(float sample, float jitterScale = 1.0f) {
         m_history[m_offset] = sample;
         ++m_offset;
 
@@ -32,8 +32,8 @@ public:
             static_cast<float>(m_maxJitter - 1));
         
         const float s = m_noiseFilter.fast_f(dist(m_generator) * m_jitterScale * jitterScale);
-        const float s_i_0 = clamp(std::floor(s), 0.0f, static_cast<float>(m_maxJitter - 1));
-        const float s_i_1 = clamp(std::ceil(s), 0.0f, static_cast<float>(m_maxJitter - 1));
+        const float s_i_0 = ::clamp(std::floor(s), 0.0f, static_cast<float>(m_maxJitter - 1));
+        const float s_i_1 = ::clamp(std::ceil(s), 0.0f, static_cast<float>(m_maxJitter - 1));
 
         const float s_frac = (s - s_i_0);
 

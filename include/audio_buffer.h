@@ -1,8 +1,8 @@
 #ifndef ATG_ENGINE_SIM_AUDIO_BUFFER_H
 #define ATG_ENGINE_SIM_AUDIO_BUFFER_H
 
-#include "scs.h"
-
+#include <cstddef>
+#include <cstring>
 #include <stdint.h>
 
 class AudioBuffer {
@@ -59,11 +59,11 @@ class AudioBuffer {
 
             if (start == end) return;
             else if (start < end) {
-                memcpy(dest, m_samples + start, length * sizeof(int16_t));
+                std::memcpy(dest, m_samples + start, length * sizeof(int16_t));
             }
             else {
-                memcpy(dest, m_samples + start, ((size_t)m_bufferSize - start) * sizeof(int16_t));
-                memcpy(dest + m_bufferSize - start, m_samples, end * sizeof(int16_t));
+                std::memcpy(dest, m_samples + start, (static_cast<std::size_t>(m_bufferSize) - start) * sizeof(int16_t));
+                std::memcpy(dest + m_bufferSize - start, m_samples, end * sizeof(int16_t));
             }
         }
 

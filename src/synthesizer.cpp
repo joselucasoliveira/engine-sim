@@ -1,13 +1,12 @@
 #include "../include/synthesizer.h"
 
 #include "../include/utilities.h"
-#include "../include/delta.h"
 
+#include <algorithm>
 #include <cassert>
 #include <cmath>
-
-#undef min
-#undef max
+#include <cstdlib>
+#include <cstring>
 
 Synthesizer::Synthesizer() {
     m_inputChannels = nullptr;
@@ -147,7 +146,7 @@ int Synthesizer::readAudioOutput(int samples, int16_t *buffer) {
     }
     else {
         m_audioBuffer.readAndRemove(newDataLength, buffer);
-        memset(
+        std::memset(
             buffer + newDataLength,
             0,
             sizeof(int16_t) * ((size_t)samples - newDataLength));
@@ -304,7 +303,7 @@ int16_t Synthesizer::renderAudio(int inputSample) {
         float v_in =
             f_p * dF_F_mix
             + f * r_mixed * (1 - dF_F_mix);
-        if (fpclassify(v_in) == FP_SUBNORMAL) {
+        if (std::fpclassify(v_in) == FP_SUBNORMAL) {
             v_in = 0;
         }
 

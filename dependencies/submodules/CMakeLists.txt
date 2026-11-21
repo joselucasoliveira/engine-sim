@@ -32,10 +32,14 @@ add_library(simple-2d-constraint-solver STATIC
     ${solver}/src/conjugate_gradient_sle_solver.cpp
     ${solver}/src/rotation_friction_constraint.cpp
 )
-target_include_directories(simple-2d-constraint-solver PUBLIC "${solver}/include")
+target_include_directories(simple-2d-constraint-solver PRIVATE "${solver}/include")
+if (NOT MSVC)
+    target_compile_options(simple-2d-constraint-solver PRIVATE
+        -include "${PROJECT_SOURCE_DIR}/cmake/SolverCompatibility.h")
+endif ()
 
 engine_sim_locked_source(csv csv-io)
-add_library(csv-io STATIC "${csv}/src/csv_data.cpp" "${csv}/src/information.cpp")
+add_library(csv-io STATIC EXCLUDE_FROM_ALL "${csv}/src/csv_data.cpp" "${csv}/src/information.cpp")
 target_compile_definitions(csv-io PRIVATE PROJECT_NAMESPACE=atg_csv)
 target_include_directories(csv-io PUBLIC "${csv}/include")
 

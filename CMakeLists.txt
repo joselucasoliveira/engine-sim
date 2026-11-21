@@ -152,10 +152,8 @@ add_library(engine-sim STATIC
 )
 
 find_package(Threads REQUIRED)
-target_link_libraries(engine-sim PUBLIC simple-2d-constraint-solver PRIVATE csv-io Threads::Threads)
-if (ENGINE_SIM_BUILD_DESKTOP)
-    target_link_libraries(engine-sim PRIVATE delta-basic)
-endif ()
+target_link_libraries(engine-sim PUBLIC simple-2d-constraint-solver PRIVATE Threads::Threads)
+target_compile_features(engine-sim PUBLIC cxx_std_17)
 
 target_include_directories(engine-sim PUBLIC include dependencies/submodules)
 
@@ -203,7 +201,7 @@ if (PIRANHA_ENABLED)
     target_include_directories(engine-sim-script-interpreter
         PUBLIC dependencies/submodules)
 
-    target_link_libraries(engine-sim-script-interpreter PUBLIC engine-sim piranha PRIVATE csv-io)
+    target_link_libraries(engine-sim-script-interpreter PUBLIC engine-sim piranha)
     target_compile_definitions(engine-sim-script-interpreter PUBLIC ATG_ENGINE_SIM_PIRANHA_ENABLED)
 endif ()
 
@@ -338,7 +336,7 @@ if (BUILD_TESTING)
         test/synthesizer_tests.cpp
     )
 
-    target_link_libraries(engine-sim-test PRIVATE gtest_main engine-sim)
+    target_link_libraries(engine-sim-test PRIVATE gtest_main engine-sim csv-io)
 
     include(GoogleTest)
     gtest_discover_tests(engine-sim-test DISCOVERY_TIMEOUT 30)

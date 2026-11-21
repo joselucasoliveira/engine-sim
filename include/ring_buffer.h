@@ -1,8 +1,6 @@
 #ifndef ATG_ENGINE_SIM_RING_BUFFER_H
 #define ATG_ENGINE_SIM_RING_BUFFER_H
 
-#include "part.h"
-
 #include <cstring>
 
 template <typename T_Data>
@@ -46,7 +44,7 @@ public:
     }
 
     inline void overwrite(T_Data data, size_t index) {
-        if (start + index < m_capacity) {
+        if (m_start + index < m_capacity) {
             m_buffer[m_start + index] = data;
         }
         else {
@@ -77,14 +75,14 @@ public:
 
     inline void read(size_t n, T_Data *target) {
         if (m_start + n < m_capacity) {
-            memcpy(target, m_buffer + m_start, n * sizeof(T_Data));
+            std::memcpy(target, m_buffer + m_start, n * sizeof(T_Data));
         }
         else {
-            memcpy(
+            std::memcpy(
                 target,
                 m_buffer + m_start,
                 (m_capacity - m_start) * sizeof(T_Data));
-            memcpy(
+            std::memcpy(
                 target + (m_capacity - m_start),
                 m_buffer,
                 (n - (m_capacity - m_start)) * sizeof(T_Data));
@@ -93,14 +91,14 @@ public:
 
     inline void readAndRemove(size_t n, T_Data *target) {
         if (m_start + n < m_capacity) {
-            memcpy(target, m_buffer + m_start, n * sizeof(T_Data));
+            std::memcpy(target, m_buffer + m_start, n * sizeof(T_Data));
         }
         else {
-            memcpy(
+            std::memcpy(
                 target,
                 m_buffer + m_start,
                 (m_capacity - m_start) * sizeof(T_Data));
-            memcpy(
+            std::memcpy(
                 target + (m_capacity - m_start),
                 m_buffer,
                 (n - (m_capacity - m_start)) * sizeof(T_Data));
