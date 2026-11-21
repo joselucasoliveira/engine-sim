@@ -115,7 +115,16 @@ public:
         if (!SDL_PushEvent(&event)) throw DesktopError("smoke key event",SDL_GetError());
     }
     void resizeForSmoke(int width,int height) override {
-        if (!SDL_SetWindowSize(window.nativeHandle(),width,height)) throw DesktopError("smoke resize",SDL_GetError());
+        const auto request = [&] {
+            if (!SDL_RestoreWindow(window.nativeHandle())) throw DesktopError("smoke restore",SDL_GetError());
+            if (!SDL_SyncWindow(window.nativeHandle())) throw DesktopError("smoke restore synchronization",SDL_GetError());
+            if (!SDL_SetWindowSize(window.nativeHandle(),width,height)) throw DesktopError("smoke resize",SDL_GetError());
+            return SDL_SyncWindow(window.nativeHandle());
+        };
+        // Some desktops report automatic maximization only while synchronizing
+        // the first size request. Restore that observed state and retry once.
+        if (!request() && (!(SDL_GetWindowFlags(window.nativeHandle()) & SDL_WINDOW_MAXIMIZED) || !request()))
+            throw DesktopError("smoke resize synchronization",SDL_GetError());
     }
 private:
     RunOptions options;
