@@ -1,0 +1,119 @@
+name: Replay an exact native revision
+
+# Native Windows/macOS and hardware admission are pending until their actual
+# runs are reviewed. This manual workflow never runs on pull_request events.
+on:
+  workflow_dispatch:
+    inputs:
+      revision:
+        description: Full forty-character product commit SHA
+        required: true
+        type: string
+      smoke:
+        description: Require a functioning native window/GPU and installed smoke
+        type: boolean
+        default: false
+      audio_mode:
+        description: Virtual proves a software endpoint; device still needs independent sink/loopback evidence
+        type: choice
+        options: [virtual, device]
+        default: virtual
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    name: ${{ matrix.os }} ${{ matrix.preset }} exact-revision replay
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            preset: desktop
+            arch: x86_64
+          - os: windows-2022
+            preset: desktop-windows
+            arch: x86_64
+          - os: windows-2022
+            preset: win-asan
+            arch: x86_64
+          - os: macos-15
+            preset: desktop
+            arch: arm64
+    runs-on: ${{ matrix.os }}
+    env:
+      EXPECTED_REVISION: ${{ inputs.revision }}
+      REQUEST_SMOKE: ${{ inputs.smoke }}
+      AUDIO_MODE: ${{ inputs.audio_mode }}
+      PRESET: ${{ matrix.preset }}
+      EXPECTED_ARCH: ${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ inputs.revision }}
+          persist-credentials: false
+          submodules: recursive
+      - name: Prepare Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes flex bison libfl-dev xvfb xauth mesa-vulkan-drivers libvulkan1 \
+            libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev \
+            libwayland-dev wayland-protocols libxkbcommon-dev libdrm-dev libgbm-dev libasound2-dev libpulse-dev bubblewrap
+          icd=$(find /usr/share/vulkan/icd.d -maxdepth 1 -name 'lvp_icd*.json' -print -quit)
+          test -n "$icd"
+          echo "VK_DRIVER_FILES=$icd" >> "$GITHUB_ENV"
+          if ! bwrap --unshare-net --ro-bind / / -- /usr/bin/true; then
+            echo "ENGINE_SIM_BWRAP_COMMAND=$(python3 -c 'import json,os; print(json.dumps(["sudo","-n","bwrap","--uid",str(os.getuid()),"--gid",str(os.getgid()),"--cap-drop","ALL"]))')" >> "$GITHUB_ENV"
+          fi
+      - name: Prepare the specified Apple toolchain
+        if: runner.os == 'macOS'
+        run: |
+          test -d /Applications/Xcode_16.4.app/Contents/Developer
+          brew install bison flex
+          echo 'DEVELOPER_DIR=/Applications/Xcode_16.4.app/Contents/Developer' >> "$GITHUB_ENV"
+          echo "$(brew --prefix bison)/bin" >> "$GITHUB_PATH"
+          echo "$(brew --prefix flex)/bin" >> "$GITHUB_PATH"
+          bison --version
+          flex --version
+      - name: Replay Unix entry points
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          export CMAKE_GENERATOR=Ninja
+          smoke=()
+          compiler=()
+          if test "$RUNNER_OS" = Linux; then compiler=(--c-compiler gcc-13 --cxx-compiler g++-13); fi
+          if test "$REQUEST_SMOKE" = true; then smoke=(--smoke --audio-mode "$AUDIO_MODE"); fi
+          command=(python3 -B tools/verify_build.py --preset "$PRESET" --out "$RUNNER_TEMP/engine-sim-native" \
+            --expected-revision "$EXPECTED_REVISION" --expected-arch "$EXPECTED_ARCH" "${compiler[@]}" "${smoke[@]}")
+          if test "$RUNNER_OS" = Linux; then
+            export SDL_VIDEO_DRIVER=x11
+            xvfb-run -a -s '-screen 0 2560x1440x24 -nolisten tcp' "${command[@]}"
+          else
+            "${command[@]}"
+          fi
+      - name: Replay Windows entry points
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+          $vs = & $vswhere -latest -products '*' -version '[17.0,18.0)' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if ($LASTEXITCODE -ne 0 -or !$vs) { throw 'Visual Studio 2022 x64 C++ tools are required' }
+          Import-Module (Join-Path $vs 'Common7\Tools\Microsoft.VisualStudio.DevShell.dll')
+          Enter-VsDevShell -VsInstallPath $vs -SkipAutomaticLocation -DevCmdArguments '-arch=x64 -host_arch=x64'
+          $arguments = @('-3', '-B', 'tools/verify_build.py', '--preset', $env:PRESET, '--out', (Join-Path $env:RUNNER_TEMP 'engine-sim-native'), '--expected-revision', $env:EXPECTED_REVISION, '--expected-arch', $env:EXPECTED_ARCH)
+          if ($env:REQUEST_SMOKE -eq 'true') { $arguments += @('--smoke', '--audio-mode', $env:AUDIO_MODE) }
+          & py @arguments
+          if ($LASTEXITCODE -ne 0) { throw "Native replay failed: $LASTEXITCODE" }
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        if: always()
+        with:
+          name: native-${{ matrix.os }}-${{ matrix.preset }}-logs
+          path: ${{ runner.temp }}/engine-sim-native/logs/
+          retention-days: 7
+          if-no-files-found: warn

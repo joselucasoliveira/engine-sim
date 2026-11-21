@@ -1,76 +1,35 @@
-name: Build and core tests
+name: Build and regression checks
 
 on:
   push:
     branches: [master]
+    paths: ['src/**', 'include/**', 'scripting/**', 'es/**', 'assets/**', 'test/**', 'tools/**', 'cmake/**', 'dependencies/**', 'CMakeLists.txt', 'CMakePresets.json', '.github/workflows/**']
   pull_request:
     branches: [master]
+    paths: ['src/**', 'include/**', 'scripting/**', 'es/**', 'assets/**', 'test/**', 'tools/**', 'cmake/**', 'dependencies/**', 'CMakeLists.txt', 'CMakePresets.json', '.github/workflows/**']
 
 permissions:
   contents: read
 
 jobs:
   linux-numerical:
-    name: Linux x86_64 core and audio tests
+    name: Linux x86_64 numerical regressions
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
       CMAKE_GENERATOR: Ninja
-      LC_ALL: C
-      TZ: UTC
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
           persist-credentials: false
           submodules: recursive
-      - name: Build the core and run all fast regressions
-        shell: bash
-        run: |
-          set -euo pipefail
-          export ES_OUT="$RUNNER_TEMP/engine-sim-core"
-          mkdir -p "$ES_OUT/logs"
-          {
-            set -x
-            git rev-parse HEAD | tee "$ES_OUT/logs/revision.txt"
-            test "$(cat "$ES_OUT/logs/revision.txt")" = "$GITHUB_SHA"
-            printf 'ImageOS=%s\nImageVersion=%s\n' "${ImageOS:-unknown}" "${ImageVersion:-unknown}"
-            uname -srm
-            git submodule status --recursive
-            g++ --version
-            cmake --version
-            ninja --version
-            python3 tools/bootstrap.py --profile core --tests --out "$ES_OUT"
-            cp "$ES_OUT/dependency-receipt.json" "$ES_OUT/logs/"
-            cmake --preset core
-            cmake --build --preset core
-            ctest --preset core --no-tests=error --output-on-failure \
-              --output-junit "$ES_OUT/logs/core.xml"
-            python3 - "$ES_OUT/logs/core.xml" <<'PY'
-          import sys
-          from xml.etree import ElementTree
-          cases = list(ElementTree.parse(sys.argv[1]).getroot().iter("testcase"))
-          names = {case.attrib["name"] for case in cases}
-          expected = {"GasSystemTests": 19, "FunctionTests": 5, "SynthesizerTests": 7,
-                      "RingBuffer": 3, "Convolution": 2, "ThreadedSynthesis": 5, "WaveReader": 8, "Resources": 5, "SceneReader": 4,
-                      "HostContract": 4}
-          assert len(cases) == len(names) == sum(expected.values())
-          for suite, count in expected.items():
-              assert sum(name.startswith(suite + ".") for name in names) == count
-          assert {"SynthesizerTests.SynthesizerSanityCheck",
-                  "SynthesizerTests.SynthesizerSystemTestSingleThread",
-                  "SynthesizerTests.SynthesizerSystemTest"} <= names
-          assert all(case.find("skipped") is None and case.find("failure") is None for case in cases)
-          PY
-          } 2>&1 | tee "$ES_OUT/logs/core.log"
-      - name: Record evidence digests
-        if: always()
-        shell: bash
-        run: |
-          set -euo pipefail
-          logs="$RUNNER_TEMP/engine-sim-core/logs"
-          if test -d "$logs"; then
-            (cd "$logs" && find . -maxdepth 1 -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 -r sha256sum) > "$logs/SHA256SUMS"
-          fi
+      - name: Replay the clean core checkout
+        env:
+          EXPECTED_REVISION: ${{ github.sha }}
+        run: >-
+          python3 -B tools/verify_build.py --preset core
+          --cxx-compiler g++-13
+          --out "$RUNNER_TEMP/engine-sim-core" --expected-revision "$EXPECTED_REVISION" --expected-arch x86_64
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         if: always()
         with:
@@ -79,183 +38,84 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
 
-  linux-sanitizers:
-    name: Linux ${{ matrix.preset }} ownership and worker diagnostics
+  linux-diagnostics:
+    name: Linux ${{ matrix.preset }} diagnostics
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
         preset: [asan, tsan]
     env:
       CMAKE_GENERATOR: Ninja
-      LC_ALL: C
-      TZ: UTC
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
           persist-credentials: false
           submodules: recursive
-      - name: Instrument and exercise the selected paths
-        shell: bash
+      - name: Prepare host parser and diagnostic tools
         run: |
-          set -euo pipefail
-          export ES_OUT="$RUNNER_TEMP/engine-sim-${{ matrix.preset }}"
-          mkdir -p "$ES_OUT/logs"
-          if test '${{ matrix.preset }}' = asan; then
-            sudo apt-get update
-            sudo apt-get install --yes bubblewrap
-            bwrap --version | tee "$ES_OUT/logs/bubblewrap.txt"
-            if ! bwrap --unshare-net --ro-bind / / -- /usr/bin/true; then
-              export ENGINE_SIM_BWRAP_COMMAND="$(python3 -c 'import json, os; print(json.dumps(["sudo", "-n", "bwrap", "--uid", str(os.getuid()), "--gid", str(os.getgid()), "--cap-drop", "ALL"]))')"
-            fi
+          sudo apt-get update
+          sudo apt-get install --yes flex bison libfl-dev clang-18 llvm-18 bubblewrap
+          if ! bwrap --unshare-net --ro-bind / / -- /usr/bin/true; then
+            echo "ENGINE_SIM_BWRAP_COMMAND=$(python3 -c 'import json,os; print(json.dumps(["sudo","-n","bwrap","--uid",str(os.getuid()),"--gid",str(os.getgid()),"--cap-drop","ALL"]))')" >> "$GITHUB_ENV"
           fi
-          {
-            set -x
-            git rev-parse HEAD | tee "$ES_OUT/logs/revision.txt"
-            test "$(cat "$ES_OUT/logs/revision.txt")" = "$GITHUB_SHA"
-            printf 'ImageOS=%s\nImageVersion=%s\n' "${ImageOS:-unknown}" "${ImageVersion:-unknown}"
-            uname -srm
-            clang++ --version
-            g++ --version
-            cmake --version
-            flex --version
-            bison --version
-            export ASAN_SYMBOLIZER_PATH="$(command -v llvm-symbolizer)"
-            "$ASAN_SYMBOLIZER_PATH" --version
-            python3 tools/bootstrap.py --profile capture --tests --out "$ES_OUT"
-            cp "$ES_OUT/dependency-receipt.json" "$ES_OUT/logs/"
-            cmake --preset ${{ matrix.preset }}
-            ASAN_OPTIONS=detect_leaks=0 cmake --build --preset ${{ matrix.preset }}
-            if test '${{ matrix.preset }}' = asan; then
-              export ENGINE_SIM_STAGE_EVIDENCE="$ES_OUT/logs/staged-resources"
-              ctest --preset asan --no-tests=error --output-on-failure --output-junit "$ES_OUT/logs/tests.xml"
-              cmake --build --preset asan --target engine-sim-analysis
-              export ASAN_OPTIONS=detect_leaks=1:halt_on_error=1
-              export UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1
-            else
-              ctest --preset tsan -L threaded --no-tests=error --output-on-failure --output-junit "$ES_OUT/logs/tests.xml"
-              export TSAN_OPTIONS=halt_on_error=1:exitcode=66
-            fi
-            python3 - "$ES_OUT/logs/tests.xml" '${{ matrix.preset }}' <<'PY'
-          import sys
-          from xml.etree import ElementTree
-          cases = list(ElementTree.parse(sys.argv[1]).getroot().iter("testcase"))
-          names = {case.attrib["name"] for case in cases}
-          assert len(cases) == len(names) == (95 if sys.argv[2] == "asan" else 7)
-          assert sum(name.startswith("ThreadedSynthesis.") for name in names) == 5
-          assert {"Load.FailedCandidatePreservesRunningSession",
-                  "Load.RepeatedReplacementRetainsSignalAndCleanup"} <= names
-          if sys.argv[2] == "asan":
-              assert sum(name.startswith("Load.") for name in names) == 8
-              assert sum(name.startswith("Lifecycle.") for name in names) == 5
-              assert {"CaptureQuick", "CaptureComparator", "CaptureStress", "ImpulseReference"} <= names
-              assert sum(name.startswith("WaveReader.") for name in names) == 8
-              assert sum(name.startswith("Resources.") for name in names) == 5
-              assert sum(name.startswith("SceneReader.") for name in names) == 4
-              assert "StagedResources" in names
-              assert sum(name.startswith("HostContract.") for name in names) == 4
-              assert sum(name.startswith("HostApplication.") for name in names) == 8
-          assert all(case.find("skipped") is None and case.find("failure") is None for case in cases)
-          PY
-            if test '${{ matrix.preset }}' = asan; then
-              "$ES_OUT/asan/bin/engine-sim-capture" run --suite stress --resources "$GITHUB_WORKSPACE" \
-                --out "$ES_OUT/logs/stress" --seed 1 --repetitions 1 --mode sync
-            else
-              "$ES_OUT/tsan/bin/engine-sim-capture" run --suite stress --case THREAD --resources "$GITHUB_WORKSPACE" \
-                --out "$ES_OUT/logs/stress" --seed 1 --repetitions 1 --mode sync
-            fi
-          } 2>&1 | tee "$ES_OUT/logs/sanitizers.log"
-      - name: Preserve diagnostics and digests
-        if: always()
+      - name: Run all memory diagnostics or the separate threaded selection
         shell: bash
+        env:
+          PRESET: ${{ matrix.preset }}
+          EXPECTED_REVISION: ${{ github.sha }}
+          ASAN_SYMBOLIZER_PATH: /usr/bin/llvm-symbolizer-18
         run: |
           set -euo pipefail
-          root="$RUNNER_TEMP/engine-sim-${{ matrix.preset }}"
-          mkdir -p "$root/logs"
-          test ! -d "$root/${{ matrix.preset }}/analysis" || cp -R "$root/${{ matrix.preset }}/analysis" "$root/logs/analysis"
-          test ! -d "$root/${{ matrix.preset }}/Testing" || cp -R "$root/${{ matrix.preset }}/Testing" "$root/logs/Testing"
-          (cd "$root/logs" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 -r sha256sum) > "$root/logs/SHA256SUMS"
+          compiler=(--cxx-compiler g++-13)
+          if test "$PRESET" = asan; then compiler=(--cxx-compiler clang++-18); fi
+          python3 -B tools/verify_build.py --preset "$PRESET" --out "$RUNNER_TEMP/engine-sim-$PRESET" \
+            --expected-revision "$EXPECTED_REVISION" --expected-arch x86_64 "${compiler[@]}"
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         if: always()
         with:
-          name: linux-${{ matrix.preset }}-diagnostics
+          name: linux-${{ matrix.preset }}-logs
           path: ${{ runner.temp }}/engine-sim-${{ matrix.preset }}/logs/
           retention-days: 7
           if-no-files-found: warn
 
-  windows-build:
-    name: Windows x64 ${{ matrix.preset }} build and diagnostics
-    runs-on: windows-2022
-    strategy:
-      fail-fast: false
-      matrix:
-        preset: [desktop, win-asan]
+  linux-virtual-desktop:
+    name: Linux X11 software Vulkan and virtual audio
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
+    env:
+      CMAKE_GENERATOR: Ninja
+      SDL_VIDEO_DRIVER: x11
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
           persist-credentials: false
           submodules: recursive
-      - name: Build the Windows desktop executable
-        shell: pwsh
+      - name: Prepare the explicitly virtual desktop
         run: |
-          $ErrorActionPreference = 'Stop'
-          $env:ES_OUT = Join-Path $env:RUNNER_TEMP 'engine-sim-windows-${{ matrix.preset }}'
-          $logs = Join-Path $env:ES_OUT 'logs'
-          New-Item -ItemType Directory -Path $logs -Force | Out-Null
-
-          function Invoke-Checked([string] $Program, [string[]] $Arguments) {
-            Write-Host "+ $Program $($Arguments -join ' ')"
-            & $Program @Arguments
-            if ($LASTEXITCODE -ne 0) { throw "$Program failed with exit $LASTEXITCODE" }
-          }
-
-          Start-Transcript -Path (Join-Path $logs 'build.log')
-          try {
-            $revision = git rev-parse HEAD
-            if ($LASTEXITCODE -ne 0 -or $revision -ne $env:GITHUB_SHA) { throw 'Unexpected checkout revision' }
-            $revision | Set-Content (Join-Path $logs 'revision.txt')
-            Write-Host "ImageOS=$env:ImageOS ImageVersion=$env:ImageVersion Architecture=$env:PROCESSOR_ARCHITECTURE"
-            Invoke-Checked 'git' @('submodule', 'status', '--recursive')
-
-            $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
-            $vs = & $vswhere -latest -products '*' -version '[17.0,18.0)' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
-            if ($LASTEXITCODE -ne 0 -or !$vs) { throw 'Visual Studio 2022 with x64 C++ tools is required' }
-            Import-Module (Join-Path $vs 'Common7\Tools\Microsoft.VisualStudio.DevShell.dll')
-            Enter-VsDevShell -VsInstallPath $vs -SkipAutomaticLocation -DevCmdArguments '-arch=x64 -host_arch=x64'
-            Write-Host "VSCMD_VER=$env:VSCMD_VER WindowsSDKVersion=$env:WindowsSDKVersion"
-            $probe = Join-Path $env:ES_OUT 'toolchain.cpp'
-            'int main() { return 0; }' | Set-Content $probe
-            $object = Join-Path $env:ES_OUT 'toolchain.obj'
-            Invoke-Checked 'cl.exe' @('/nologo', '/Bv', '/c', $probe, "/Fo$object")
-            Invoke-Checked 'cmake' @('--version')
-            Invoke-Checked 'py' @('-3', 'tools/bootstrap.py', '--profile', 'desktop', '--tests', '--out', $env:ES_OUT)
-            Copy-Item (Join-Path $env:ES_OUT 'dependency-receipt.json') $logs
-            $preset = '${{ matrix.preset }}'
-            $config = if ($preset -eq 'win-asan') { 'RelWithDebInfo' } else { 'Release' }
-            Invoke-Checked 'cmake' @('--preset', $preset)
-            Invoke-Checked 'cmake' @('--build', '--preset', $preset, '--config', $config)
-            if ($preset -eq 'win-asan') {
-              $env:ASAN_OPTIONS = 'halt_on_error=1'
-              $env:ENGINE_SIM_STAGE_EVIDENCE = Join-Path $logs 'staged-resources'
-              $xml = Join-Path $logs 'tests.xml'
-              Invoke-Checked 'ctest' @('--preset', $preset, '-C', $config, '--no-tests=error', '--output-on-failure', '--output-junit', $xml)
-              [xml]$results = Get-Content $xml
-              $cases = @($results.SelectNodes('//testcase'))
-              if ($cases.Count -ne 95 -or @($results.SelectNodes('//skipped | //failure')).Count -ne 0) { throw 'Missing or failed sanitizer tests' }
-            }
-          } finally {
-            Stop-Transcript
-            Get-ChildItem $logs -File | Sort-Object Name | ForEach-Object {
-              $hash = Get-FileHash -Algorithm SHA256 -Path $_.FullName
-              "$($hash.Hash.ToLower())  $($_.Name)"
-            } | Set-Content (Join-Path $logs 'SHA256SUMS')
-          }
+          sudo apt-get update
+          sudo apt-get install --yes flex bison libfl-dev xvfb xauth mesa-vulkan-drivers libvulkan1 \
+            libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev \
+            libwayland-dev wayland-protocols libxkbcommon-dev libdrm-dev libgbm-dev libasound2-dev libpulse-dev bubblewrap
+          icd=$(find /usr/share/vulkan/icd.d -maxdepth 1 -name 'lvp_icd*.json' -print -quit)
+          test -n "$icd"
+          echo "VK_DRIVER_FILES=$icd" >> "$GITHUB_ENV"
+          if ! bwrap --unshare-net --ro-bind / / -- /usr/bin/true; then
+            echo "ENGINE_SIM_BWRAP_COMMAND=$(python3 -c 'import json,os; print(json.dumps(["sudo","-n","bwrap","--uid",str(os.getuid()),"--gid",str(os.getgid()),"--cap-drop","ALL"]))')" >> "$GITHUB_ENV"
+          fi
+      - name: Exercise the actual installed application
+        env:
+          EXPECTED_REVISION: ${{ github.sha }}
+        run: >-
+          xvfb-run -a -s '-screen 0 2560x1440x24 -nolisten tcp'
+          python3 -B tools/verify_build.py --preset desktop --smoke --audio-mode virtual
+          --c-compiler gcc-13 --cxx-compiler g++-13
+          --out "$RUNNER_TEMP/engine-sim-desktop" --expected-revision "$EXPECTED_REVISION" --expected-arch x86_64
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         if: always()
         with:
-          name: windows-${{ matrix.preset }}-build-logs
-          path: ${{ runner.temp }}/engine-sim-windows-${{ matrix.preset }}/logs/
+          name: linux-virtual-desktop-logs
+          path: ${{ runner.temp }}/engine-sim-desktop/logs/
           retention-days: 7
           if-no-files-found: warn

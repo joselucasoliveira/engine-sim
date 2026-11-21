@@ -125,6 +125,22 @@
         "ENGINE_SIM_SANITIZER": "address",
         "ENGINE_SIM_BUILD_CAPTURE": true
       }
+    },
+    {
+      "name": "desktop-asan",
+      "inherits": "asan",
+      "cacheVariables": {
+        "ENGINE_SIM_BUILD_DESKTOP": true,
+        "CMAKE_C_COMPILER": "clang"
+      }
+    },
+    {
+      "name": "desktop-tsan",
+      "inherits": "tsan",
+      "cacheVariables": {
+        "ENGINE_SIM_BUILD_DESKTOP": true,
+        "CMAKE_C_COMPILER": "gcc"
+      }
     }
   ],
   "buildPresets": [
@@ -166,6 +182,16 @@
     {
       "name": "win-asan",
       "configurePreset": "win-asan",
+      "configuration": "RelWithDebInfo"
+    },
+    {
+      "name": "desktop-asan",
+      "configurePreset": "desktop-asan",
+      "configuration": "RelWithDebInfo"
+    },
+    {
+      "name": "desktop-tsan",
+      "configurePreset": "desktop-tsan",
       "configuration": "RelWithDebInfo"
     }
   ],
@@ -272,6 +298,21 @@
       "execution": {
         "noTestsAction": "error",
         "timeout": 600
+      }
+    },
+    {
+      "name": "desktop-asan",
+      "inherits": "asan",
+      "configurePreset": "desktop-asan"
+    },
+    {
+      "name": "desktop-tsan",
+      "inherits": "tsan",
+      "configurePreset": "desktop-tsan",
+      "filter": {
+        "include": {
+          "label": "desktop-audio|threaded|desktop-smoke-unit"
+        }
       }
     }
   ]
