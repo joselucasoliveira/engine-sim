@@ -125,6 +125,9 @@ if (TARGET engine-sim-runtime)
     add_test(NAME RuntimeConsumerTools COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/consumer_tool_tests.py"
         --out "${CMAKE_CURRENT_BINARY_DIR}/consumer-tool-working")
     set_tests_properties(RuntimeConsumerTools PROPERTIES LABELS "r2-sdk-tools" TIMEOUT 60)
+    add_test(NAME RuntimeCiTools COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/ci_tools_tests.py"
+        --out "${CMAKE_CURRENT_BINARY_DIR}/ci-tool-working")
+    set_tests_properties(RuntimeCiTools PROPERTIES LABELS "r2-example" TIMEOUT 60)
     # Timings require an optimized, unsanitized static implementation. The probe
     # is a different executable so allocation and stage clocks cannot affect it.
     if (NOT ENGINE_SIM_RUNTIME_SHARED AND ENGINE_SIM_SANITIZER STREQUAL "none")

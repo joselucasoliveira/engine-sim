@@ -266,3 +266,50 @@ is a process high-water value and does not establish a leak. Separate leak and
 thread sanitizers establish their narrower checks. Keep raw failures and native
 platform limitations with each run rather than replacing them with a universal
 performance pass mark.
+
+## Installed SDK native replay
+
+The manual [native SDK workflow](.github/workflows/runtime-sdk.yml) requires a
+full product commit SHA. Every static/shared cell is required on Ubuntu 24.04
+x86_64/GCC 13, Windows Server 2022 x64/VS 2022, and macOS 15 arm64/Xcode 16.4.
+It preserves the separate desktop workflows. Defining these jobs or passing
+local syntax checks does not establish a hosted result.
+
+Producer jobs alone check out source and bootstrap project dependencies. They
+install the code SDK with its optional lawful example, then transfer two
+separate archives: installed SDK and minimal consumer sources. The manifest
+records exact revision, dependency lock, file digests, actual native toolchain
+and run identity. No original recordings, desktop resources, producer build
+objects or planning trees are transferred. The consumer job has no checkout or
+bootstrap. It checks every transferred digest, producer/consumer identities,
+absence of producer paths, imported target paths, shared exports and device
+library dependencies before accepting results. Linux additionally runs with
+only system tools, minimal devices and transferred data in a namespace. A
+trusted manual runner may use the recorded narrow sudo/bubblewrap fallback;
+this workflow has no untrusted pull-request trigger.
+
+The transferred matrix compiles actual C11 and C++17 public-header consumers
+for free/driven operation at both 44100 and 48000 Hz, checks completed frame,
+native sample and tick counts, tracking and reset/unload, and compares their
+PCM fingerprints. The shared variant also compares standalone ctypes. Existing
+offline WAV/direct-C/FFI and malformed-input cases remain. Ordinary consumers
+can use Ninja or native multi-config generators; tests locate the actual built
+executable. Fingerprints describe byte identity and do not authenticate artifacts.
+
+`tools/runtime_ci.py produce` is also a local entry point. It requires a fresh
+absolute `--out`, `--revision` and `--variant`; default preparation uses the
+public bootstrap. `--deps-root` explicitly reuses a previously verified root
+with the same lock. `consume` requires `--payload` in a separate clean native
+environment, with producer source/build paths inaccessible. `--allow-dirty`
+labels a precommit rehearsal and cannot qualify an exact clean revision.
+`--hosted` verifies actual runner, distribution/architecture, compiler/SDK and
+run identifiers; label names alone are insufficient. Each command retains raw
+stdout, exit, hashes and failure results outside the checkout. The separate
+`runtime-win-asan` cell requires the native MSVC address-sanitizer component;
+it is not equivalent to Linux UBSan/leak or TSan checks.
+
+The `RuntimeCiTools` CTest case covers bounded archive handling, path/link and
+digest rejection, actual executable discovery and required workflow controls.
+Its deliberate guard inputs and local syntax checks are not native Windows or
+macOS runs. Those exact-revision execution cells remain pending until their
+actual reports are available.

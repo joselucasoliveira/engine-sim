@@ -1,0 +1,259 @@
+name: Verify native installed runtime SDKs
+
+# Deliberate exact-revision replay. Defining this workflow is not a native result.
+on:
+  workflow_dispatch:
+    inputs:
+      revision:
+        description: Full forty-character product commit SHA
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  EXPECTED_REVISION: ${{ inputs.revision }}
+  PYTHONUTF8: "1"
+  CMAKE_GENERATOR: Ninja
+
+jobs:
+  producer:
+    name: Produce ${{ matrix.os }} ${{ matrix.variant }} SDK
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ["ubuntu-24.04", "windows-2022", "macos-15"]
+        variant: ["static", "shared"]
+    env:
+      VARIANT: ${{ matrix.variant }}
+    steps:
+      - name: Require a full revision
+        shell: bash
+        run: '[[ "$EXPECTED_REVISION" =~ ^[0-9a-f]{40}$ ]]'
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ inputs.revision }}
+          persist-credentials: false
+          submodules: recursive
+      - name: Prepare Linux producer tools
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes gcc-13 g++-13 flex bison libfl-dev ninja-build
+          echo 'CC=gcc-13' >> "$GITHUB_ENV"
+          echo 'CXX=g++-13' >> "$GITHUB_ENV"
+      - name: Prepare Apple producer tools
+        if: runner.os == 'macOS'
+        run: |
+          test -d /Applications/Xcode_16.4.app/Contents/Developer
+          brew install bison flex
+          echo 'DEVELOPER_DIR=/Applications/Xcode_16.4.app/Contents/Developer' >> "$GITHUB_ENV"
+          echo "$(brew --prefix bison)/bin" >> "$GITHUB_PATH"
+          echo "$(brew --prefix flex)/bin" >> "$GITHUB_PATH"
+      - name: Produce Unix SDK and consumer payload
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B tools/runtime_ci.py produce --hosted \
+            --out "$RUNNER_TEMP/sdk-producer" --revision "$EXPECTED_REVISION" --variant "$VARIANT"
+      - name: Produce MSVC SDK and consumer payload
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+          $vs = & $vswhere -latest -products '*' -version '[17.0,18.0)' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if ($LASTEXITCODE -ne 0 -or !$vs) { throw 'VS 2022 x64 C++ tools are required' }
+          Import-Module (Join-Path $vs 'Common7\Tools\Microsoft.VisualStudio.DevShell.dll')
+          Enter-VsDevShell -VsInstallPath $vs -SkipAutomaticLocation -DevCmdArguments '-arch=x64 -host_arch=x64'
+          & py -3 -B tools/runtime_ci.py produce --hosted --out (Join-Path $env:RUNNER_TEMP 'sdk-producer') --revision $env:EXPECTED_REVISION --variant $env:VARIANT
+          if ($LASTEXITCODE -ne 0) { throw "SDK production failed: $LASTEXITCODE" }
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: sdk-${{ matrix.os }}-${{ matrix.variant }}
+          path: ${{ runner.temp }}/sdk-producer/transfer/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Retain producer diagnostics
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: sdk-producer-${{ matrix.os }}-${{ matrix.variant }}-logs
+          path: |
+            ${{ runner.temp }}/sdk-producer/*.json
+            ${{ runner.temp }}/sdk-producer/*.log
+            ${{ runner.temp }}/sdk-producer/build/dependency-receipt.json
+          if-no-files-found: warn
+          retention-days: 7
+
+  consumer:
+    name: Consume ${{ matrix.os }} ${{ matrix.variant }} SDK without checkout
+    needs: producer
+    if: ${{ always() && !cancelled() }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ["ubuntu-24.04", "windows-2022", "macos-15"]
+        variant: ["static", "shared"]
+    env:
+      VARIANT: ${{ matrix.variant }}
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: sdk-${{ matrix.os }}-${{ matrix.variant }}
+          path: ${{ runner.temp }}/sdk-payload
+      - name: Prepare Linux consumer tools
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes gcc-13 g++-13 bubblewrap ninja-build cmake
+          echo 'CC=gcc-13' >> "$GITHUB_ENV"
+          echo 'CXX=g++-13' >> "$GITHUB_ENV"
+      - name: Require Apple consumer toolchain
+        if: runner.os == 'macOS'
+        run: |
+          test -d /Applications/Xcode_16.4.app/Contents/Developer
+          echo 'DEVELOPER_DIR=/Applications/Xcode_16.4.app/Contents/Developer' >> "$GITHUB_ENV"
+      - name: Consume Linux transfer in a minimal namespace
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/sdk-consumer"
+          prefix=(bwrap)
+          if ! bwrap --unshare-all --ro-bind / / -- /usr/bin/true; then
+            prefix=(sudo -n bwrap --uid "$(id -u)" --gid "$(id -g)" --cap-drop ALL)
+          fi
+          args=(--unshare-all --die-with-parent --new-session)
+          for path in /usr /lib /lib64 /bin /etc; do
+            if test -e "$path"; then args+=(--ro-bind "$path" "$path"); fi
+          done
+          args+=(--proc /proc --dev /dev --tmpfs /tmp --ro-bind "$RUNNER_TEMP/sdk-payload" /payload
+            --bind "$RUNNER_TEMP/sdk-consumer" /result --chdir /result --clearenv
+            --setenv PATH /usr/bin:/bin --setenv LC_ALL C.UTF-8 --setenv TZ UTC)
+          for key in RUNNER_OS RUNNER_ARCH ImageOS ImageVersion GITHUB_SHA GITHUB_RUN_ID GITHUB_RUN_ATTEMPT GITHUB_WORKFLOW_REF CC CXX; do
+            if test -n "${!key-}"; then args+=(--setenv "$key" "${!key}"); fi
+          done
+          "${prefix[@]}" "${args[@]}" /usr/bin/python3 -B /payload/runtime_ci.py consume --hosted \
+            --payload /payload --out /result/run --revision "$EXPECTED_REVISION" --variant "$VARIANT"
+      - name: Consume Apple transfer without producer trees
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B "$RUNNER_TEMP/sdk-payload/runtime_ci.py" consume --hosted \
+            --payload "$RUNNER_TEMP/sdk-payload" --out "$RUNNER_TEMP/sdk-consumer/run" \
+            --revision "$EXPECTED_REVISION" --variant "$VARIANT"
+      - name: Consume MSVC transfer without producer trees
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+          $vs = & $vswhere -latest -products '*' -version '[17.0,18.0)' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if ($LASTEXITCODE -ne 0 -or !$vs) { throw 'VS 2022 x64 C++ tools are required' }
+          Import-Module (Join-Path $vs 'Common7\Tools\Microsoft.VisualStudio.DevShell.dll')
+          Enter-VsDevShell -VsInstallPath $vs -SkipAutomaticLocation -DevCmdArguments '-arch=x64 -host_arch=x64'
+          & py -3 -B (Join-Path $env:RUNNER_TEMP 'sdk-payload/runtime_ci.py') consume --hosted --payload (Join-Path $env:RUNNER_TEMP 'sdk-payload') --out (Join-Path $env:RUNNER_TEMP 'sdk-consumer/run') --revision $env:EXPECTED_REVISION --variant $env:VARIANT
+          if ($LASTEXITCODE -ne 0) { throw "Clean SDK consumption failed: $LASTEXITCODE" }
+      - name: Retain consumer diagnostics and identities
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: sdk-consumer-${{ matrix.os }}-${{ matrix.variant }}-logs
+          path: |
+            ${{ runner.temp }}/sdk-payload/manifest.json
+            ${{ runner.temp }}/sdk-consumer/**/*.json
+            ${{ runner.temp }}/sdk-consumer/**/*.log
+            ${{ runner.temp }}/sdk-consumer/**/imported-properties.txt
+          if-no-files-found: warn
+          retention-days: 7
+
+  diagnostics:
+    name: Runtime ${{ matrix.preset }} diagnostics
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            preset: runtime-asan
+          - os: ubuntu-24.04
+            preset: runtime-tsan
+          - os: windows-2022
+            preset: runtime-win-asan
+    env:
+      PRESET: ${{ matrix.preset }}
+    steps:
+      - name: Require a full revision
+        shell: bash
+        run: '[[ "$EXPECTED_REVISION" =~ ^[0-9a-f]{40}$ ]]'
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ inputs.revision }}
+          persist-credentials: false
+          submodules: recursive
+      - name: Run Linux memory or thread diagnostics
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes gcc-13 g++-13 clang-18 llvm-18 flex bison libfl-dev ninja-build bubblewrap
+          export CC=gcc-13 CXX=g++-13 ES_OUT="$RUNNER_TEMP/sdk-diagnostics"
+          if ! bwrap --unshare-all --ro-bind / / -- /usr/bin/true; then
+            export ENGINE_SIM_BWRAP_COMMAND="$(python3 -c 'import json,os; print(json.dumps(["sudo","-n","bwrap","--uid",str(os.getuid()),"--gid",str(os.getgid()),"--cap-drop","ALL"]))')"
+          fi
+          run() { "$@" 2>&1 | tee -a "$RUNNER_TEMP/sdk-diagnostics.log"; }
+          run python3 -B tools/runtime_ci.py probe --hosted --out "$RUNNER_TEMP/sdk-diagnostic-probe" --revision "$EXPECTED_REVISION" --variant static
+          run python3 -B tools/bootstrap.py --profile runtime --tests --out "$ES_OUT"
+          compiler=()
+          if test "$PRESET" = runtime-asan; then compiler=(-DCMAKE_C_COMPILER=clang-18 -DCMAKE_CXX_COMPILER=clang++-18); fi
+          run cmake --preset "$PRESET" "${compiler[@]}"
+          ASAN_OPTIONS=detect_leaks=0 run cmake --build --preset "$PRESET" --config RelWithDebInfo --parallel 2
+          run ctest --preset "$PRESET" --no-tests=error --output-on-failure --output-junit "$ES_OUT/tests.xml"
+      - name: Run separate native MSVC address diagnostics
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+          $vs = & $vswhere -latest -products '*' -version '[17.0,18.0)' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 Microsoft.VisualStudio.Component.VC.ASAN -property installationPath
+          if ($LASTEXITCODE -ne 0 -or !$vs) { throw 'VS 2022 with native address diagnostics required' }
+          Import-Module (Join-Path $vs 'Common7\Tools\Microsoft.VisualStudio.DevShell.dll')
+          Enter-VsDevShell -VsInstallPath $vs -SkipAutomaticLocation -DevCmdArguments '-arch=x64 -host_arch=x64'
+          $env:ES_OUT = Join-Path $env:RUNNER_TEMP 'sdk-diagnostics'
+          $log = Join-Path $env:RUNNER_TEMP 'sdk-diagnostics.log'
+          & py -3 -B tools/runtime_ci.py probe --hosted --out (Join-Path $env:RUNNER_TEMP 'sdk-diagnostic-probe') --revision $env:EXPECTED_REVISION --variant static *>&1 | Tee-Object -FilePath $log -Append
+          if ($LASTEXITCODE -ne 0) { throw 'Wrong native diagnostic tuple' }
+          & py -3 -B tools/bootstrap.py --profile runtime --tests --out $env:ES_OUT *>&1 | Tee-Object -FilePath $log -Append
+          if ($LASTEXITCODE -ne 0) { throw 'Diagnostic preparation failed' }
+          & cmake --preset runtime-win-asan *>&1 | Tee-Object -FilePath $log -Append
+          if ($LASTEXITCODE -ne 0) { throw 'Diagnostic configuration failed' }
+          & cmake --build --preset runtime-win-asan --config RelWithDebInfo --parallel 2 *>&1 | Tee-Object -FilePath $log -Append
+          if ($LASTEXITCODE -ne 0) { throw 'Diagnostic compilation failed' }
+          & ctest --preset runtime-win-asan --no-tests=error --output-on-failure --output-junit (Join-Path $env:ES_OUT 'tests.xml') *>&1 | Tee-Object -FilePath $log -Append
+          if ($LASTEXITCODE -ne 0) { throw 'Native address diagnostics failed' }
+      - name: Retain diagnostic failures and test counts
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: sdk-${{ matrix.preset }}-logs
+          path: |
+            ${{ runner.temp }}/sdk-diagnostic-probe/*.json
+            ${{ runner.temp }}/sdk-diagnostic-probe/*.log
+            ${{ runner.temp }}/sdk-diagnostics/tests.xml
+            ${{ runner.temp }}/sdk-diagnostics.log
+            ${{ runner.temp }}/sdk-diagnostics/dependency-receipt.json
+            ${{ runner.temp }}/sdk-diagnostics/**/Testing/Temporary/*.log
+            ${{ runner.temp }}/sdk-diagnostics/**/commands/*.json
+            ${{ runner.temp }}/sdk-diagnostics/**/commands/*.log
+          if-no-files-found: warn
+          retention-days: 7

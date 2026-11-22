@@ -25,3 +25,21 @@ The app uses the inherited scene, engine scripts, impulse responses, font and or
 The inherited Silkscreen font has glyphs 32 through 127. UI text keeps those glyphs, normalizes line endings/tabs and displays one `?` for an unsupported valid UTF-8 code point. Malformed bytes are handled safely. Raw load diagnostics retain their complete text in the model and standard error. An unsuccessful reload retains the current running engine and its audio session; a later successful reload replaces it.
 
 The runtime allowlist includes complete notices for its selected inputs. The root MIT license does not establish separate recording redistribution rights. Original impulse-recording clearance remains unresolved, so default redistribution staging is blocked. Explicit local-validation stages preserve the original bytes and identify their private purpose. Signing, publication and distribution require separate decisions.
+
+## Device-free runtime SDK
+
+Local Linux x86_64/GCC 14.2 and Clang 19 checks exercise static/shared SDK links,
+source-hidden Unicode relocation, C11/C++17 consumers, standalone ctypes, both
+shaft modes and both output rates. Separate full memory/leak/UB and thread
+selections exercise preparation, reset, retirement, coherent fault prefixes and
+independent concurrent owners. The optimized static benchmark is a separate
+CPU observation; it does not qualify audio callback deadlines or hardware.
+
+The manual runtime SDK workflow defines required producer and separate clean
+consumer jobs for Ubuntu 24.04/GCC 13, Windows Server 2022/VS 2022 x64 and macOS
+15 arm64/Xcode 16.4, plus separate Linux and MSVC diagnostics. It verifies actual
+OS, machine, compiler and SDK and retains exact commit/run and file identities.
+The image catalog and local workflow/transport checks are source evidence;
+actual hosted runs and native Windows/macOS execution remain pending. The
+original desktop, driver/bus, physical audio and recording-rights limits above
+remain separate.
