@@ -1,6 +1,7 @@
 #include "runtime.hpp"
 #include "simulation_fault.h"
 #include "constants.h"
+#include "piston_engine_simulator.h"
 
 #include <algorithm>
 #include <cmath>
@@ -94,6 +95,7 @@ Runtime::Session::Session(PreparedEngine value, std::uint32_t outputHz) : prepar
     if (sim.getTransmission()->getGear() != -1) sim.getTransmission()->changeGear(-1);
     sim.getTransmission()->setClutchPressure(0);
     sim.m_dyno.m_enabled = sim.m_dyno.m_hold = false;
+    static_cast<PistonEngineSimulator &>(sim).enableExternalLoad();
     pull = std::make_unique<PullEngine>(sim, [this] { latch(); }, SampleClock::Profile::Public, outputHz);
 }
 void Runtime::Session::latch() {
@@ -101,6 +103,7 @@ void Runtime::Session::latch() {
     sim.getEngine()->setSpeedControl(requested.demand);
     sim.getEngine()->getIgnitionModule()->m_enabled = requested.ignition != 0;
     sim.m_starterMotor.m_enabled = requested.starter != 0;
+    static_cast<PistonEngineSimulator &>(sim).setExternalLoadNm(requested.load_nm);
 }
 es_telemetry Runtime::snapshot(const Session &session) const {
     const auto &sim = *session.prepared.session->simulator;
@@ -116,6 +119,9 @@ es_telemetry Runtime::snapshot(const Session &session) const {
     value.measured_rpm = std::abs(value.crank_rad_s) * 60 / (2 * constants::pi);
     value.cycle_rad = crank->getCycleAngle(); value.plate_angle_rad = engine->getThrottlePlateAngle();
     value.displacement_m3 = engine->getDisplacement();
+    value.requested_load_nm = session.requested.load_nm;
+    value.load_reaction_nm = static_cast<const PistonEngineSimulator &>(sim).getExternalLoadReactionNm();
+    if (!std::isfinite(value.load_reaction_nm)) throw SimulationFault("nonfinite external load reaction");
     return value;
 }
 void Runtime::load(const es_script::PreparationContext &recipe) {
@@ -168,7 +174,7 @@ void Runtime::unload() noexcept {
 
 extern "C" {
 uint32_t ES_CALL es_api_version(void) { return ES_ABI_V1; }
-uint32_t ES_CALL es_capabilities(void) { return ES_CAP_FREE | ES_CAP_44100 | ES_CAP_48000 | ES_CAP_RESET | ES_CAP_PARALLEL_RENDER; }
+uint32_t ES_CALL es_capabilities(void) { return ES_CAP_FREE | ES_CAP_44100 | ES_CAP_48000 | ES_CAP_LOAD | ES_CAP_RESET | ES_CAP_PARALLEL_RENDER; }
 es_status ES_CALL es_config_init(uint32_t abi, uint32_t capacity, es_config *out, es_error *error) {
     return boundary(error, [&] {
         if (!out) return fail(error, ES_INVALID, "config: NULL destination");
@@ -203,7 +209,7 @@ es_status ES_CALL es_set_controls(es_runtime *rt, const es_controls *controls, e
         if (controls->ignition > 1 || controls->starter > 1 || !finiteRange(controls->demand, 1)
             || !finiteRange(controls->load_nm, 10000) || !finiteRange(controls->driven_rpm, 12000))
             return fail(error, ES_INVALID, "controls: invalid boolean or numeric range");
-        if (controls->load_nm != 0 || controls->driven_rpm != 0) return fail(error, ES_UNSUPPORTED, "controls: shaft load and driven speed are unavailable");
+        if (controls->driven_rpm != 0) return fail(error, ES_UNSUPPORTED, "controls: driven speed is unavailable");
         if (rt->implementation.telemetry().state != ES_READY) return fail(error, ES_STATE, "controls: ready engine required");
         rt->implementation.setControls(*controls); return ES_OK;
     });

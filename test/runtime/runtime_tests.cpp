@@ -135,7 +135,7 @@ TEST_F(RuntimeApi, RejectedControlsPreserveFullVectorAndErrorStorageIsIndependen
     c=valid;c.demand=std::numeric_limits<double>::quiet_NaN();EXPECT_EQ(es_set_controls(a.get(),&c,&error),ES_INVALID);
     c=valid;c.starter=2;EXPECT_EQ(es_set_controls(a.get(),&c,&error),ES_INVALID);
     c=valid;c.demand=1.01;EXPECT_EQ(es_set_controls(a.get(),&c,&error),ES_INVALID);
-    c=valid;c.load_nm=1;EXPECT_EQ(es_set_controls(a.get(),&c,&error),ES_UNSUPPORTED);
+    c=valid;c.load_nm=10001;EXPECT_EQ(es_set_controls(a.get(),&c,&error),ES_INVALID);
     c=valid;c.driven_rpm=1;EXPECT_EQ(es_set_controls(a.get(),&c,&error),ES_UNSUPPORTED);
     c=valid;c.load_nm=-1;EXPECT_EQ(es_set_controls(a.get(),&c,&error),ES_INVALID);
     c=valid;c.driven_rpm=std::numeric_limits<double>::infinity();EXPECT_EQ(es_set_controls(a.get(),&c,&error),ES_INVALID);

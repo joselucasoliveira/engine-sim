@@ -7,6 +7,7 @@
 #include <assert.h>
 #include <chrono>
 #include <set>
+#include <stdexcept>
 
 PistonEngineSimulator::PistonEngineSimulator() {
     m_engine = nullptr;
@@ -28,6 +29,24 @@ PistonEngineSimulator::PistonEngineSimulator() {
 
 PistonEngineSimulator::~PistonEngineSimulator() {
     destroy();
+}
+
+void PistonEngineSimulator::enableExternalLoad() {
+    if (m_externalLoadEnabled) return;
+    if (!m_system || !m_engine) throw std::logic_error("external load requires a prepared graph");
+    m_externalLoad.setBody(&m_engine->getOutputCrankshaft()->m_body);
+    setExternalLoadNm(0);
+    m_system->addConstraint(&m_externalLoad);
+    m_externalLoadEnabled = true;
+}
+
+void PistonEngineSimulator::setExternalLoadNm(double torque) noexcept {
+    m_externalLoad.m_minTorque = -torque * units::Nm;
+    m_externalLoad.m_maxTorque = torque * units::Nm;
+}
+
+double PistonEngineSimulator::getExternalLoadReactionNm() const noexcept {
+    return m_externalLoadEnabled ? m_externalLoad.F_t[0][0] / units::Nm : 0;
 }
 
 void PistonEngineSimulator::loadSimulation(Engine *engine, Vehicle *vehicle, Transmission *transmission) {
@@ -358,6 +377,11 @@ void PistonEngineSimulator::destroy() {
     m_exhaustFlowStagingBuffer = nullptr;
     m_crankshaftLinks = nullptr;
     Simulator::destroy();
+
+    m_externalLoadEnabled = false;
+    m_externalLoad.setBody(nullptr);
+    m_externalLoad.F_t[0][0] = 0;
+    setExternalLoadNm(0);
 
     m_vehicle = nullptr;
     m_transmission = nullptr;

@@ -35,6 +35,12 @@ class PistonEngineSimulator : public Simulator {
 
         virtual double getAverageOutputSignal() const override;
 
+        // Public runtime brake, separate from inherent model friction and dyno.
+        // Opt in after preparation so legacy/desktop graph ordering is unchanged.
+        void enableExternalLoad();
+        void setExternalLoadNm(double torque) noexcept;
+        double getExternalLoadReactionNm() const noexcept;
+
         DerivativeFilter m_derivativeFilter;
 
     protected:
@@ -54,6 +60,8 @@ class PistonEngineSimulator : public Simulator {
         atg_scs::FixedPositionConstraint *m_crankConstraints;
         atg_scs::ClutchConstraint *m_crankshaftLinks;
         atg_scs::RotationFrictionConstraint *m_crankshaftFrictionConstraints;
+        atg_scs::RotationFrictionConstraint m_externalLoad;
+        bool m_externalLoadEnabled = false;
         atg_scs::LineConstraint *m_cylinderWallConstraints;
         atg_scs::LinkConstraint *m_linkConstraints;
         atg_scs::RigidBody m_vehicleMass;
