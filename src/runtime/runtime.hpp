@@ -20,7 +20,7 @@ public:
 private:
     friend struct RuntimeTestAccess;
     struct Session {
-        explicit Session(PreparedEngine value);
+        Session(PreparedEngine value, std::uint32_t outputHz);
         void latch();
         PreparedEngine prepared;
         es_controls requested{sizeof(es_controls), ES_ABI_V1, 0, 0, 0, 0, 0};

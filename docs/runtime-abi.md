@@ -65,3 +65,11 @@ Serialize every operation on one handle, including telemetry, reset and destruct
 Each call accepts optional independent `es_error` storage. Successful calls clear only the supplied error message. Other handles and calls using different storage do not modify it. A rendering fault publishes only completed frames and preserves the rest of the caller's PCM buffer. Telemetry retains the last completed-frame snapshot with FAULTED state until successful load/reset or unload.
 
 These are synchronous correctness and ownership guarantees. Rendering can allocate or lock internally and carries no audio-callback deadline guarantee. Deterministic equality requires the same binary, inputs, seed, control timeline and floating-point environment; it is not a cross-platform byte guarantee.
+
+## Output rates and clock boundaries
+
+Mono float output supports 44100 and 48000 Hz. The native synthesis/filter/IR stream remains 44100 Hz and retains its S16 quantization. At 44100 Hz every returned sample is the native S16 value divided by 32768 exactly. At 48000 Hz the output uses causal linear interpolation of the two latest native values, initialized from the first real native sample; it adds one native interval of delay. It preserves DC and pitch but attenuates high frequencies, and does not reconstruct lost native precision.
+
+Frame n is at n/output_hz. A render call processes a half-open interval, completing all due physics ticks at its right boundary while deferring a coincident next native sample or control latch. With N completed output frames, telemetry reports floor(N*simulation_hz/output_hz) completed ticks and ceil(N*44100/output_hz) generated native frames. Controls latch at numerical tick starts. Smaller calls, including single frames, preserve the same physical timeline and PCM; requesting native audio never advances physics past the host call boundary.
+
+Source interpolation contributes one numerical-tick pipeline delay; 48000 Hz output additionally contributes one native interval. Model/filter response and host device buffering are separate. There is no independent advance/drain operation or synthetic starvation padding in the runtime.

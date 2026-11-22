@@ -14,12 +14,14 @@ long double roundedCycles(long double value) {
     return std::abs(value - nearest) <= tolerance ? nearest : value;
 }
 }
-SampleClock::SampleClock(std::uint32_t frequency, const std::vector<double> &rest, ClockSource &source, Profile profile)
-    : m_frequency(frequency), m_source(source), m_previous(rest), m_current(rest),
+SampleClock::SampleClock(std::uint32_t frequency, const std::vector<double> &rest, ClockSource &source, Profile profile, std::uint32_t outputRate)
+    : m_frequency(frequency), m_outputRate(outputRate), m_source(source), m_previous(rest), m_current(rest),
       m_next(rest.size()), m_interpolated(rest.size()), m_profile(profile) {
     const auto minimum = profile == Profile::Desktop ? 400u : 4000u;
     const auto maximum = profile == Profile::Desktop ? 400000u : 96000u;
-    if (frequency < minimum || frequency > maximum || rest.empty()) {
+    if (frequency < minimum || frequency > maximum || rest.empty()
+        || (outputRate != NativeRate && outputRate != 48000)
+        || (profile == Profile::Desktop && outputRate != NativeRate)) {
         throw std::invalid_argument("sample clock requires a supported frequency and exhaust channels");
     }
     for (double value : rest) {
@@ -37,8 +39,12 @@ void SampleClock::validateSpan(float *output, std::size_t count) const {
     const auto extraTicks = (m_variable || m_pendingFrequency) && count
         ? (std::uint64_t{400000} * count + NativeRate - 1) / NativeRate + 1
         : (std::uint64_t{m_frequency} * count + m_phase) / NativeRate;
-    if (count > maximum - m_counts.frames || count > maximum - m_counts.nativeFrames
-        || extraTicks > maximum - m_counts.ticks) {
+    const auto ticks = m_outputRate == NativeRate ? extraTicks
+        : (std::uint64_t{m_frequency} * count + m_outputTickPhase) / m_outputRate;
+    const auto native = m_outputRate == NativeRate ? count
+        : (std::uint64_t{NativeRate} * count + m_outputNativePhase + m_outputRate - 1) / m_outputRate - (m_outputNativePhase != 0);
+    if (count > maximum - m_counts.frames || native > maximum - m_counts.nativeFrames
+        || ticks > maximum - m_counts.ticks) {
         throw std::overflow_error("sample clock counter capacity exceeded");
     }
 }
@@ -48,7 +54,8 @@ void SampleClock::render(float *output, std::size_t count) {
     validateSpan(output, count);
     try {
         while (m_written < count) {
-            interval(output + m_written);
+            if (m_outputRate == NativeRate) interval(output + m_written);
+            else convertedInterval(output + m_written);
             ++m_written;
         }
     }
@@ -58,8 +65,7 @@ void SampleClock::render(float *output, std::size_t count) {
     }
 }
 
-void SampleClock::interval(float *output) {
-    const double fraction = position();
+std::int16_t SampleClock::nativeFrame(double fraction) {
     for (std::size_t i = 0; i < m_current.size(); ++i) {
         const double value = (1 - fraction) * m_previous[i] + fraction * m_current[i];
         if (!std::isfinite(value)) throw SimulationFault("nonfinite interpolated exhaust input");
@@ -69,6 +75,11 @@ void SampleClock::interval(float *output) {
     if (!m_source.native(m_interpolated.data(), sample)) {
         throw SimulationFault("native synthesis made no progress");
     }
+    return sample;
+}
+
+void SampleClock::interval(float *output) {
+    const auto sample = nativeFrame(position());
     if (!m_tickActive) {
         if (m_pendingFrequency) {
             m_frequency = m_pendingFrequency;
@@ -90,6 +101,46 @@ void SampleClock::interval(float *output) {
     ++m_counts.nativeFrames;
     m_counts.ticks += ticks;
     *output = static_cast<float>(sample) / 32768.0f;
+}
+
+void SampleClock::convertedNative() {
+    const auto sample = nativeFrame(static_cast<double>(m_nativeInterpolationPhase) / NativeRate);
+    if (!m_haveNative) { m_nativePrevious = m_nativeCurrent = sample; m_haveNative = true; }
+    else { m_nativePrevious = m_nativeCurrent; m_nativeCurrent = sample; }
+    m_nativeInterpolationPhase = (m_nativeInterpolationPhase + m_frequency) % NativeRate;
+}
+
+void SampleClock::convertedInterval(float *output) {
+    std::uint32_t native = 0, ticks = 0;
+    if (m_outputNativePhase == 0) { convertedNative(); ++native; }
+    const auto fraction = static_cast<double>(m_outputNativePhase) / m_outputRate;
+    const float sample = static_cast<float>(((1 - fraction) * m_nativePrevious + fraction * m_nativeCurrent) / 32768.0);
+    if (!m_tickActive) startTick();
+    auto nextTick = m_outputRate - m_outputTickPhase;
+    auto nextNative = m_outputRate - m_outputNativePhase;
+    // Event times inside this output interval are nextTick/F and nextNative/S.
+    // Cross products are bounded by the configured rates, never lifetime counts.
+    while (nextTick <= m_frequency || nextNative < NativeRate) {
+        const bool dueNative = nextNative < NativeRate;
+        const auto tickTime = std::uint64_t{nextTick} * NativeRate;
+        const auto nativeTime = std::uint64_t{nextNative} * m_frequency;
+        if (nextTick <= m_frequency && (!dueNative || tickTime <= nativeTime)) {
+            finishTick(); ++ticks;
+            if (nextTick < m_frequency && (!dueNative || tickTime != nativeTime)) startTick();
+            nextTick += m_outputRate;
+        }
+        else {
+            convertedNative(); ++native;
+            // At a tie the completed tick precedes native synthesis and the
+            // next latch follows it. A right-edge native event stays deferred.
+            if (!m_tickActive) startTick();
+            nextNative += m_outputRate;
+        }
+    }
+    m_outputTickPhase = (m_outputTickPhase + m_frequency) % m_outputRate;
+    m_outputNativePhase = (m_outputNativePhase + NativeRate) % m_outputRate;
+    ++m_counts.frames; m_counts.ticks += ticks; m_counts.nativeFrames += native;
+    *output = sample;
 }
 
 double SampleClock::position() const {

@@ -69,7 +69,7 @@ es_status configStatus(const es_config &c, es_error *error) noexcept {
     if (c.output_hz == 0 || c.mode > ES_DRIVEN || (c.simulation_hz != 0 && (c.simulation_hz < 4000 || c.simulation_hz > 96000))
         || !finiteRange(c.starter_torque_nm, 10000)) return fail(error, ES_INVALID, "config: invalid rate, mode or starter torque");
     if (c.flags) return fail(error, ES_UNSUPPORTED, "config.flags: unknown flags");
-    if (c.output_hz != 44100) return fail(error, ES_UNSUPPORTED, "config.output_hz: rate is unavailable");
+    if (c.output_hz != 44100 && c.output_hz != 48000) return fail(error, ES_UNSUPPORTED, "config.output_hz: rate is unavailable");
     if (c.mode != ES_FREE) return fail(error, ES_UNSUPPORTED, "config.mode: mode is unavailable");
     return ES_OK;
 }
@@ -89,12 +89,12 @@ es_status pathStatus(const char *text, bool directory, std::filesystem::path &ou
 
 namespace engine_sim {
 Runtime::Runtime(es_config config) noexcept : m_config(config) { unload(); }
-Runtime::Session::Session(PreparedEngine value) : prepared(std::move(value)) {
+Runtime::Session::Session(PreparedEngine value, std::uint32_t outputHz) : prepared(std::move(value)) {
     auto &sim = *prepared.session->simulator;
     if (sim.getTransmission()->getGear() != -1) sim.getTransmission()->changeGear(-1);
     sim.getTransmission()->setClutchPressure(0);
     sim.m_dyno.m_enabled = sim.m_dyno.m_hold = false;
-    pull = std::make_unique<PullEngine>(sim, [this] { latch(); });
+    pull = std::make_unique<PullEngine>(sim, [this] { latch(); }, SampleClock::Profile::Public, outputHz);
 }
 void Runtime::Session::latch() {
     auto &sim = *prepared.session->simulator;
@@ -120,7 +120,7 @@ es_telemetry Runtime::snapshot(const Session &session) const {
 }
 void Runtime::load(const es_script::PreparationContext &recipe) {
     auto candidate = std::make_unique<Session>(prepareEngine(recipe,
-        {m_config.simulation_hz, m_config.mode, m_config.starter_torque_nm, m_config.seed}));
+        {m_config.simulation_hz, m_config.mode, m_config.starter_torque_nm, m_config.seed}), m_config.output_hz);
     const auto initial = snapshot(*candidate);
     m_session.swap(candidate);
     m_snapshot = initial;
@@ -128,7 +128,7 @@ void Runtime::load(const es_script::PreparationContext &recipe) {
 void Runtime::reset() {
     const auto &saved = m_session->prepared;
     auto candidate = std::make_unique<Session>(prepareEngine(saved.recipe,
-        {m_config.simulation_hz, m_config.mode, m_config.starter_torque_nm, m_config.seed}, &saved.inputs));
+        {m_config.simulation_hz, m_config.mode, m_config.starter_torque_nm, m_config.seed}, &saved.inputs), m_config.output_hz);
     const auto initial = snapshot(*candidate);
     m_session.swap(candidate);
     m_snapshot = initial;
@@ -139,12 +139,14 @@ void Runtime::setControls(const es_controls &controls) noexcept {
 }
 void Runtime::render(float *output, std::uint32_t frames, std::uint32_t &written) {
     const auto &counts = m_session->pull->counts();
-    const auto rate = SampleClock::NativeRate;
+    const auto rate = m_config.output_hz;
     const auto frequency = m_snapshot.simulation_hz;
     const auto phase = ((counts.frames % rate) * frequency) % rate;
     const auto extraTicks = (std::uint64_t{frames} * frequency + phase) / rate;
+    const auto nativePhase = ((counts.frames % rate) * SampleClock::NativeRate) % rate;
+    const auto extraNative = (std::uint64_t{frames} * SampleClock::NativeRate + nativePhase + rate - 1) / rate - (nativePhase != 0);
     const auto maximum = std::numeric_limits<std::uint64_t>::max();
-    if (frames > maximum - counts.frames || frames > maximum - counts.nativeFrames || extraTicks > maximum - counts.ticks)
+    if (frames > maximum - counts.frames || extraNative > maximum - counts.nativeFrames || extraTicks > maximum - counts.ticks)
         throw std::overflow_error("render: counter capacity exceeded");
     try {
         while (written < frames) {
@@ -166,7 +168,7 @@ void Runtime::unload() noexcept {
 
 extern "C" {
 uint32_t ES_CALL es_api_version(void) { return ES_ABI_V1; }
-uint32_t ES_CALL es_capabilities(void) { return ES_CAP_FREE | ES_CAP_44100 | ES_CAP_RESET | ES_CAP_PARALLEL_RENDER; }
+uint32_t ES_CALL es_capabilities(void) { return ES_CAP_FREE | ES_CAP_44100 | ES_CAP_48000 | ES_CAP_RESET | ES_CAP_PARALLEL_RENDER; }
 es_status ES_CALL es_config_init(uint32_t abi, uint32_t capacity, es_config *out, es_error *error) {
     return boundary(error, [&] {
         if (!out) return fail(error, ES_INVALID, "config: NULL destination");

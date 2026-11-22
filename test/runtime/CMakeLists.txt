@@ -80,3 +80,13 @@ if (TARGET engine-sim-runtime)
     gtest_discover_tests(engine-sim-runtime-lifecycle-test WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/lifecycle-working"
         DISCOVERY_TIMEOUT 30 PROPERTIES LABELS "r2-lifecycle" TIMEOUT 180 ENVIRONMENT "ENGINE_SIM_TEST_SOURCE=${PROJECT_SOURCE_DIR}")
 endif ()
+
+if (TARGET engine-sim-runtime)
+    add_executable(engine-sim-rate-test rate_tests.cpp)
+    target_link_libraries(engine-sim-rate-test PRIVATE EngineSim::Runtime engine-sim-script-interpreter gtest_main)
+    target_include_directories(engine-sim-rate-test PRIVATE "${PROJECT_SOURCE_DIR}/src/runtime")
+    engine_sim_diagnose(engine-sim-rate-test TRUE)
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/rate-working")
+    gtest_discover_tests(engine-sim-rate-test WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/rate-working"
+        DISCOVERY_TIMEOUT 30 PROPERTIES LABELS "r2-rate" TIMEOUT 180 ENVIRONMENT "ENGINE_SIM_TEST_SOURCE=${PROJECT_SOURCE_DIR}")
+endif ()

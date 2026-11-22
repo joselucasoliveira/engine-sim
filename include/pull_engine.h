@@ -12,7 +12,8 @@ class PullEngine final : private ClockSource {
 public:
     using ControlLatch = std::function<void()>;
     using TickObserver = std::function<void(const Simulator &)>;
-    PullEngine(Simulator &simulator, ControlLatch controls, SampleClock::Profile profile = SampleClock::Profile::Public);
+    PullEngine(Simulator &simulator, ControlLatch controls, SampleClock::Profile profile = SampleClock::Profile::Public,
+        std::uint32_t outputRate = SampleClock::NativeRate);
     PullEngine(const PullEngine &) = delete;
     PullEngine &operator=(const PullEngine &) = delete;
     void render(float *output, std::size_t count) { m_clock.render(output, count); }

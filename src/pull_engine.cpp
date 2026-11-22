@@ -15,9 +15,9 @@ std::vector<double> preparedRest(Simulator &simulator) {
 }
 }
 
-PullEngine::PullEngine(Simulator &simulator, ControlLatch controls, SampleClock::Profile profile)
+PullEngine::PullEngine(Simulator &simulator, ControlLatch controls, SampleClock::Profile profile, std::uint32_t outputRate)
     : m_simulator(simulator), m_controls(std::move(controls)),
-      m_clock(simulator.getSimulationFrequency(), preparedRest(simulator), *this, profile),
+      m_clock(simulator.getSimulationFrequency(), preparedRest(simulator), *this, profile, outputRate),
       m_flowTotals(simulator.getEngine()->getIntakeCount()) {
     m_simulator.synthesizer().beginSynchronous();
 }

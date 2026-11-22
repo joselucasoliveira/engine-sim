@@ -29,7 +29,7 @@ public:
     static constexpr std::uint32_t NativeRate = 44100;
     static constexpr std::size_t MaximumBlock = 65536;
     SampleClock(std::uint32_t frequency, const std::vector<double> &rest, ClockSource &source,
-        Profile profile = Profile::Public);
+        Profile profile = Profile::Public, std::uint32_t outputRate = NativeRate);
     SampleClock(const SampleClock &) = delete;
     SampleClock &operator=(const SampleClock &) = delete;
     void render(float *output, std::size_t count);
@@ -43,6 +43,9 @@ private:
     friend struct ClockTestAccess;
     void validateSpan(float *output, std::size_t count) const;
     void interval(float *output);
+    void convertedInterval(float *output);
+    std::int16_t nativeFrame(double fraction);
+    void convertedNative();
     void finishTick();
     void startTick();
     double position() const;
@@ -51,6 +54,7 @@ private:
     std::uint32_t advanceVariable();
     std::uint32_t changeFrequencyWithinInterval(long double remaining);
     std::uint32_t m_frequency;
+    std::uint32_t m_outputRate;
     std::uint32_t m_phase = 0;
     ClockSource &m_source;
     ClockCounts m_counts;
@@ -62,6 +66,9 @@ private:
     std::uint32_t m_pendingFrequency = 0, m_variablePhase = 0;
     long double m_offset = 0;
     bool m_variable = false;
+    std::uint32_t m_outputTickPhase = 0, m_outputNativePhase = 0, m_nativeInterpolationPhase = 0;
+    std::int16_t m_nativePrevious = 0, m_nativeCurrent = 0;
+    bool m_haveNative = false;
 };
 }
 #endif
