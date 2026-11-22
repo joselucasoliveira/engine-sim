@@ -13,7 +13,7 @@ if ("@engine_sim_sdk_kind@" STREQUAL "STATIC")
     find_dependency(Threads)
     set_property(TARGET EngineSim::Runtime PROPERTY INTERFACE_COMPILE_DEFINITIONS ES_RUNTIME_STATIC)
     set(_engine_sim_archives
-        "engine-sim-script-interpreter" "engine-sim" "simple-2d-constraint-solver" "piranha" "engine-sim-boost-filesystem")
+        "engine-sim-runtime-backend" "engine-sim-script-interpreter" "engine-sim" "simple-2d-constraint-solver" "piranha" "engine-sim-boost-filesystem")
     set(_engine_sim_links)
     foreach(name IN LISTS _engine_sim_archives)
         set(target "EngineSimRuntime::Private_${name}")

@@ -49,6 +49,7 @@ class Admission(unittest.TestCase):
         expected = verify.expected_suites("desktop", False)
         self.assertEqual(expected["HostApplication"], 8)
         self.assertEqual(expected["ViewsApplication"], 4)
+        self.assertEqual(expected["RuntimeDesktop"], 5)
         self.assertEqual(expected["DesktopPacing"], 8)
         self.assertEqual(expected["CaptureMechanics"], 1)
         self.assertEqual(expected["DesktopAudio"], 9)

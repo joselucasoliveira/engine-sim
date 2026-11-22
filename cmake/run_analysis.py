@@ -32,7 +32,9 @@ def main():
                 "src/synthesizer.cpp", "src/engine.cpp", "scripting/src/compiler.cpp", "src/wave_reader.cpp", "src/resource_paths.cpp", "src/compiled_scene.cpp")}
     if options.frontend:
         selected.update(source / name for name in ("src/desktop_math.cpp", "src/desktop_host.cpp", "src/desktop_run.cpp", "src/shaders.cpp",
-                        "src/engine_sim_application.cpp", "src/geometry_generator.cpp", "src/oscilloscope.cpp"))
+                        "src/engine_sim_application.cpp", "src/geometry_generator.cpp", "src/oscilloscope.cpp",
+                        "src/runtime/runtime.cpp", "src/runtime/desktop_runtime.cpp", "src/desktop_engine_views.cpp",
+                        "scripting/src/prepared_engine.cpp"))
     if options.sdl_window:
         selected.add(source / "src/sdl_window.cpp")
     if options.sdl_renderer:

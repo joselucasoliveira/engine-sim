@@ -11,6 +11,7 @@ struct PreparationConfig {
     std::uint32_t mode = ES_FREE;
     double starterTorqueNm = 0;
     std::uint64_t seed = 1;
+    bool desktop = false; // Private legacy preparation/rate profile; never a C ABI flag.
 };
 
 struct PreparedEngine {
@@ -22,5 +23,6 @@ struct PreparedEngine {
 
 PreparedEngine prepareEngine(const es_script::PreparationContext &recipe, PreparationConfig config = {},
     const std::vector<es_script::ScriptInput> *expectedInputs = nullptr);
+PreparedEngine prepareDesktopEngine(EngineDefinition definition);
 }
 #endif

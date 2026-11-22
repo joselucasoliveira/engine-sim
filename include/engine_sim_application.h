@@ -34,12 +34,15 @@
 #include <vector>
 #include <memory>
 
+namespace desktop { class RuntimeHost; }
+
 class EngineSimApplication {
     private:
         static std::string s_buildVersion;
         struct UserInterface;
         struct PendingSession;
         bool loadEngine(EngineDefinition definition);
+        bool loadRuntime(std::unique_ptr<desktop::RuntimeHost> runtime, const std::string &path);
         void buildObjects(desktop::EngineViews &views, std::vector<SimulationObject *> &objects);
         std::unique_ptr<UserInterface> prepareUserInterface(desktop::EngineViews &views);
         void bindSession();
@@ -156,18 +159,18 @@ class EngineSimApplication {
         desktop::TextRenderer m_textRenderer;
 
         std::vector<SimulationObject *> m_objects;
-        Engine *m_iceEngine;
-        Vehicle *m_vehicle;
-        Transmission *m_transmission;
-        Simulator *m_simulator;
+        const Engine *m_iceEngine;
+        const Vehicle *m_vehicle;
+        const Transmission *m_transmission;
+        const Simulator *m_simulator;
         double m_dynoSpeed;
         double m_torque;
 
-        std::unique_ptr<EngineSession> m_session;
+        std::unique_ptr<desktop::RuntimeHost> m_runtime;
         std::unique_ptr<UserInterface> m_userInterface;
-        std::unique_ptr<desktop::EngineViews> m_engineViews;
-        std::unique_ptr<desktop::EngineCommands> m_desktopControls;
-        std::unique_ptr<engine_sim::PullEngine> m_pullEngine;
+        desktop::EngineViews *m_engineViews = nullptr;
+        desktop::EngineCommands *m_desktopControls = nullptr;
+        engine_sim::PullEngine *m_pullEngine = nullptr;
         std::unique_ptr<desktop::AudioPacer> m_audioPacer;
         desktop::AudioPacer::Observation m_audioObservation;
         double m_manualFrameFraction = 0;

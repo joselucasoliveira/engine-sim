@@ -62,48 +62,54 @@ std::string readImpulseBytes(const fs::path &path) {
     }
     return bytes;
 }
+void verifyInput(const es_script::ScriptInput &input, const std::vector<es_script::ScriptInput> *expectedInputs) {
+    if (!expectedInputs) return;
+    const auto found = std::find_if(expectedInputs->begin(), expectedInputs->end(), [&](const auto &expected) {
+        return expected.resolvedPath == input.resolvedPath;
+    });
+    if (found == expectedInputs->end() || found->bytes != input.bytes)
+        throw EngineLoadError({"resources", input.resolvedPath.u8string(), "Preparation input changed"});
 }
-
-PreparedEngine prepareEngine(const es_script::PreparationContext &recipe, PreparationConfig config,
-        const std::vector<es_script::ScriptInput> *expectedInputs) {
-    if (config.mode != ES_FREE && config.mode != ES_DRIVEN) {
-        throw EngineLoadError({"unsupported", recipe.entry.u8string(), "Unknown engine mode"});
-    }
+void validateConfig(const PreparationConfig &config, const fs::path &entry) {
+    if (config.mode != ES_FREE && config.mode != ES_DRIVEN)
+        throw EngineLoadError({"unsupported", entry.u8string(), "Unknown engine mode"});
+    if (config.desktop && config.mode != ES_FREE)
+        throw EngineLoadError({"unsupported", entry.u8string(), "Desktop requires free-running mechanics"});
     if (!std::isfinite(config.starterTorqueNm) || config.starterTorqueNm < 0 || config.starterTorqueNm > 10000 ||
-        (config.simulationHz != 0 && (config.simulationHz < 4000 || config.simulationHz > 96000))) {
-        throw EngineLoadError({"configuration", recipe.entry.u8string(), "Invalid frequency or starter torque"});
-    }
-    if (config.mode == ES_DRIVEN && config.starterTorqueNm != 0) {
-        throw EngineLoadError({"unsupported", recipe.entry.u8string(), "Starter torque is unavailable in driven mode"});
-    }
-    PreparedEngine candidate;
-    candidate.recipe = recipe;
-    candidate.config = config;
+        (config.simulationHz != 0 && (config.simulationHz < (config.desktop ? 400U : 4000U)
+                                  || config.simulationHz > (config.desktop ? 400000U : 96000U))))
+        throw EngineLoadError({"configuration", entry.u8string(), "Invalid frequency or starter torque"});
+    if (config.mode == ES_DRIVEN && config.starterTorqueNm != 0)
+        throw EngineLoadError({"unsupported", entry.u8string(), "Starter torque is unavailable in driven mode"});
+}
+PreparedEngine finishPrepared(PreparedEngine candidate, EngineDefinition definition,
+        const std::vector<es_script::ScriptInput> *expectedInputs) {
+    if (!definition.engine) throw EngineLoadError({"graph", candidate.recipe.entry.u8string(), "No engine was selected"});
+    const auto &recipe = candidate.recipe;
+    const auto config = candidate.config;
     std::set<fs::path> observed;
+    for (const auto &input : candidate.inputs) observed.insert(input.resolvedPath);
     const auto verify = [&](const es_script::ScriptInput &input) {
-        if (expectedInputs != nullptr) {
-            const auto found = std::find_if(expectedInputs->begin(), expectedInputs->end(), [&](const auto &expected) {
-                return expected.resolvedPath == input.resolvedPath;
-            });
-            if (found == expectedInputs->end() || found->bytes != input.bytes) {
-                throw EngineLoadError({"resources", input.resolvedPath.u8string(), "Preparation input changed"});
-            }
-        }
+        verifyInput(input, expectedInputs);
         observed.insert(input.resolvedPath);
     };
-    auto definition = es_script::Compiler::prepare(recipe, candidate.inputs, verify);
     auto &engine = *definition.engine;
     engine.setRandomSeed(config.seed);
-    const double frequency = config.simulationHz == 0 ? engine.getSimulationFrequency() : config.simulationHz;
-    require(std::isfinite(frequency) && frequency >= 4000 && frequency <= 96000 &&
-        std::floor(frequency) == frequency, "simulation frequency must be an integer in [4000,96000]", recipe.entry);
+    const double declaredFrequency = config.simulationHz == 0 ? engine.getSimulationFrequency() : config.simulationHz;
+    // The legacy desktop setter narrowed its positive script value to integer Hz.
+    // Keep that convention separate from the public immutable numerical profile.
+    const double frequency = config.desktop && std::isfinite(declaredFrequency)
+        ? std::trunc(declaredFrequency) : declaredFrequency;
+    require(std::isfinite(frequency) && frequency >= (config.desktop ? 400 : 4000) && frequency <= (config.desktop ? 400000 : 96000) &&
+        std::floor(frequency) == frequency, config.desktop ? "effective desktop simulation frequency must be in [400,400000]"
+                       : "simulation frequency must be an integer in [4000,96000]", recipe.entry);
     require(std::isfinite(engine.getRedline()) && engine.getRedline() > 0, "invalid engine redline", recipe.entry);
     validateGeometry(engine, recipe.entry);
     for (const auto value : {engine.getInitialJitter(), engine.getInitialNoise(), engine.getInitialHighFrequencyGain()}) {
         require(std::isfinite(value) && std::abs(value) <= std::numeric_limits<float>::max(),
             "synthesizer parameter exceeds float range", recipe.entry);
     }
-    const EngineSessionOptions options{static_cast<int>(frequency), units::torque(config.starterTorqueNm, units::Nm)};
+    const EngineSessionOptions options{config.desktop ? 0 : static_cast<int>(frequency), units::torque(config.starterTorqueNm, units::Nm)};
     candidate.session = EngineSession::prepare(std::move(definition), [&](const ImpulseResponse &response) {
         const auto path = fs::u8path(response.getFilename());
         require(std::isfinite(response.getVolume()) && std::abs(response.getVolume()) <= std::numeric_limits<float>::max(),
@@ -137,5 +143,25 @@ PreparedEngine prepareEngine(const es_script::PreparationContext &recipe, Prepar
         throw EngineLoadError({"resources", recipe.entry.u8string(), "Preparation input set changed"});
     }
     return candidate;
+}
+} // namespace
+
+PreparedEngine prepareEngine(const es_script::PreparationContext &recipe, PreparationConfig config,
+        const std::vector<es_script::ScriptInput> *expectedInputs) {
+    validateConfig(config, recipe.entry);
+    PreparedEngine candidate;
+    candidate.recipe = recipe; candidate.config = config;
+    auto definition = es_script::Compiler::prepare(recipe, candidate.inputs,
+        [&](const es_script::ScriptInput &input) { verifyInput(input, expectedInputs); });
+    return finishPrepared(std::move(candidate), std::move(definition), expectedInputs);
+}
+
+PreparedEngine prepareDesktopEngine(EngineDefinition definition) {
+    PreparedEngine candidate;
+    candidate.recipe.entry = fs::u8path(definition.sourcePath);
+    candidate.config.desktop = true;
+    if (definition.engine) candidate.config.seed = definition.engine->getRandomSeed();
+    validateConfig(candidate.config, candidate.recipe.entry);
+    return finishPrepared(std::move(candidate), std::move(definition), nullptr);
 }
 }

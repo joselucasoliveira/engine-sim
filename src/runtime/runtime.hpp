@@ -6,12 +6,14 @@
 #include "pull_engine.h"
 #include <memory>
 
+namespace desktop { class RuntimeHost; }
+
 namespace engine_sim {
 struct RuntimeTestAccess;
 class DrivenShaft;
 class Runtime {
 public:
-    explicit Runtime(es_config config) noexcept;
+    explicit Runtime(es_config config, SampleClock::Profile profile = SampleClock::Profile::Public) noexcept;
     void load(const es_script::PreparationContext &recipe);
     void reset();
     void setControls(const es_controls &controls) noexcept;
@@ -20,8 +22,11 @@ public:
     const es_telemetry &telemetry() const noexcept { return m_snapshot; }
 private:
     friend struct RuntimeTestAccess;
+    friend class desktop::RuntimeHost;
+    void adoptPrepared(PreparedEngine prepared, PullEngine::ControlLatch controls = {});
     struct Session {
-        Session(PreparedEngine value, std::uint32_t outputHz);
+        Session(PreparedEngine value, std::uint32_t outputHz, SampleClock::Profile profile,
+                PullEngine::ControlLatch controls);
         ~Session();
         void latch();
         PreparedEngine prepared;
@@ -31,6 +36,7 @@ private:
     };
     es_telemetry snapshot(const Session &session) const;
     es_config m_config;
+    SampleClock::Profile m_profile;
     es_telemetry m_snapshot{};
     std::unique_ptr<Session> m_session;
 };

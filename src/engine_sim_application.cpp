@@ -1,4 +1,5 @@
 #include "../include/engine_sim_application.h"
+#include "runtime/desktop_runtime.hpp"
 
 #include "../include/piston_object.h"
 #include "../include/connecting_rod_object.h"
@@ -12,8 +13,8 @@
 #include "../include/exhaust_system.h"
 #include "../include/feedback_comb_filter.h"
 #include "../include/utilities.h"
-#include "../include/wave_reader.h"
 #include "../include/compiled_scene.h"
+#include "../include/simulation_fault.h"
 
 #ifdef ATG_ENGINE_SIM_PIRANHA_ENABLED
 #include "../scripting/include/compiler.h"
@@ -46,12 +47,7 @@ T *appendObject(std::vector<SimulationObject *> &objects, EngineSimApplication *
     return candidate.release();
 }
 
-std::vector<int16_t> readSessionImpulse(const ImpulseResponse &response) {
-    try { return engine_sim::readImpulseWave(std::filesystem::u8path(response.getFilename())); }
-    catch (const engine_sim::WaveError &error) {
-        throw EngineLoadError({"resources", error.path.u8string(), error.reason});
-    }
-}
+
 }
 
 struct EngineSimApplication::UserInterface {
@@ -66,19 +62,16 @@ struct EngineSimApplication::UserInterface {
 };
 
 struct EngineSimApplication::PendingSession {
-    std::unique_ptr<EngineSession> session;
+    std::unique_ptr<desktop::RuntimeHost> runtime;
     std::vector<SimulationObject *> objects;
     std::unique_ptr<UserInterface> ui;
-    std::unique_ptr<desktop::EngineViews> views;
-    std::unique_ptr<desktop::EngineCommands> controls;
-    std::unique_ptr<engine_sim::PullEngine> pull;
     std::unique_ptr<desktop::AudioPacer> pacer;
     ~PendingSession() {
-        pacer.reset(); pull.reset(); controls.reset();
-        if (views) views->invalidate();
+        pacer.reset();
+        if (runtime) runtime->views().invalidate();
         ui.reset();
         releaseObjects(objects);
-        views.reset(); session.reset();
+        runtime.reset();
     }
 };
 
@@ -220,15 +213,15 @@ void EngineSimApplication::process(float frame_dt) {
 }
 
 void EngineSimApplication::serviceDesktopAudio(float seconds, bool manual) {
-    m_pullEngine->requestDesktopFrequency(m_desktopControls->pending.frequency);
+    m_runtime->requestFrequency(m_desktopControls->pending.frequency);
     const double exact = m_manualFrameFraction + clamp(static_cast<double>(seconds), 1.0 / 200, 1.0 / 30) * 44100;
     const auto frames = manual ? static_cast<std::uint32_t>(std::floor(exact)) : 0;
     const auto rejected = m_audioPacer->statistics().rejectedManualSteps;
-    m_pullEngine->beginPresentation();
+    m_runtime->beginPresentation();
     bool ok;
     try { ok = m_audioPacer->service(*m_host, m_audioSpeedDivisor, m_paused, frames); }
-    catch (...) { m_pullEngine->endPresentation(); throw; }
-    m_pullEngine->endPresentation();
+    catch (...) { m_runtime->endPresentation(); throw; }
+    m_runtime->endPresentation();
     const auto &stats = m_audioPacer->statistics();
     if (manual && ok && stats.rejectedManualSteps == rejected) m_manualFrameFraction = exact - frames;
     if (stats.rejectedManualSteps != rejected) std::cerr << "Manual step rejected: audio queue is full\n";
@@ -236,6 +229,8 @@ void EngineSimApplication::serviceDesktopAudio(float seconds, bool manual) {
         m_host->quiesceAudio();
         throw desktop::DesktopError("pull audio", m_audioPacer->fault());
     }
+    if (m_runtime->presentationTicks())
+        m_performanceCluster->addTimePerTimestepSample(m_runtime->renderCpuSeconds() / m_runtime->presentationTicks());
     m_performanceCluster->addInputBufferUsageSample(static_cast<double>(stats.ready + stats.reserved) / desktop::AudioPacer::Capacity);
     m_performanceCluster->addAudioLatencySample(static_cast<double>(stats.deviceQueued + stats.ready) / desktop::AudioPacer::Target);
 }
@@ -345,7 +340,7 @@ void EngineSimApplication::run() {
         }
         else serviceDesktopAudio(m_host->GetFrameLength(), false);
 
-        m_engineViews->collectIgnition(*m_simulator);
+        m_runtime->observePresentation();
         desktop::ScopeObservation point;
         while (m_engineViews->popScope(point)) m_oscCluster->sample(point);
         {
@@ -372,12 +367,12 @@ void EngineSimApplication::destroy() {
     if (m_destroyed) return;
     m_destroyed = true;
     if (m_host) m_host->quiesceAudio();
-    m_audioPacer.reset(); m_pullEngine.reset(); m_desktopControls.reset();
+    m_audioPacer.reset(); m_pullEngine = nullptr; m_desktopControls = nullptr;
     if (m_engineViews) m_engineViews->invalidate();
     m_userInterface.reset();
     destroyObjects();
-    m_engineViews.reset();
-    m_session.reset();
+    m_engineViews = nullptr;
+    m_runtime.reset();
     bindSession();
 
     if (m_host) { m_host->shutdown(); m_host.reset(); }
@@ -397,13 +392,20 @@ bool EngineSimApplication::loadEngine(Engine *engine, Vehicle *vehicle, Transmis
 
 bool EngineSimApplication::loadEngine(EngineDefinition definition) {
     const auto path = definition.sourcePath;
+    try { return loadRuntime(desktop::RuntimeHost::adopt(std::move(definition)), path); }
+    catch (const EngineLoadError &error) { reportLoadFailure(error.what()); }
+    catch (const std::exception &error) { reportLoadFailure(EngineLoadDiagnostic{"initialize", path, error.what()}.format()); }
+    return false;
+}
+
+bool EngineSimApplication::loadRuntime(std::unique_ptr<desktop::RuntimeHost> runtime, const std::string &path) {
     try {
         if (m_engineViews) m_engineViews->requireQuiescent();
         PendingSession candidate;
-        candidate.session = EngineSession::prepare(std::move(definition), readSessionImpulse);
+        candidate.runtime = std::move(runtime);
         // Widget initialization reads the palette and units. Roll back those values
         // on any failure; window changes are deferred until the accepted swap.
-        auto previousSettings = candidate.session->definition.applicationSettings;
+        auto previousSettings = candidate.runtime->settings();
         using std::swap;
         swap(m_applicationSettings, previousSettings);
         struct PaletteRollback {
@@ -420,11 +422,9 @@ bool EngineSimApplication::loadEngine(EngineDefinition definition) {
         } palette{*this, previousSettings};
         updatePalette();
 
-        auto *engine = candidate.session->definition.engine.get();
-        auto *simulator = candidate.session->simulator.get();
-        candidate.views = std::make_unique<desktop::EngineViews>(*simulator);
-        buildObjects(*candidate.views, candidate.objects);
-        candidate.ui = prepareUserInterface(*candidate.views);
+        auto *views = &candidate.runtime->views();
+        buildObjects(*views, candidate.objects);
+        candidate.ui = prepareUserInterface(*views);
         {
             // Stage CPU geometry against a detached buffer and viewport. A failure
             // cannot disturb the active frame's vertices or its visual bindings.
@@ -439,35 +439,26 @@ bool EngineSimApplication::loadEngine(EngineDefinition definition) {
                 EngineSimApplication &application; GeometryGenerator &buffer; EngineView *previous;
                 ~DrawingRollback() { application.m_geometryGenerator.swap(buffer); application.m_engineView = previous; }
             } drawing{*this, staging, previousView};
-            auto phase = candidate.views->present();
+            auto phase = views->present();
             for (auto *object : candidate.objects) object->generatePresentationGeometry();
             validatePreparedViews();
         }
-        const int maxDepth = engine->getMaxDepth();
-        candidate.controls = std::make_unique<desktop::EngineCommands>(*simulator, *candidate.views);
-        auto *commands = candidate.controls.get();
-        candidate.pull = std::make_unique<engine_sim::PullEngine>(*simulator,
-            [commands] { commands->latch(); }, engine_sim::SampleClock::Profile::Desktop);
-        candidate.pull->setTickCommands([commands] { commands->apply(commands->applied, false); },
-            [commands] { commands->apply(commands->pending, true); });
-        auto *observations = candidate.views.get();
-        candidate.pull->setTickObserver([observations](const Simulator &sim) { observations->sampleTick(sim); });
-        auto *pull = candidate.pull.get();
-        candidate.pacer = std::make_unique<desktop::AudioPacer>([pull] {
+        const int maxDepth = candidate.runtime->simulator()->getEngine()->getMaxDepth();
+        auto *owner = candidate.runtime.get();
+        candidate.pacer = std::make_unique<desktop::AudioPacer>([owner] {
             float sample;
-            pull->render(&sample, 1);
+            std::uint32_t written = 0;
+            owner->render(&sample, 1, written);
+            if (written != 1) throw engine_sim::SimulationFault("Desktop runtime returned no source frame");
             return sample;
         });
         candidate.pacer->setObservation({observeReadyAudio, this});
 
         if (m_audioOpen) { m_host->quiesceAudio(); m_host->resetAudioQueue(); }
         if (m_engineViews) { m_engineViews->requireQuiescent(); m_engineViews->invalidate(); }
-        m_session.swap(candidate.session);
-        m_engineViews.swap(candidate.views);
+        m_runtime.swap(candidate.runtime);
         m_objects.swap(candidate.objects);
         m_userInterface.swap(candidate.ui);
-        m_desktopControls.swap(candidate.controls);
-        m_pullEngine.swap(candidate.pull);
         m_audioPacer.swap(candidate.pacer);
         m_manualFrameFraction = 0;
         bindSession();
@@ -485,10 +476,13 @@ bool EngineSimApplication::loadEngine(EngineDefinition definition) {
 }
 
 void EngineSimApplication::bindSession() {
-    m_iceEngine = m_session ? m_session->definition.engine.get() : nullptr;
-    m_vehicle = m_session ? m_session->definition.vehicle.get() : nullptr;
-    m_transmission = m_session ? m_session->definition.transmission.get() : nullptr;
-    m_simulator = m_session ? m_session->simulator.get() : nullptr;
+    m_simulator = m_runtime ? m_runtime->simulator() : nullptr;
+    m_iceEngine = m_simulator ? m_simulator->getEngine() : nullptr;
+    m_vehicle = m_simulator ? m_simulator->getVehicle() : nullptr;
+    m_transmission = m_simulator ? m_simulator->getTransmission() : nullptr;
+    m_engineViews = m_runtime ? &m_runtime->views() : nullptr;
+    m_desktopControls = m_runtime ? &m_runtime->commands() : nullptr;
+    m_pullEngine = m_runtime ? &m_runtime->pull() : nullptr;
     m_engineView = m_userInterface ? m_userInterface->engineView : nullptr;
     m_rightGaugeCluster = m_userInterface ? m_userInterface->rightGauge : nullptr;
     m_oscCluster = m_userInterface ? m_userInterface->oscilloscope : nullptr;
@@ -585,14 +579,9 @@ const SimulationObject::ViewParameters &
 bool EngineSimApplication::loadScript() {
 #ifdef ATG_ENGINE_SIM_PIRANHA_ENABLED
     try {
-        es_script::Compiler compiler;
-        compiler.initialize({m_resources.library.u8string(), m_resources.assets.u8string()});
-        std::ostringstream diagnostics;
-        if (!compiler.compile(m_resources.script.u8string(), diagnostics)) {
-            reportLoadFailure(compiler.getLastError().format() + "\n" + diagnostics.str());
-            return false;
-        }
-        return loadEngine(compiler.execute());
+        if (m_engineViews) m_engineViews->requireQuiescent();
+        return loadRuntime(desktop::RuntimeHost::prepare({m_resources.script, m_resources.library, m_resources.assets}),
+            m_resources.script.u8string());
     }
     catch (const std::exception &error) { reportLoadFailure(error.what()); }
 #else

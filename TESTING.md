@@ -117,3 +117,10 @@ per-block frame counts. A duration of `B/100` seconds has `441 * B` samples on
 the half-open grid. The legacy synthesizer may also emit the endpoint sample,
 which is retained in the raw reference. The seven reference cases and their
 original trace columns remain available through `--suite reference`.
+
+
+Desktop source ownership is exercised with `ctest --preset desktop -L '^r2-desktop$' --no-tests=error --output-on-failure`. These cases render through the private runtime owner, then exercise stopped/partial/wrapped device requests, live numerical-rate changes, control-timeline partition equivalence, staged reset/input identity, stale observations and real fault prefixes. The existing pacing and view suites remain separate. Automated native tests use the documented virtual audio and X11 conditions.
+
+The desktop's `RT/dT` gauge measures time spent rendering source PCM, divided by completed physics ticks in that presentation interval. It includes solver, native DSP and runtime observation bookkeeping. A frame that produces no source does not invent a timing sample or advance the model. Queue occupancy, source faults, discarded frames and device starvation remain transport diagnostics; UI frame rate determines presentation only. This is a cost diagnostic, not an audio-callback deadline guarantee.
+
+Desktop script rates retain their legacy conversion to an effective integer rate before checking the private 400..400000 Hz profile. Public runtime script rates remain integral in 4000..96000 Hz. Live desktop tuning finishes the old numerical tick before applying the new rate, retaining source and transport phase.

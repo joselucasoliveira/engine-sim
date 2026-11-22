@@ -267,6 +267,13 @@ if (DISCORD_ENABLED)
     set_property(TARGET discord PROPERTY FOLDER "discord")
 endif ()
 
+if (PIRANHA_ENABLED AND (ENGINE_SIM_BUILD_RUNTIME OR ENGINE_SIM_BUILD_DESKTOP OR (BUILD_TESTING AND ENGINE_SIM_BUILD_HOST_TESTS)))
+    add_library(engine-sim-runtime-backend STATIC src/runtime/runtime.cpp)
+    target_link_libraries(engine-sim-runtime-backend PRIVATE engine-sim-script-interpreter)
+    target_compile_features(engine-sim-runtime-backend PRIVATE cxx_std_17)
+    engine_sim_diagnose(engine-sim-runtime-backend TRUE)
+endif ()
+
 if ((BUILD_TESTING AND ENGINE_SIM_BUILD_HOST_TESTS) OR ENGINE_SIM_BUILD_DESKTOP)
     add_library(engine-sim-host STATIC src/desktop_math.cpp src/desktop_host.cpp src/desktop_audio_pacer.cpp)
     target_include_directories(engine-sim-host PUBLIC include)
@@ -277,12 +284,18 @@ if ((BUILD_TESTING AND ENGINE_SIM_BUILD_HOST_TESTS) OR ENGINE_SIM_BUILD_DESKTOP)
 endif ()
 
 if (PIRANHA_ENABLED AND ((BUILD_TESTING AND ENGINE_SIM_BUILD_HOST_TESTS) OR ENGINE_SIM_BUILD_DESKTOP))
+    add_library(engine-sim-desktop-runtime STATIC src/runtime/desktop_runtime.cpp src/desktop_engine_views.cpp)
+    target_link_libraries(engine-sim-desktop-runtime PRIVATE engine-sim-runtime-backend engine-sim-script-interpreter)
+    target_compile_features(engine-sim-desktop-runtime PRIVATE cxx_std_17)
+    engine_sim_diagnose(engine-sim-desktop-runtime TRUE)
+    if (NOT MSVC)
+        target_compile_options(engine-sim-desktop-runtime PRIVATE -ffp-contract=off)
+    endif ()
     add_library(engine-sim-frontend STATIC
         src/engine_sim_application.cpp
         src/desktop_run.cpp
         src/geometry_generator.cpp
         src/simulation_object.cpp
-        src/desktop_engine_views.cpp
         src/piston_object.cpp
         src/connecting_rod_object.cpp
         src/ui_element.cpp
@@ -312,7 +325,8 @@ if (PIRANHA_ENABLED AND ((BUILD_TESTING AND ENGINE_SIM_BUILD_HOST_TESTS) OR ENGI
         src/mixer_cluster.cpp
         src/info_cluster.cpp
     )
-    target_link_libraries(engine-sim-frontend PUBLIC engine-sim-script-interpreter engine-sim-host)
+    target_link_libraries(engine-sim-frontend PUBLIC engine-sim-script-interpreter engine-sim-host
+        PRIVATE engine-sim-desktop-runtime)
     if (TARGET engine-sim-host-resources)
         target_link_libraries(engine-sim-frontend PUBLIC engine-sim-host-resources)
     endif ()
@@ -438,12 +452,16 @@ if (BUILD_TESTING)
         add_subdirectory(test/script)
         if (TARGET engine-sim-host)
             add_executable(engine-sim-pacing-test test/desktop_audio_pacing_tests.cpp)
-            target_link_libraries(engine-sim-pacing-test PRIVATE gtest_main engine-sim-host engine-sim-script-interpreter)
+            target_link_libraries(engine-sim-pacing-test PRIVATE gtest_main engine-sim-host engine-sim-script-interpreter engine-sim-desktop-runtime)
             engine_sim_diagnose(engine-sim-pacing-test TRUE)
             file(MAKE_DIRECTORY "${PROJECT_BINARY_DIR}/pacing-working")
-            gtest_discover_tests(engine-sim-pacing-test DISCOVERY_TIMEOUT 30
+            gtest_discover_tests(engine-sim-pacing-test TEST_FILTER "DesktopPacing.*" DISCOVERY_TIMEOUT 30
                 WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/pacing-working"
                 PROPERTIES LABELS "r2-desktop-pacing" TIMEOUT 180
+                ENVIRONMENT "ENGINE_SIM_TEST_SOURCE=${PROJECT_SOURCE_DIR}")
+            gtest_discover_tests(engine-sim-pacing-test TEST_FILTER "RuntimeDesktop.*" DISCOVERY_TIMEOUT 30
+                WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/pacing-working"
+                PROPERTIES LABELS "r2-desktop" TIMEOUT 180
                 ENVIRONMENT "ENGINE_SIM_TEST_SOURCE=${PROJECT_SOURCE_DIR}")
         endif ()
     endif ()
@@ -457,10 +475,10 @@ if (ENGINE_SIM_BUILD_RUNTIME)
     if (ENGINE_SIM_RUNTIME_SHARED)
         set(engine_sim_runtime_kind SHARED)
     endif ()
-    add_library(engine-sim-runtime ${engine_sim_runtime_kind} src/runtime/runtime.cpp)
+    add_library(engine-sim-runtime ${engine_sim_runtime_kind} src/runtime/api.cpp)
     add_library(EngineSim::Runtime ALIAS engine-sim-runtime)
     target_include_directories(engine-sim-runtime PUBLIC "$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>")
-    target_link_libraries(engine-sim-runtime PRIVATE engine-sim-script-interpreter)
+    target_link_libraries(engine-sim-runtime PRIVATE engine-sim-runtime-backend engine-sim-script-interpreter)
     target_compile_features(engine-sim-runtime PUBLIC cxx_std_17)
     engine_sim_diagnose(engine-sim-runtime TRUE)
 endif ()

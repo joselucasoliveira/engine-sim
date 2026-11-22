@@ -1,4 +1,5 @@
 #include "desktop_audio_pacer.h"
+#include "../src/runtime/desktop_runtime.hpp"
 #include "prepared_engine.h"
 #include "pull_engine.h"
 #include "simulation_fault.h"
@@ -9,7 +10,19 @@
 #include <cstdlib>
 #include <deque>
 #include <filesystem>
+#include <chrono>
+#include <fstream>
+#include <sstream>
+#include <limits>
 
+namespace engine_sim {
+struct RuntimeTestAccess {
+    static void corruptDesktopBody(desktop::RuntimeHost &host) {
+        host.m_runtime.m_session->prepared.session->definition.engine->getCrankshaft(0)->m_body.p_x =
+            std::numeric_limits<double>::quiet_NaN();
+    }
+};
+}
 namespace {
 using desktop::AudioPacer;
 class Device final : public desktop::Host {
@@ -258,4 +271,148 @@ TEST(DesktopPacing, RealPullPcmMatchesItsContinuousControlTimeline) {
     EXPECT_EQ(a.session->simulator->synthesizer().getDroppedInputSamples(), 0u);
     EXPECT_EQ(a.session->simulator->synthesizer().getBufferStatistics().droppedOutput, 0u);
 }
+
+namespace fs = std::filesystem;
+fs::path runtimeFixture() {
+    const auto *root=std::getenv("ENGINE_SIM_TEST_SOURCE");
+    if (!root) throw std::runtime_error("Missing explicit fixture source");
+    return fs::u8path(root)/"examples/runtime/fixture";
+}
+es_script::PreparationContext recipeAt(const fs::path &root) { return {root/"main.mr",root/"library",root}; }
+struct DesktopFiles {
+    fs::path root=fs::current_path()/fs::u8path("owner space Ω-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    DesktopFiles() { fs::copy(runtimeFixture(),root,fs::copy_options::recursive); }
+    ~DesktopFiles() { std::error_code error;fs::remove_all(root,error); }
+};
+float runtimeSample(desktop::RuntimeHost &host) {
+    float sample=123;std::uint32_t written=0;host.render(&sample,1,written);
+    if (written!=1) throw engine_sim::SimulationFault("Missing source frame");
+    return sample;
+}
+
+TEST(RuntimeDesktop, StoppedPartialAndWrappedDeviceRequestsUseOnlyCommittedRuntimePcm) {
+    auto host=desktop::RuntimeHost::prepare(recipeAt(runtimeFixture()));
+    host->commands().setStarter(true);host->commands().setIgnition(true);host->commands().setDemand(.25);host->commands().flush();
+    std::vector<std::int16_t> expected;
+    AudioPacer pacer([&] { const auto sample=runtimeSample(*host);expected.push_back(static_cast<std::int16_t>(sample*32768));return sample; });
+    Device device;device.partial=13;
+    const auto service=[&] {
+        host->beginPresentation();const bool result=pacer.service(device,1,false);host->endPresentation();return result;
+    };
+    ASSERT_TRUE(service());const auto filled=host->counts().frames;EXPECT_EQ(filled,AudioPacer::Target);
+    for (int i=0;i<100;++i) { ASSERT_TRUE(service());EXPECT_EQ(host->counts().frames,filled);EXPECT_EQ(host->presentationTicks(),0u);EXPECT_DOUBLE_EQ(host->renderCpuSeconds(),0); }
+    for (int i=0;i<200;++i) {device.consume(10);ASSERT_TRUE(service());}
+    EXPECT_EQ(host->counts().frames,pacer.statistics().generatedSource);
+    EXPECT_EQ(pacer.statistics().requestedSource,pacer.statistics().generatedSource);
+    EXPECT_EQ(host->counts().frames,filled+2000);EXPECT_EQ(host->telemetry().frames,host->counts().frames);
+    ASSERT_LE(device.submitted.size(),expected.size());EXPECT_TRUE(std::equal(device.submitted.begin(),device.submitted.end(),expected.begin()));
+    EXPECT_EQ(device.silence,0u);EXPECT_EQ(pacer.statistics().discarded,0u);EXPECT_EQ(pacer.statistics().sourceFaults,0u);
+    EXPECT_LE(pacer.statistics().maximumQueued,AudioPacer::Target);
+    EXPECT_EQ(host->simulator()->synthesizer().getDroppedInputSamples(),0u);
+    EXPECT_EQ(host->simulator()->synthesizer().getDroppedOutputSamples(),0u);
+}
+
+TEST(RuntimeDesktop, PartitionsRateChangesAndNamedCommandsPreservePcmAndPhysicalPhase) {
+    auto a=desktop::RuntimeHost::prepare(recipeAt(runtimeFixture())),b=desktop::RuntimeHost::prepare(recipeAt(runtimeFixture()));
+    const std::array<std::uint32_t,9> events{0,1,147,160,1600,4409,6000,7000,10000};
+    const auto render=[&](desktop::RuntimeHost &host,bool chopped) {
+        std::vector<float> output(12000);std::size_t first=0;
+        for (std::size_t event=0;event<events.size();++event) {
+            const auto at=events[event],end=event+1<events.size()?events[event+1]:static_cast<std::uint32_t>(output.size());
+            auto &commands=host.commands();commands.setDemand(event%2?.6:.25);commands.setIgnition(event!=8);commands.setStarter(event<4);
+            commands.setClutch(event>=6?.5:0);commands.changeGear(event>=6?0:-1);
+            commands.setDyno(event==7,true,units::rpm(1000));
+            commands.setFrequency(event==5?4000:event==6?32000:10000);
+            auto mixer=commands.mixer();mixer.volume=event%2?.4f:.25f;commands.setMixer(mixer);commands.flush();
+            host.requestFrequency(commands.pending.frequency);
+            EXPECT_EQ(first,at);
+            for (;first<end;) {
+                const auto count=static_cast<std::uint32_t>(chopped?std::min<std::size_t>(1+first%97,end-first):end-first);
+                std::uint32_t written=0;host.beginPresentation();host.render(output.data()+first,count,written);host.endPresentation();
+                EXPECT_EQ(written,count);first+=written;
+            }
+        }
+        return output;
+    };
+    const auto first=render(*a,false),second=render(*b,true);
+    EXPECT_EQ(first,second);EXPECT_EQ(a->counts().frames,12000u);EXPECT_EQ(a->counts().nativeFrames,12000u);
+    EXPECT_EQ(a->counts().ticks,b->counts().ticks);
+    EXPECT_EQ(a->simulator()->getEngine()->getCrankshaft(0)->m_body.theta,b->simulator()->getEngine()->getCrankshaft(0)->m_body.theta);
+    EXPECT_EQ(a->simulator()->getTransmission()->getGear(),0);
+    EXPECT_DOUBLE_EQ(a->simulator()->getTransmission()->getClutchPressure(),.5);
+}
+
+TEST(RuntimeDesktop, ResetCandidateVerifiesOwnedInputsAndRetiresPreviousGenerationOnPublication) {
+    DesktopFiles files;const auto recipe=recipeAt(files.root);
+    auto host=desktop::RuntimeHost::prepare(recipe);
+    host->commands().setStarter(true);host->commands().setIgnition(true);host->commands().flush();
+    std::array<float,441> samples{};std::uint32_t written=0;host->render(samples.data(),samples.size(),written);
+    auto previous=host->views().at<Engine>();auto replacement=host->resetCandidate();
+    EXPECT_EQ(host->counts().frames,441u);EXPECT_EQ(replacement->counts().frames,0u);
+    EXPECT_NE(previous.generation(),replacement->views().at<Engine>().generation());
+    {auto phase=host->views().present();EXPECT_TRUE(previous->getIgnitionModule()->m_enabled);}
+    host=std::move(replacement);EXPECT_FALSE(previous.valid());
+    {auto phase=host->views().present();EXPECT_THROW(previous->getRpm(),std::logic_error);}
+    auto reference=desktop::RuntimeHost::prepare(recipe);
+    written=0;host->render(samples.data(),samples.size(),written);
+    std::array<float,441> expected{};written=0;reference->render(expected.data(),expected.size(),written);EXPECT_EQ(samples,expected);
+    const auto frames=host->counts().frames;auto current=host->views().at<Engine>();
+    std::ifstream source(files.root/"impulse.wav",std::ios::binary);ASSERT_TRUE(source.good());
+    std::ostringstream savedBytes;savedBytes<<source.rdbuf();const auto original=savedBytes.str();source.close();
+    {std::ofstream changed(files.root/"impulse.wav",std::ios::binary);changed<<"changed malformed impulse";}
+    try {auto rejected=host->resetCandidate();FAIL()<<"Changed input was accepted";}
+    catch(const EngineLoadError &error) {EXPECT_EQ(error.diagnostic.stage,"resources");}
+    EXPECT_EQ(host->counts().frames,frames);EXPECT_TRUE(current.valid());
+    written=0;host->render(samples.data(),samples.size(),written);written=0;reference->render(expected.data(),expected.size(),written);EXPECT_EQ(samples,expected);
+    {std::ofstream restored(files.root/"impulse.wav",std::ios::binary);restored<<original;}
+}
+
+TEST(RuntimeDesktop, PrivatePreparationAdmitsLegacyRatesWithoutChangingPublicLimitsOrSeed) {
+    DesktopFiles files;const auto recipe=recipeAt(files.root);
+    std::ifstream source(files.root/"main.mr");std::ostringstream contents;contents<<source.rdbuf();source.close();const auto original=contents.str();
+    const auto field=original.find("simulation_frequency: 10000");ASSERT_NE(field,std::string::npos);
+    for (double declared:{400.0,400000.0,400.75,400000.75,10000.75}) {
+        const auto frequency=static_cast<unsigned>(declared);
+        auto text=original;text.replace(field,std::string("simulation_frequency: 10000").size(),"simulation_frequency: "+std::to_string(declared));
+        {std::ofstream target(files.root/"main.mr");target<<text;}
+        EXPECT_THROW(engine_sim::prepareEngine(recipe),EngineLoadError);
+        auto host=desktop::RuntimeHost::prepare(recipe);EXPECT_EQ(host->simulator()->getSimulationFrequency(),frequency);
+        auto view=host->views().at<Engine>();const auto generation=view.generation();
+        float sample;std::uint32_t written=0;host->render(&sample,1,written);EXPECT_EQ(written,1u);
+        if(frequency==400) {
+            EXPECT_EQ(host->counts().ticks,0u);
+            host->commands().setFrequency(400000);host->commands().flush();host->requestFrequency(400000);
+            std::array<float,111> rest{};written=0;host->render(rest.data(),rest.size(),written);
+            EXPECT_EQ(host->counts().frames,112u);EXPECT_EQ(host->counts().ticks,16u);
+        }
+        EXPECT_EQ(view.generation(),generation);
+    }
+    std::vector<es_script::ScriptInput> inputs;auto definition=es_script::Compiler::prepare(recipe,inputs);
+    definition.engine->setRandomSeed(123);auto adopted=desktop::RuntimeHost::adopt(std::move(definition));
+    EXPECT_EQ(adopted->simulator()->getEngine()->getRandomSeed(),123u);
+}
+
+TEST(RuntimeDesktop, FaultsPublishOnlyCompletedFramesAndNeverAdvanceWhileAViewIsLeased) {
+    static_assert(desktop::RuntimeHost::MaxRenderFrames==AudioPacer::Capacity);
+    auto host=desktop::RuntimeHost::prepare(recipeAt(runtimeFixture()));
+    std::uint32_t empty=0;host->render(nullptr,0,empty);EXPECT_EQ(host->counts().frames,0u);
+    float canary=123;EXPECT_THROW(host->render(&canary,desktop::RuntimeHost::MaxRenderFrames+1,empty),std::length_error);
+    EXPECT_FLOAT_EQ(canary,123);EXPECT_EQ(host->counts().frames,0u);EXPECT_EQ(host->telemetry().state,ES_READY);
+    std::array<float,441> output;output.fill(123);std::uint32_t written=0;
+    {auto phase=host->views().present();EXPECT_THROW(host->render(output.data(),output.size(),written),std::logic_error);
+        EXPECT_THROW(host->endPresentation(),std::logic_error); }
+    EXPECT_EQ(written,0u);EXPECT_EQ(host->counts().frames,0u);
+    engine_sim::RuntimeTestAccess::corruptDesktopBody(*host);
+    EXPECT_THROW(host->render(output.data(),output.size(),written),engine_sim::SimulationFault);
+    EXPECT_EQ(written,4u);EXPECT_EQ(host->telemetry().frames,written);EXPECT_EQ(host->telemetry().state,ES_FAULTED);
+    EXPECT_TRUE(std::all_of(output.begin()+written,output.end(),[](float sample){return sample==123;}));
+    const auto frames=host->counts().frames;written=0;EXPECT_THROW(host->render(output.data(),1,written),engine_sim::SimulationFault);
+    EXPECT_EQ(written,0u);EXPECT_EQ(host->counts().frames,frames);
+    auto transported=desktop::RuntimeHost::prepare(recipeAt(runtimeFixture()));engine_sim::RuntimeTestAccess::corruptDesktopBody(*transported);
+    Device device;AudioPacer pacer([&] {return runtimeSample(*transported);});
+    EXPECT_FALSE(pacer.service(device,1,false));EXPECT_EQ(pacer.statistics().sourceFaults,1u);
+    EXPECT_EQ(pacer.statistics().generatedSource,4u);EXPECT_EQ(device.submitted.size(),4u);
+    EXPECT_EQ(transported->telemetry().frames,4u);EXPECT_EQ(pacer.statistics().discarded,0u);
+}
+
 }
