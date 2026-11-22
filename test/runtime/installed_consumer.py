@@ -11,6 +11,13 @@ import sys
 
 PUBLIC = {'es_api_version','es_capabilities','es_config_init','es_create','es_load','es_set_controls','es_render','es_get_telemetry','es_reset','es_unload','es_destroy'}
 
+def file_sha256(path):
+    digest = hashlib.sha256()
+    with path.open('rb') as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b''):
+            digest.update(block)
+    return digest.hexdigest()
+
 def command(argv, cwd, report, env=None):
     result = subprocess.run(list(map(str, argv)), cwd=cwd, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     report.append({'argv':list(map(str, argv)), 'cwd':str(cwd), 'exit':result.returncode, 'output':result.stdout})
@@ -156,7 +163,7 @@ def main():
         result['host']={'system':platform.system(),'machine':platform.machine(),'python':sys.version}
         result['original_prefix_absent']=not prefix.exists();assert result['original_prefix_absent']
         result['outer_commands']=report
-        result['installed_files']={p.relative_to(moved).as_posix():hashlib.file_digest(p.open('rb'),'sha256').hexdigest() for p in sorted(moved.rglob('*')) if p.is_file()}
+        result['installed_files']={p.relative_to(moved).as_posix():file_sha256(p) for p in sorted(moved.rglob('*')) if p.is_file()}
     except Exception as error:
         result={'status':'fail','error':str(error),'outer_commands':report}
     (out/'result.json').write_text(json.dumps(result,indent=2)+'\n')

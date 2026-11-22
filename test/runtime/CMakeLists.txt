@@ -122,6 +122,9 @@ endif ()
 
 if (TARGET engine-sim-runtime)
     find_package(Python3 3.9 COMPONENTS Interpreter REQUIRED)
+    add_test(NAME RuntimeConsumerTools COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/consumer_tool_tests.py"
+        --out "${CMAKE_CURRENT_BINARY_DIR}/consumer-tool-working")
+    set_tests_properties(RuntimeConsumerTools PROPERTIES LABELS "r2-sdk-tools" TIMEOUT 60)
     # Timings require an optimized, unsanitized static implementation. The probe
     # is a different executable so allocation and stage clocks cannot affect it.
     if (NOT ENGINE_SIM_RUNTIME_SHARED AND ENGINE_SIM_SANITIZER STREQUAL "none")
