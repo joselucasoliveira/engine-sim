@@ -14,6 +14,17 @@ Prepare a focused branch, add a regression that distinguishes the corrected beha
 
 Keep build output, PCM captures, traces, coverage, large test cases and machine-specific settings out of the source tree. A reusable small fixture should include its origin, permitted uses, hash and the property it tests. A solver or audio change should include comparable before/after evidence and explain intentional differences. Identify device, headless and native validation individually.
 
+For a runtime issue, include static/shared selection, ABI/capabilities, output and
+numerical rates, mode, seed, exact input identities and complete controls at
+absolute frame indices. Keep event times fixed when comparing block partitions;
+record requested/written frames, status and the last coherent telemetry. For a
+desktop queue issue, separate source production, ready/reserved PCM, transport
+submission, actual device consumption, drops and inserted silence. Include
+pause/reload boundaries and distinguish initialization from stabilized idle.
+Never use a timed offline render as a callback deadline or physical playback
+claim. Follow the [integration contracts](docs/runtime-guide.md) and preserve
+the native tuple and first failure with the result.
+
 Preserve the first failing log when retrying. Keep reference captures and calibrated comparison policies immutable; explain each intended signal change. Reusable third-party material needs its exact source and applicable notice. Do not infer recording or SDK redistribution rights from the root license. See [third-party notices](THIRD_PARTY_NOTICES.md).
 
 ## Optional Discord presence

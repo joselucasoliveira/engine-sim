@@ -313,3 +313,21 @@ digest rejection, actual executable discovery and required workflow controls.
 Its deliberate guard inputs and local syntax checks are not native Windows or
 macOS runs. Those exact-revision execution cells remain pending until their
 actual reports are available.
+
+## Documentation and ordinary consumers
+
+The [integration guide](docs/runtime-guide.md) defines every output/prefix variable
+and executes from an ordinary clone with only the public bootstrap, pinned solver
+and parser, and verified dependency archives. Its C11 and C++17 projects compile
+against an installed header/target; the shared example also loads via ctypes.
+The documented 48 kHz schedule releases the starter at frame 48000 and writes
+96000 float frames. Check RIFF format tag 3, mono/rate/byte rate, fact count and
+data length independently of the renderer's exit status. Use a fresh destination.
+The C and C++ examples report 88200 and 96000 completed frames respectively.
+
+Run the `r2-example` selection with `--no-tests=error`, then the full runtime
+suite as documented above. Validate code-only and opt-in static/shared installs
+in separate prefixes; the installed-consumer test deliberately relocates its
+prefix, so do not point it at a personal SDK installation. Check local Markdown
+paths/anchors after documentation edits. Keep builds, logs, WAVs and command
+receipts outside the checkout; documentation must not depend on them.

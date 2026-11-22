@@ -115,9 +115,17 @@ The installed application uses executable-relative resources and needs no networ
 
 ## Embedding with the C runtime SDK
 
-The device-free SDK builds with the locked solver, Piranha and Boost prerequisites. Use an absolute external `ES_OUT`, initialize the solver and Piranha submodules, then run:
+The device-free SDK builds with the locked solver, Piranha and Boost prerequisites.
+From the ordinary checkout with the native compiler, Ninja and parser tools above:
 
 ```sh
+set -e
+export CMAKE_GENERATOR=Ninja
+export ES_OUT="$(cd .. && pwd)/engine-sim-runtime-output"
+export SDK_PREFIX="$ES_OUT/sdk-static"
+export CONSUMER_BUILD="$ES_OUT/client-static"
+git submodule update --init dependencies/submodules/simple-2d-constraint-solver \
+  dependencies/submodules/piranha
 python3 -B tools/bootstrap.py --profile runtime --out "$ES_OUT"
 cmake --preset runtime-static -DENGINE_SIM_INSTALL_RUNTIME_EXAMPLE=ON
 cmake --build --preset runtime-static --config Release
@@ -135,6 +143,6 @@ cmake -S examples/runtime/consumer -B "$CONSUMER_BUILD" -DCMAKE_PREFIX_PATH="$SD
 cmake --build "$CONSUMER_BUILD" --config Release
 ```
 
-Run either consumer with three absolute UTF-8 arguments: entry script, library directory and asset directory. The C consumer renders 88200 native frames; the C++ consumer renders 96000 frames at 48 kHz. They use caller-owned PCM and release handles only through `es_destroy`. See `docs/runtime-abi.md` for controls, counters and recovery. No audio device is opened.
+Run either consumer with three absolute UTF-8 arguments: entry script, library directory and asset directory. The C consumer renders 88200 native frames; the C++ consumer renders 96000 frames at 48 kHz. They use caller-owned PCM and release handles only through `es_destroy`. The [integration guide](docs/runtime-guide.md) provides the complete static/shared run commands, optional CLI/ctypes examples, control timeline, compatibility and measured limits. The [ABI reference](docs/runtime-abi.md) specifies controls, counters and recovery. No audio device is opened.
 
 `runtime-test` provides private static unit tests. Shared SDK consumers run in separate processes to keep one implementation and one set of parser globals per process. `python3 -B test/runtime/installed_consumer.py --prefix "$SDK_PREFIX" --variant static --out "$FRESH_EXTERNAL_RESULT"` moves the prefix to a Unicode path and validates both consumers; select `shared` for a shared installation. On Linux it requires bubblewrap and isolates source, producer build and desktop/device services. Other native hosts record relocation checks separately from source-hidden qualification.

@@ -1,9 +1,10 @@
 # Runtime C ABI version 1
 
 The [runtime header](../include/engine_sim/runtime.h) defines the version 1
-contract for C11 and C++17 hosts. The build provides the static
-`EngineSim::Runtime` target and declaration/layout checks. Installed SDK
-packaging is separate from this build target.
+contract for C11 and C++17 hosts. Static and shared SDK installations both
+provide `EngineSim::Runtime`, with relative installed dependencies and only
+the eleven C exports in the shared library. Start with the
+[integration guide](runtime-guide.md) for complete build and usage commands.
 
 ## Platform and compatibility
 
@@ -49,6 +50,111 @@ A caller may pass an optional 512-byte `es_error`, including before a handle
 exists. Each call that accepts an error record clears the message on success
 or writes a bounded, NUL-terminated UTF-8 diagnostic on failure. Retain a
 diagnostic by using different error storage for subsequent calls.
+
+The constants are nonnegative signed `es_status` values: OK=0, INVALID=1,
+VERSION=2, UNSUPPORTED=3, STATE=4, SCRIPT=5, RESOURCE=6, MODEL=7, CAPACITY=8,
+NO_MEMORY=9, RENDER_FAULT=10 and INTERNAL=11. Check against `ES_OK`, not a
+negative-error convention. Exceptions stay inside the library. Allocation
+failure and unexpected exceptions during rendering still obey the completed
+prefix rule. A diagnostic may be truncated at a UTF-8 boundary; it is not a
+process-global last error.
+
+## Configuration and controls
+
+Configuration is fixed for the handle's lifetime. Initialize it with
+`es_config_init(ES_ABI_V1, sizeof config, &config, &error)` before editing fields.
+No packing pragma or foreign allocation ownership is part of this ABI.
+
+| Configuration field | Default | Accepted value |
+| --- | --- | --- |
+| `output_hz` | 44100 | 44100 or 48000 Hz, mono float32 |
+| `mode` | `ES_FREE` (0) | FREE or `ES_DRIVEN` (1) |
+| `seed` | 1 | Every unsigned 64-bit value |
+| `simulation_hz` | 0 | Script's rate, or integer override 4000–96000 Hz |
+| `flags` | 0 | Zero; unknown bits return `ES_UNSUPPORTED` |
+| `starter_torque_nm` | 0 | Inherit the model, or finite (0,10000] N·m in FREE; zero only in DRIVEN |
+
+A script's selected numerical rate must also be a finite integer in
+4000–96000 Hz unless a supported creation override supplies the rate. Changing
+configuration requires a fresh handle. The starter keeps the model's signed
+speed and rotation direction; a torque override changes its ceiling only.
+
+All control defaults are zero. Set `size` and `abi`, then supply the entire
+vector; an invalid field rejects the vector without changing pending controls.
+Finite numeric values are required, including when another field disables an
+operation. Demand has no runtime smoothing.
+
+| Control field | Range and physical meaning |
+| --- | --- |
+| `ignition` | 0 or 1; enables spark, not pause or guaranteed silence |
+| `starter` | 0 or 1 in FREE; uses model torque/speed; DRIVEN requires zero |
+| `demand` | [0,1]; model driver demand through its direct linkage or governor |
+| `load_nm` | [0,10000] N·m; independent output-crank load, described below |
+| `driven_rpm` | [0,`driven_limit_rpm`] clockwise in DRIVEN; FREE requires zero |
+
+Nonfinite values, invalid booleans and out-of-range numbers return `ES_INVALID`;
+recognized but incompatible mode/control combinations return `ES_UNSUPPORTED`.
+Controls latch at the next eligible tick start, persist until replaced and are
+reset to defaults by successful load/reset. For simultaneous setters the last
+valid complete vector wins. Split rendering at each absolute event frame.
+
+## Calls and states
+
+The header gives the exact cdecl signatures. All status-returning calls accept
+optional caller-owned `es_error *`; queries and destruction do not need one.
+
+| Function | Result and storage contract |
+| --- | --- |
+| `es_api_version` | Immutable packed major/minor, currently `ES_ABI_V1` |
+| `es_capabilities` | Independent feature bits for FREE, both rates, LOAD, DRIVEN, RESET and parallel prepared rendering |
+| `es_config_init` | Write the known default prefix only on success; retain supplied compatible ABI and capacity |
+| `es_create` | Validate configuration; clear a valid output slot on entry, then return an EMPTY handle on success |
+| `es_load` | Borrow three absolute UTF-8 paths during preparation; transactionally replace the session |
+| `es_set_controls` | Accept or reject one whole requested vector |
+| `es_render` | Zero required `written` on entry; fill at most the requested/capacity extent; return only completed frames |
+| `es_get_telemetry` | Copy a coherent snapshot without advancing; preserve caller size/ABI/tail and leave the record unchanged on error |
+| `es_reset` | Reprepare the original input identity/configuration/seed and replace only on success |
+| `es_unload` | Discard without filesystem reads; idempotent |
+| `es_destroy` | Release through the library; NULL accepted; no call may subsequently use the handle |
+
+| State | Permitted instance calls | Transitions |
+| --- | --- | --- |
+| `ES_EMPTY` (0) | telemetry, load, unload, destroy | Load → READY; reset/control/render return `ES_STATE` |
+| `ES_READY` (1) | All calls | Successful load/reset → fresh READY; unload → EMPTY; computation fault → FAULTED |
+| `ES_FAULTED` (2) | telemetry, load, reset, unload, destroy | Successful load/reset → READY; unload → EMPTY; render/control return `ES_STATE` |
+
+Rendering successfully keeps the state READY. There is no separate running
+state. Preflight failures and failed preparation preserve the current state.
+Callers supply valid aligned, accessible, nonoverlapping pointers; the API does
+not validate arbitrary invalid memory or races. Record headers must themselves
+be accessible even when reporting a short record. Zero-frame rendering may
+use a NULL PCM pointer in READY and advances nothing; a faulted handle remains
+faulted. A required output slot must not already own another handle.
+
+## Telemetry units and observation time
+
+Initialize telemetry `size` and `abi` before calling `es_get_telemetry`. The
+snapshot never reads a device or advances the source. `reserved` is zero.
+
+| Fields | Meaning |
+| --- | --- |
+| `state`, `mode`, `output_hz`, `simulation_hz` | Lifecycle, immutable mode/output rate and prepared numerical rate |
+| `frames`, `ticks`, `native_frames` | Completed host intervals, completed physics ticks and generated native samples |
+| `cylinders`, `displacement_m3` | Loaded cylinder count and total displacement in cubic metres |
+| `measured_rpm` | Magnitude: `abs(crank_rad_s) * 60 / (2*pi)` |
+| `crank_rad_s` | Signed output-crank angular velocity, counterclockwise positive; forward driven rotation is negative |
+| `cycle_rad` | Model output-crank phase in [0,4*pi), relative to its TDC |
+| `plate_angle_rad` | Actual first-intake plate angle in radians, separate from demand |
+| `requested_load_nm` | Latest accepted load request, including a request awaiting a tick |
+| `load_reaction_nm`, `drive_reaction_nm` | Actual last completed tick reactions, counterclockwise positive N·m |
+| `applied_driven_rpm`, `driven_limit_rpm` | Last completed tick's target and validated loaded-model command ceiling; zero in FREE |
+
+Before the first tick, reactions and applied drive target are zero and angles
+reflect the prepared model. EMPTY retains configured mode/output rate but zeros
+simulation/model/control fields and counters. FAULTED exposes the last completed
+frame's snapshot with the fault state, even if internal computation partially
+advanced before failing. An accepted load request is visible immediately;
+the corresponding actual reaction can still describe the preceding tick.
 
 ## Reset and independent instance lifetimes
 

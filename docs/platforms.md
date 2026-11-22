@@ -28,7 +28,14 @@ The runtime allowlist includes complete notices for its selected inputs. The roo
 
 ## Device-free runtime SDK
 
-Local Linux x86_64/GCC 14.2 and Clang 19 checks exercise static/shared SDK links,
+The implementation at `254989e861f83a029b7e6f9570be353973e0f9dc` was exercised
+locally on Debian 13/Linux x86_64, glibc 2.41, GCC 14.2 and Clang 19. The final
+Release selection passed 155 cases; separate ASan/UBSan/LSan and TSan selections
+passed 154 each. The exact clean commit also passed static/shared transfers to
+independent minimal-namespace consumers. These are local native results, not
+hosted job reports. Later documentation-only revisions preserve that code binding.
+
+These checks exercise static/shared SDK links,
 source-hidden Unicode relocation, C11/C++17 consumers, standalone ctypes, both
 shaft modes and both output rates. Separate full memory/leak/UB and thread
 selections exercise preparation, reset, retirement, coherent fault prefixes and
@@ -43,3 +50,11 @@ The image catalog and local workflow/transport checks are source evidence;
 actual hosted runs and native Windows/macOS execution remain pending. The
 original desktop, driver/bus, physical audio and recording-rights limits above
 remain separate.
+
+See the [integration guide](runtime-guide.md) for units, lifecycle, event timing,
+legacy signal differences, measured conversion response and tuple-specific CPU
+cost. A positive manual EJ25 idle listening report accompanies the desktop queue
+correction; it does not close physical loopback, hardware latency, device-change
+or complete native Windows/macOS qualification. Future native reports must name
+their actual committed revision and toolchain rather than inheriting the Linux
+result or a workflow label.
