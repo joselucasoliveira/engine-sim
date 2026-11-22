@@ -399,6 +399,10 @@ endif ()
 
 if (ENGINE_SIM_BUILD_CAPTURE)
     add_subdirectory(tools/capture)
+    if (BUILD_TESTING)
+        enable_language(C)
+        add_subdirectory(test/runtime)
+    endif ()
 endif ()
 
 foreach(target IN ITEMS engine-sim engine-sim-desktop-run-test engine-sim-sdl-audio engine-sim-sdl-audio-test engine-sim-sdl-renderer engine-sim-sdl-render-test engine-sim-sdl-window engine-sim-sdl-window-test engine-sim-host engine-sim-host-test engine-sim-host-application-test engine-sim-frontend engine-sim-script-interpreter engine-sim-app engine-sim-test
