@@ -53,3 +53,20 @@ gtest_discover_tests(engine-sim-clock-test
     WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/clock-working"
     DISCOVERY_TIMEOUT 30 PROPERTIES LABELS "r2-clock" TIMEOUT 180
     ENVIRONMENT "ENGINE_SIM_TEST_SOURCE=${PROJECT_SOURCE_DIR}")
+
+if (TARGET engine-sim-runtime)
+    add_executable(engine-sim-runtime-c-test consumer_c.c)
+    target_link_libraries(engine-sim-runtime-c-test PRIVATE EngineSim::Runtime)
+    set_target_properties(engine-sim-runtime-c-test PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO LINKER_LANGUAGE CXX)
+    engine_sim_diagnose(engine-sim-runtime-c-test TRUE)
+    set(fixture "${PROJECT_SOURCE_DIR}/examples/runtime/fixture")
+    add_test(NAME RuntimeCConsumer COMMAND engine-sim-runtime-c-test "${fixture}/main.mr" "${fixture}/library" "${fixture}")
+    set_tests_properties(RuntimeCConsumer PROPERTIES LABELS "r2-runtime" TIMEOUT 180)
+    add_executable(engine-sim-runtime-test runtime_tests.cpp)
+    target_link_libraries(engine-sim-runtime-test PRIVATE EngineSim::Runtime engine-sim-script-interpreter gtest_main)
+    target_include_directories(engine-sim-runtime-test PRIVATE "${PROJECT_SOURCE_DIR}/src/runtime")
+    engine_sim_diagnose(engine-sim-runtime-test TRUE)
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/runtime-working")
+    gtest_discover_tests(engine-sim-runtime-test WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/runtime-working"
+        DISCOVERY_TIMEOUT 30 PROPERTIES LABELS "r2-runtime" TIMEOUT 180 ENVIRONMENT "ENGINE_SIM_TEST_SOURCE=${PROJECT_SOURCE_DIR}")
+endif ()

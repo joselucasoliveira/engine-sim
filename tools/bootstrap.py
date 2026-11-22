@@ -206,7 +206,9 @@ def write_atomic(path, text):
 def bootstrap(options):
     windows = platform.system() == "Windows"
     lock = json.loads(LOCK_PATH.read_text(encoding="utf-8"))
-    names = ["simple-2d-constraint-solver", "csv-io"]
+    names = ["simple-2d-constraint-solver"]
+    if options.profile != "runtime":
+        names.append("csv-io")
     inputs = ["googletest"] if options.tests else []
     if options.profile != "core":
         names.append("piranha")
@@ -266,7 +268,7 @@ def bootstrap(options):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--profile", choices=("core", "capture", "desktop"), required=True)
+    parser.add_argument("--profile", choices=("core", "capture", "desktop", "runtime"), required=True)
     parser.add_argument("--out", type=external_path, required=True)
     parser.add_argument("--cache", type=external_path)
     parser.add_argument("--offline", action="store_true")

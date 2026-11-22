@@ -141,6 +141,58 @@
         "ENGINE_SIM_BUILD_DESKTOP": true,
         "CMAKE_C_COMPILER": "gcc"
       }
+    },
+    {
+      "name": "runtime",
+      "inherits": "external",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_TESTING": false,
+        "ENGINE_SIM_BUILD_RUNTIME": true,
+        "ENGINE_SIM_BUILD_HOST_TESTS": false,
+        "ENGINE_SIM_BUILD_DESKTOP": false,
+        "ENGINE_SIM_BUILD_CAPTURE": false,
+        "PIRANHA_ENABLED": true
+      }
+    },
+    {
+      "name": "runtime-test",
+      "inherits": "runtime",
+      "cacheVariables": {
+        "BUILD_TESTING": true
+      }
+    },
+    {
+      "name": "runtime-asan",
+      "inherits": "runtime-test",
+      "generator": "Ninja",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      },
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "clang++",
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": true,
+        "ENGINE_SIM_SANITIZER": "address"
+      }
+    },
+    {
+      "name": "runtime-tsan",
+      "inherits": "runtime-test",
+      "generator": "Ninja",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      },
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "g++",
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": true,
+        "ENGINE_SIM_SANITIZER": "thread"
+      }
     }
   ],
   "buildPresets": [
@@ -192,6 +244,26 @@
     {
       "name": "desktop-tsan",
       "configurePreset": "desktop-tsan",
+      "configuration": "RelWithDebInfo"
+    },
+    {
+      "name": "runtime",
+      "configurePreset": "runtime",
+      "configuration": "Release"
+    },
+    {
+      "name": "runtime-test",
+      "configurePreset": "runtime-test",
+      "configuration": "Release"
+    },
+    {
+      "name": "runtime-asan",
+      "configurePreset": "runtime-asan",
+      "configuration": "RelWithDebInfo"
+    },
+    {
+      "name": "runtime-tsan",
+      "configurePreset": "runtime-tsan",
       "configuration": "RelWithDebInfo"
     }
   ],
@@ -313,6 +385,39 @@
         "include": {
           "label": "desktop-audio|threaded|desktop-smoke-unit"
         }
+      }
+    },
+    {
+      "name": "runtime-test",
+      "configurePreset": "runtime-test",
+      "configuration": "Release",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error"
+      }
+    },
+    {
+      "name": "runtime-asan",
+      "configurePreset": "runtime-asan",
+      "configuration": "RelWithDebInfo",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error"
+      }
+    },
+    {
+      "name": "runtime-tsan",
+      "configurePreset": "runtime-tsan",
+      "configuration": "RelWithDebInfo",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error"
       }
     }
   ]

@@ -26,6 +26,7 @@ public:
     void endPresentation();
 
 private:
+    friend struct ClockTestAccess;
     void latch() override;
     bool tick(double *endpoint) override;
     bool native(const double *input, std::int16_t &sample) override;
