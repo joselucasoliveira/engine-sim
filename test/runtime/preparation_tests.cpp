@@ -131,6 +131,30 @@ TEST_F(Preparation, StarterOverrideControlsActualColdCrank) {
     EXPECT_GT(high.session->definition.engine->getRpm(), low.session->definition.engine->getRpm());
     const auto defaultTorque = prepareEngine(recipe).session->simulator->m_starterMotor.m_maxTorque;
     EXPECT_DOUBLE_EQ(defaultTorque, units::torque(40, units::Nm));
+    const auto original = read(recipe.entry);
+    const std::string setting = "starter_speed: 600 * u.rpm,";
+    ASSERT_NE(original.find(setting), std::string::npos);
+    for (int speed : {600, 0, -600}) {
+        auto script = original;
+        script.replace(script.find(setting), setting.size(), "starter_speed: " + std::to_string(speed) + " * u.rpm,");
+        auto entry = write("starter-direction.mr", script);
+        auto prepared = prepareEngine({entry, recipe.libraryRoot, recipe.assetRoot}, {0, ES_FREE, 80});
+        auto &engine = *prepared.session->definition.engine;
+        auto &sim = *prepared.session->simulator;
+        EXPECT_DOUBLE_EQ(engine.getStarterSpeed(), units::rpm(speed));
+        EXPECT_DOUBLE_EQ(sim.m_starterMotor.m_rotationSpeed, -units::rpm(speed));
+        EXPECT_DOUBLE_EQ(engine.getOutputCrankshaft()->m_body.v_theta, 0);
+        EXPECT_FALSE(engine.getIgnitionModule()->m_enabled);
+        sim.m_starterMotor.m_enabled = true;
+        for (int block = 0; block < 10; ++block) step(prepared, 100);
+        const double actual = engine.getOutputCrankshaft()->m_body.v_theta;
+        if (speed == 0) EXPECT_NEAR(actual, 0, 1e-9);
+        else EXPECT_LT(actual * speed, 0) << "Starter must retain the script's rotation direction";
+    }
+    auto invalid = original;
+    invalid.replace(invalid.find(setting), setting.size(), "starter_speed: (600.0 / 0.0) * u.rpm,");
+    auto entry = write("starter-nonfinite.mr", invalid);
+    reject([&] { prepareEngine({entry, recipe.libraryRoot, recipe.assetRoot}); }, "graph", "starter_speed");
 }
 
 TEST_F(Preparation, NativePresetsRetainTheirDefinitions) {
@@ -138,12 +162,17 @@ TEST_F(Preparation, NativePresetsRetainTheirDefinitions) {
     for (const auto &preset : {
         Preset{"atg-video-1/02_kohler_ch750.mr", 2, 30000},
         Preset{"atg-video-2/07_gm_ls.mr", 8, 10000},
+        Preset{"atg-video-1/05_honda_vtec.mr", 4, 20000},
         Preset{"atg-video-2/09_radial_9.mr", 9, 7500}}) {
         auto entry = write("entry.mr", std::string("import \"engine_sim.mr\"\nimport \"engines/") + preset.path + "\"\nmain()\n");
         auto prepared = prepareEngine({entry, resources / "es", resources / "assets"});
         EXPECT_EQ(prepared.session->definition.engine->getCylinderCount(), preset.cylinders);
         EXPECT_EQ(prepared.session->simulator->getSimulationFrequency(), preset.frequency);
         EXPECT_GT(prepared.session->definition.engine->getDisplacement(), 0);
+        if (std::string(preset.path) == "atg-video-1/05_honda_vtec.mr") {
+            EXPECT_DOUBLE_EQ(prepared.session->definition.engine->getStarterSpeed(), units::rpm(-500));
+            EXPECT_DOUBLE_EQ(prepared.session->simulator->m_starterMotor.m_rotationSpeed, units::rpm(500));
+        }
         step(prepared, preset.frequency / 100);
     }
 }

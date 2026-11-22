@@ -146,7 +146,7 @@ namespace es_script {
             requirePositive(m_parameters.initialSimulationFrequency, "simulation frequency");
             requirePositive(m_parameters.redline, "engine redline");
             requireNonnegative(m_parameters.starterTorque, "starter torque");
-            requireNonnegative(m_parameters.starterSpeed, "starter speed");
+            requireFinite(m_parameters.starterSpeed, "starter speed");
             m_throttle->validate();
             m_ignitionModule->validate();
             m_fuel->validate();
