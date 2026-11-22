@@ -27,6 +27,8 @@ if (WIN32 AND MSVC AND CMAKE_SIZEOF_VOID_P EQUAL 8
 endif ()
 option(ENGINE_SIM_BUILD_DESKTOP "Build the Engine Simulator desktop app" ${engine_sim_windows})
 option(ENGINE_SIM_BUILD_RUNTIME "Build the device-free C runtime" OFF)
+option(ENGINE_SIM_RUNTIME_SHARED "Build the C runtime as a shared library" OFF)
+option(ENGINE_SIM_INSTALL_RUNTIME_EXAMPLE "Install the lawful synthetic runtime example" OFF)
 option(ENGINE_SIM_BUILD_HOST_TESTS "Build the desktop host contract fixtures" ON)
 set(engine_sim_parser_default ${ENGINE_SIM_BUILD_DESKTOP})
 if (ENGINE_SIM_BUILD_RUNTIME)
@@ -52,6 +54,9 @@ endif ()
 
 if (ENGINE_SIM_BUILD_RUNTIME AND NOT PIRANHA_ENABLED)
     message(FATAL_ERROR "The runtime requires PIRANHA_ENABLED")
+endif ()
+if (ENGINE_SIM_BUILD_RUNTIME AND ENGINE_SIM_RUNTIME_SHARED AND BUILD_TESTING)
+    message(FATAL_ERROR "Use runtime-test for private static tests and runtime-shared for isolated public SDK consumers")
 endif ()
 
 if (ENGINE_SIM_BUILD_CAPTURE AND NOT PIRANHA_ENABLED)
@@ -88,7 +93,6 @@ add_library(engine-sim STATIC
     src/camshaft.cpp
     src/crankshaft.cpp
     src/combustion_chamber.cpp
-    src/compiled_scene.cpp
     src/connecting_rod.cpp
     src/convolution_filter.cpp
     src/cylinder_bank.cpp
@@ -115,7 +119,6 @@ add_library(engine-sim STATIC
     src/part.cpp
     src/piston.cpp
     src/piston_engine_simulator.cpp
-    src/resource_paths.cpp
     src/simulator.cpp
     src/sample_clock.cpp
     src/pull_engine.cpp
@@ -183,8 +186,18 @@ add_library(engine-sim STATIC
 find_package(Threads REQUIRED)
 target_link_libraries(engine-sim PUBLIC simple-2d-constraint-solver PRIVATE Threads::Threads)
 target_compile_features(engine-sim PUBLIC cxx_std_17)
-if (WIN32)
-    target_link_libraries(engine-sim PRIVATE shell32)
+if (NOT ENGINE_SIM_BUILD_RUNTIME)
+    target_sources(engine-sim PRIVATE src/compiled_scene.cpp src/resource_paths.cpp)
+    if (WIN32)
+        target_link_libraries(engine-sim PRIVATE shell32)
+    endif ()
+elseif (BUILD_TESTING OR ENGINE_SIM_BUILD_DESKTOP OR ENGINE_SIM_BUILD_CAPTURE)
+    add_library(engine-sim-host-resources STATIC src/compiled_scene.cpp src/resource_paths.cpp)
+    target_include_directories(engine-sim-host-resources PUBLIC include)
+    target_compile_features(engine-sim-host-resources PUBLIC cxx_std_17)
+    if (WIN32)
+        target_link_libraries(engine-sim-host-resources PRIVATE shell32)
+    endif ()
 endif ()
 
 target_include_directories(engine-sim PUBLIC include dependencies/submodules)
@@ -295,6 +308,9 @@ if (PIRANHA_ENABLED AND ((BUILD_TESTING AND ENGINE_SIM_BUILD_HOST_TESTS) OR ENGI
         src/info_cluster.cpp
     )
     target_link_libraries(engine-sim-frontend PUBLIC engine-sim-script-interpreter engine-sim-host)
+    if (TARGET engine-sim-host-resources)
+        target_link_libraries(engine-sim-frontend PUBLIC engine-sim-host-resources)
+    endif ()
     if (NOT MSVC)
         target_compile_options(engine-sim-frontend PRIVATE -ffp-contract=off)
     endif ()
@@ -395,6 +411,9 @@ if (BUILD_TESTING)
         PROPERTIES LABELS impulse TIMEOUT 90 ENVIRONMENT "ENGINE_SIM_TEST_SOURCE=${PROJECT_SOURCE_DIR}")
     add_executable(engine-sim-resource-test test/resource_tests.cpp)
     target_link_libraries(engine-sim-resource-test PRIVATE gtest_main engine-sim)
+    if (TARGET engine-sim-host-resources)
+        target_link_libraries(engine-sim-resource-test PRIVATE engine-sim-host-resources)
+    endif ()
     file(MAKE_DIRECTORY "${PROJECT_BINARY_DIR}/resources-working")
     gtest_discover_tests(engine-sim-resource-test
         DISCOVERY_TIMEOUT 30 WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/resources-working"
@@ -426,12 +445,15 @@ if (ENGINE_SIM_BUILD_CAPTURE)
     add_subdirectory(tools/capture)
 endif ()
 if (ENGINE_SIM_BUILD_RUNTIME)
-    add_library(engine-sim-runtime STATIC src/runtime/runtime.cpp)
+    set(engine_sim_runtime_kind STATIC)
+    if (ENGINE_SIM_RUNTIME_SHARED)
+        set(engine_sim_runtime_kind SHARED)
+    endif ()
+    add_library(engine-sim-runtime ${engine_sim_runtime_kind} src/runtime/runtime.cpp)
     add_library(EngineSim::Runtime ALIAS engine-sim-runtime)
     target_include_directories(engine-sim-runtime PUBLIC "$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>")
     target_link_libraries(engine-sim-runtime PRIVATE engine-sim-script-interpreter)
     target_compile_features(engine-sim-runtime PUBLIC cxx_std_17)
-    target_compile_definitions(engine-sim-runtime PUBLIC ES_RUNTIME_STATIC)
     engine_sim_diagnose(engine-sim-runtime TRUE)
 endif ()
 if (BUILD_TESTING AND (ENGINE_SIM_BUILD_CAPTURE OR ENGINE_SIM_BUILD_DESKTOP OR ENGINE_SIM_BUILD_RUNTIME))
@@ -439,7 +461,7 @@ if (BUILD_TESTING AND (ENGINE_SIM_BUILD_CAPTURE OR ENGINE_SIM_BUILD_DESKTOP OR E
     add_subdirectory(test/runtime)
 endif ()
 
-foreach(target IN ITEMS engine-sim engine-sim-desktop-run-test engine-sim-sdl-audio engine-sim-sdl-audio-test engine-sim-sdl-renderer engine-sim-sdl-render-test engine-sim-sdl-window engine-sim-sdl-window-test engine-sim-host engine-sim-host-test engine-sim-host-application-test engine-sim-frontend engine-sim-script-interpreter engine-sim-app engine-sim-test
+foreach(target IN ITEMS engine-sim engine-sim-host-resources engine-sim-desktop-run-test engine-sim-sdl-audio engine-sim-sdl-audio-test engine-sim-sdl-renderer engine-sim-sdl-render-test engine-sim-sdl-window engine-sim-sdl-window-test engine-sim-host engine-sim-host-test engine-sim-host-application-test engine-sim-frontend engine-sim-script-interpreter engine-sim-app engine-sim-test
         engine-sim-threaded-test engine-sim-script-test engine-sim-lifecycle-test
         engine-sim-displacement-test engine-sim-load-test engine-sim-wave-test engine-sim-resource-test engine-sim-capture)
     engine_sim_diagnose("${target}" TRUE)
@@ -477,3 +499,6 @@ if (PIRANHA_ENABLED AND CMAKE_EXPORT_COMPILE_COMMANDS AND NOT MSVC)
 endif ()
 
 include(cmake/RuntimeInstall.cmake)
+if (TARGET engine-sim-runtime)
+    include(cmake/RuntimeSdk.cmake)
+endif ()

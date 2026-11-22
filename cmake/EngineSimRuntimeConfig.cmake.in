@@ -1,0 +1,35 @@
+@PACKAGE_INIT@
+if (TARGET EngineSim::Runtime)
+    return()
+endif ()
+set(_engine_sim_prefix "${PACKAGE_PREFIX_DIR}")
+add_library(EngineSim::Runtime @engine_sim_sdk_kind@ IMPORTED)
+set_target_properties(EngineSim::Runtime PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES "${_engine_sim_prefix}/@CMAKE_INSTALL_INCLUDEDIR@"
+    IMPORTED_LOCATION "${_engine_sim_prefix}/@CMAKE_INSTALL_LIBDIR@/@engine_sim_sdk_link_file@"
+    IMPORTED_LINK_INTERFACE_LANGUAGES CXX)
+if ("@engine_sim_sdk_kind@" STREQUAL "STATIC")
+    include(CMakeFindDependencyMacro)
+    find_dependency(Threads)
+    set_property(TARGET EngineSim::Runtime PROPERTY INTERFACE_COMPILE_DEFINITIONS ES_RUNTIME_STATIC)
+    set(_engine_sim_archives
+        "engine-sim-script-interpreter" "engine-sim" "simple-2d-constraint-solver" "piranha" "engine-sim-boost-filesystem")
+    set(_engine_sim_links)
+    foreach(name IN LISTS _engine_sim_archives)
+        set(target "EngineSimRuntime::Private_${name}")
+        add_library(${target} STATIC IMPORTED)
+        set_target_properties(${target} PROPERTIES
+            IMPORTED_LOCATION "${_engine_sim_prefix}/@engine_sim_sdk_private@/@CMAKE_STATIC_LIBRARY_PREFIX@${name}@CMAKE_STATIC_LIBRARY_SUFFIX@"
+            IMPORTED_LINK_INTERFACE_LANGUAGES CXX)
+        string(CONCAT _engine_sim_link "$" "<LINK_ONLY:${target}>")
+        list(APPEND _engine_sim_links "${_engine_sim_link}")
+    endforeach ()
+    string(CONCAT _engine_sim_thread_link "$" "<LINK_ONLY:Threads::Threads>")
+    list(APPEND _engine_sim_links "${_engine_sim_thread_link}")
+    set_property(TARGET EngineSim::Runtime PROPERTY INTERFACE_LINK_LIBRARIES "${_engine_sim_links}")
+elseif (WIN32)
+    set_target_properties(EngineSim::Runtime PROPERTIES
+        IMPORTED_IMPLIB "${_engine_sim_prefix}/@CMAKE_INSTALL_LIBDIR@/@engine_sim_sdk_link_file@"
+        IMPORTED_LOCATION "${_engine_sim_prefix}/@CMAKE_INSTALL_BINDIR@/@engine_sim_sdk_runtime_file@")
+endif ()
+check_required_components(EngineSimRuntime)

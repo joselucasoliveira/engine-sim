@@ -54,6 +54,9 @@ set_property(DIRECTORY APPEND PROPERTY TEST_INCLUDE_FILES "${CMAKE_CURRENT_BINAR
 find_package(Python3 3.9 COMPONENTS Interpreter REQUIRED)
 add_executable(engine-sim-parser-preparation-test preparation_tests.cpp)
 target_link_libraries(engine-sim-parser-preparation-test PRIVATE engine-sim-script-interpreter)
+if (TARGET engine-sim-host-resources)
+    target_link_libraries(engine-sim-parser-preparation-test PRIVATE engine-sim-host-resources)
+endif ()
 engine_sim_diagnose(engine-sim-parser-preparation-test TRUE)
 add_test(NAME RuntimeParserPreparation
     COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/preparation_probe.py"

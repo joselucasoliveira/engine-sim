@@ -1,0 +1,15 @@
+{
+    global:
+        es_api_version;
+        es_capabilities;
+        es_config_init;
+        es_create;
+        es_load;
+        es_set_controls;
+        es_render;
+        es_get_telemetry;
+        es_reset;
+        es_unload;
+        es_destroy;
+    local: *;
+};

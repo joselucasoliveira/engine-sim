@@ -194,6 +194,26 @@
         "CMAKE_EXPORT_COMPILE_COMMANDS": true,
         "ENGINE_SIM_SANITIZER": "thread"
       }
+    },
+    {
+      "name": "runtime-static",
+      "inherits": "runtime",
+      "cacheVariables": {
+        "ENGINE_SIM_RUNTIME_SHARED": false,
+        "BUILD_TESTING": false,
+        "ENGINE_SIM_BUILD_HOST_TESTS": false,
+        "ENGINE_SIM_INSTALL_RUNTIME_EXAMPLE": false
+      }
+    },
+    {
+      "name": "runtime-shared",
+      "inherits": "runtime",
+      "cacheVariables": {
+        "ENGINE_SIM_RUNTIME_SHARED": true,
+        "BUILD_TESTING": false,
+        "ENGINE_SIM_BUILD_HOST_TESTS": false,
+        "ENGINE_SIM_INSTALL_RUNTIME_EXAMPLE": false
+      }
     }
   ],
   "buildPresets": [
@@ -266,6 +286,16 @@
       "name": "runtime-tsan",
       "configurePreset": "runtime-tsan",
       "configuration": "RelWithDebInfo"
+    },
+    {
+      "name": "runtime-static",
+      "configurePreset": "runtime-static",
+      "configuration": "Release"
+    },
+    {
+      "name": "runtime-shared",
+      "configurePreset": "runtime-shared",
+      "configuration": "Release"
     }
   ],
   "testPresets": [

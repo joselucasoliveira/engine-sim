@@ -110,3 +110,13 @@ if (TARGET engine-sim-runtime)
     gtest_discover_tests(engine-sim-drive-test WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/drive-working"
         DISCOVERY_TIMEOUT 30 PROPERTIES LABELS "r2-drive" TIMEOUT 180 ENVIRONMENT "ENGINE_SIM_TEST_SOURCE=${PROJECT_SOURCE_DIR}")
 endif ()
+
+if (TARGET engine-sim-runtime)
+    find_package(Python3 3.9 COMPONENTS Interpreter REQUIRED)
+    foreach(variant IN ITEMS static shared)
+        add_test(NAME RuntimeSdk_${variant} COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/sdk_gate.py"
+            --source "${PROJECT_SOURCE_DIR}" --root "${ENGINE_SIM_PRESET_ROOT}"
+            --out "${CMAKE_CURRENT_BINARY_DIR}/sdk-admission" --variant "${variant}")
+        set_tests_properties(RuntimeSdk_${variant} PROPERTIES LABELS "r2-sdk" RUN_SERIAL TRUE TIMEOUT 600)
+    endforeach ()
+endif ()

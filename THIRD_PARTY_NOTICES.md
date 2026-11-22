@@ -25,3 +25,10 @@ Its minimal script library copies the listed `es` sources with trailing
 whitespace removed.
 The original copyright notices and MIT license accompany that copy, with
 source paths and SHA-256 identities in `library/UPSTREAM.json`.
+
+The C runtime SDK installs the original Engine Simulator MIT notice and the
+solver, Piranha, Boost and Flex lexer notices it uses. Its default code-only
+component includes no engine recordings, fonts, scene or desktop assets.
+The optional runtime example installs only the explicitly listed synthetic
+fixture and minimal script-library files, retaining their original notices
+and source attribution.

@@ -1,0 +1,11 @@
+_es_api_version
+_es_capabilities
+_es_config_init
+_es_create
+_es_load
+_es_set_controls
+_es_render
+_es_get_telemetry
+_es_reset
+_es_unload
+_es_destroy

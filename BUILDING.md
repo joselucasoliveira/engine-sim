@@ -112,3 +112,29 @@ For a desktop without tests, omit `--tests` from bootstrap and configure `deskto
 Choose an absolute cache with `--cache /absolute/cache` during an online bootstrap. A fresh disconnected build uses `--offline --cache /absolute/cache --out /absolute/new-output` and sets `ES_OUT` to that new output. The cache must contain the verified archives for the requested profile. Exact recursive Git objects, initialized source trees, OS SDKs, compilers and parser tools must already be available. An archive cache alone supplies none of those. Bootstrap fails on missing or altered bytes.
 
 The installed application uses executable-relative resources and needs no network connection. Linux/Windows use `share/engine-sim/{assets,es,delta}`; the macOS bundle uses `Contents/Resources`. `runtime-inventory.json` and the included notices describe the selected payload. Keep the resource tree together when moving an installation. Use `--resources ABSOLUTE_ROOT` only for an explicitly prepared complete resource tree.
+
+## Embedding with the C runtime SDK
+
+The device-free SDK builds with the locked solver, Piranha and Boost prerequisites. Use an absolute external `ES_OUT`, initialize the solver and Piranha submodules, then run:
+
+```sh
+python3 -B tools/bootstrap.py --profile runtime --out "$ES_OUT"
+cmake --preset runtime-static -DENGINE_SIM_INSTALL_RUNTIME_EXAMPLE=ON
+cmake --build --preset runtime-static --config Release
+cmake --install "$ES_OUT/runtime-static" --config Release --prefix "$SDK_PREFIX" --component RuntimeSDK
+```
+
+`runtime-shared` builds the same interface as a shared library; use a separate prefix for each variant. Both presets disable tests, desktop, capture, video and Discord. The default installation contains code, the public header, CMake metadata and applicable notices. The optional example contains an original synthetic engine, a synthetic impulse and its minimal licensed script library at `share/engine-sim-runtime/example`; its asset root is that directory and its library root is the `library` subdirectory. Existing recording and desktop redistribution restrictions still apply to their separate installer.
+
+Consumers enable C and CXX, use `find_package(EngineSimRuntime 1.0 CONFIG REQUIRED)` and link `EngineSim::Runtime`. A C11 source includes only `<engine_sim/runtime.h>`; static linking needs the C++ final link. The imported target supplies `ES_RUNTIME_STATIC` for static builds and relative private archive dependencies. Shared builds export only the eleven C functions with ABI major 1 and library version 1.0.0. MSVC builds use the shared CRT, matching the locked Boost build. Put the shared SDK's DLL directory on the application's DLL search path on Windows; use an application rpath or the ordinary loader path on ELF/Darwin.
+
+A complete independent consumer project is in `examples/runtime/consumer`:
+
+```sh
+cmake -S examples/runtime/consumer -B "$CONSUMER_BUILD" -DCMAKE_PREFIX_PATH="$SDK_PREFIX"
+cmake --build "$CONSUMER_BUILD" --config Release
+```
+
+Run either consumer with three absolute UTF-8 arguments: entry script, library directory and asset directory. The C consumer renders 88200 native frames; the C++ consumer renders 96000 frames at 48 kHz. They use caller-owned PCM and release handles only through `es_destroy`. See `docs/runtime-abi.md` for controls, counters and recovery. No audio device is opened.
+
+`runtime-test` provides private static unit tests. Shared SDK consumers run in separate processes to keep one implementation and one set of parser globals per process. `python3 -B test/runtime/installed_consumer.py --prefix "$SDK_PREFIX" --variant static --out "$FRESH_EXTERNAL_RESULT"` moves the prefix to a Unicode path and validates both consumers; select `shared` for a shared installation. On Linux it requires bubblewrap and isolates source, producer build and desktop/device services. Other native hosts record relocation checks separately from source-hidden qualification.

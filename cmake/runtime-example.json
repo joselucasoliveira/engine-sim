@@ -1,0 +1,57 @@
+{
+  "license": "Original synthetic fixture under MIT; upstream script closure retains attribution and byte identities in library/UPSTREAM.json. No original recordings or desktop assets.",
+  "files": [
+    {
+      "path": "LICENSE",
+      "sha256": "9f64449d4ef2db6b57d6af9d36e5eca5b6de3ece2db14a847ae71d4e0dcbff15"
+    },
+    {
+      "path": "README.md",
+      "sha256": "a01d5c7edee0483ce97e0d5c4b62cd84d847f3811917b00eb66ad728f4800feb"
+    },
+    {
+      "path": "impulse.wav",
+      "sha256": "97fb8b13c2ed77769f297659db76203f86d90d56201e02df38b5a295a1bb336b"
+    },
+    {
+      "path": "library/UPSTREAM.json",
+      "sha256": "38d207074b8c4b24059d81690b50b97c72a1c48b964d7da4903d5f7dd9269a30"
+    },
+    {
+      "path": "library/actions/actions.mr",
+      "sha256": "1b556a1282ec0da8460806db251c9606343432f120101e8376401a3c07d2ba0b"
+    },
+    {
+      "path": "library/constants/constants.mr",
+      "sha256": "d95f82158aaea275abe5ff79d1d59c53f33bdaf68dd22602ee7eaeaae3ab1665"
+    },
+    {
+      "path": "library/constants/units.mr",
+      "sha256": "98ef4c60a833d00380a73442cd31de2596b4aa2d75674bb757b81785e637e89b"
+    },
+    {
+      "path": "library/objects/objects.mr",
+      "sha256": "2c6b3b61e59c0d8a7b75ab7ab06b7df021dec134951732745d2c40ede9c9eb72"
+    },
+    {
+      "path": "library/runtime_fixture.mr",
+      "sha256": "a0983759e70bef82483e76ada1485b3af78e940fef0cca033977496b9ddb9077"
+    },
+    {
+      "path": "library/types/atomic_types.mr",
+      "sha256": "6b7e85d514eb62506b2c8b83af198cdfaf9e9987f93e7393f164e92cdc8ffc7e"
+    },
+    {
+      "path": "library/types/conversions.mr",
+      "sha256": "f42e170fba81db25a5c7ce05d9a1de31bd52c6d74c2224c836225b96a692726a"
+    },
+    {
+      "path": "library/types/operations.mr",
+      "sha256": "e82e413b4159b7e59e541014f714f2b9f2e61cf76c2b293ab3993353971a57a8"
+    },
+    {
+      "path": "main.mr",
+      "sha256": "50ccecfa33a19ca3a07fd466344411edea69b11e5ae9b6db8f42fb267c2cbf06"
+    }
+  ]
+}
