@@ -45,7 +45,8 @@ class PistonEngineSimulator : public Simulator {
         void placeCylinder(int i);
         
     protected:
-        virtual void writeToSynthesizer() override;
+        void produceExhaustEndpoint() override;
+        const double *exhaustEndpoint() const override { return m_exhaustFlowStagingBuffer; }
 
     protected:
         DelayFilter *m_delayFilters;

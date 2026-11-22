@@ -107,6 +107,8 @@ add_library(engine-sim STATIC
     src/piston_engine_simulator.cpp
     src/resource_paths.cpp
     src/simulator.cpp
+    src/sample_clock.cpp
+    src/pull_engine.cpp
     src/standard_valvetrain.cpp
     src/starter_motor.cpp
     src/synthesizer.cpp

@@ -1,11 +1,14 @@
 #include "../include/simulator.h"
+#include "../include/checked_solver.h"
+
+#include <cmath>
 
 namespace {
 class OwnedOptimizedSystem : public atg_scs::OptimizedNsvRigidBodySystem {
 public:
     OwnedOptimizedSystem() { initialize(&m_solver); }
 private:
-    atg_scs::GaussSeidelSleSolver m_solver;
+    engine_sim::CheckedSolver m_solver;
 };
 
 class OwnedGenericSystem : public atg_scs::GenericRigidBodySystem {
@@ -84,6 +87,7 @@ void Simulator::loadSimulation(Engine *engine, Vehicle *vehicle, Transmission *t
     m_engine = engine;
     m_vehicle = vehicle;
     m_transmission = transmission;
+    m_frameIntakeFlows.assign(engine->getIntakeCount(), 0.0);
 }
 
 void Simulator::releaseSimulation() {
@@ -108,6 +112,7 @@ void Simulator::resetFrameFlows() {
     if (m_steps > 0) {
         for (int i = 0; i < m_engine->getIntakeCount(); ++i) {
             m_engine->getIntake(i)->m_flowRate = 0;
+            m_frameIntakeFlows[i] = 0;
         }
     }
 }
@@ -149,8 +154,28 @@ bool Simulator::simulateStep() {
         return false;
     }
 
+    advanceTick(true);
+    m_synthesizer.writeInput(exhaustEndpoint());
+    ++m_currentIteration;
+    return true;
+}
+
+void Simulator::validateBodies() const {
+    for (int i = 0; i < m_system->getRigidBodyCount(); ++i) {
+        const auto &body = *m_system->getRigidBody(i);
+        if (!std::isfinite(body.theta) || !std::isfinite(body.v_theta)
+            || !std::isfinite(body.p_x) || !std::isfinite(body.p_y)
+            || !std::isfinite(body.v_x) || !std::isfinite(body.v_y)) {
+            throw engine_sim::SimulationFault("nonfinite mechanical state");
+        }
+    }
+}
+
+void Simulator::advanceTick(bool legacyFrame) {
     const double timestep = getTimestep();
+    validateBodies();
     m_system->process(timestep, 1);
+    validateBodies();
 
     m_engine->update(timestep);
     m_vehicle->update(timestep);
@@ -168,8 +193,14 @@ bool Simulator::simulateStep() {
         shaft->m_body.theta = outputShaft->m_body.theta;
     }
 
-    const int index =
-        static_cast<int>(std::floor(DynoTorqueSamples * outputShaft->getCycleAngle() / (4 * constants::pi)));
+    const double cycle = outputShaft->getCycleAngle();
+    if (!std::isfinite(cycle) || cycle < 0 || cycle >= 4 * constants::pi) {
+        throw engine_sim::SimulationFault("invalid crank cycle angle");
+    }
+    const int index = static_cast<int>(std::floor(DynoTorqueSamples * cycle / (4 * constants::pi)));
+    if (index < 0 || index >= DynoTorqueSamples) {
+        throw engine_sim::SimulationFault("crank cycle index outside torque history");
+    }
     const int step = m_engine->isSpinningCw() ? 1 : -1;
     m_dynoTorqueSamples[index] = m_dyno.getTorque();
 
@@ -191,11 +222,15 @@ bool Simulator::simulateStep() {
     }
 
     simulateStep_();
-
-    writeToSynthesizer();
-
-    ++m_currentIteration;
-    return true;
+    produceExhaustEndpoint();
+    for (int i = 0; i < m_engine->getIntakeCount(); ++i) {
+        auto &flow = m_engine->getIntake(i)->m_flowRate;
+        if (legacyFrame) {
+            m_frameIntakeFlows[i] += flow;
+            flow = m_frameIntakeFlows[i];
+        }
+        else flow /= timestep;
+    }
 }
 
 double Simulator::getTotalExhaustFlow() const {
@@ -221,6 +256,7 @@ void Simulator::destroy() {
     m_vehicle = nullptr;
     m_transmission = nullptr;
     m_steps = m_currentIteration = 0;
+    m_frameIntakeFlows.clear();
 }
 
 void Simulator::startAudioRenderingThread() {

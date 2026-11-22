@@ -17,6 +17,7 @@
 #include <vector>
 
 namespace engine_sim_capture { struct FrameAccess; }
+namespace engine_sim { class PullEngine; }
 
 class Synthesizer {
     public:
@@ -134,6 +135,12 @@ class Synthesizer {
 
     private:
         friend struct engine_sim_capture::FrameAccess;
+        friend class engine_sim::PullEngine;
+        void beginSynchronous();
+        int16_t renderNativeFrame(const double *data);
+        float renderChannel(int channel, float input);
+        int16_t finishSample(float signal, bool rejectNonfinite);
+        void applyAudioParameters();
         bool processBlock(bool waitForWork);
         std::vector<std::vector<float>> m_pendingInput;
         std::vector<int16_t> m_renderedAudio;
@@ -149,6 +156,7 @@ class Synthesizer {
         std::uint64_t m_droppedOutputSamples = 0;
         std::atomic<bool> m_workerRunning{false};
         std::uint64_t *m_nonFiniteCaptureCount = nullptr;
+        bool m_direct = false;
 };
 
 #endif /* ATG_ENGINE_SIM_ENGINE_SYNTHESIZER_H */

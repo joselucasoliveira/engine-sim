@@ -295,6 +295,7 @@ void PistonEngineSimulator::simulateStep_() {
 
     const int exhaustSystemCount = m_engine->getExhaustSystemCount();
     const int intakeCount = m_engine->getIntakeCount();
+    for (int i = 0; i < intakeCount; ++i) m_engine->getIntake(i)->m_flowRate = 0;
     const double fluidTimestep = timestep / m_fluidSimulationSteps;
     for (int i = 0; i < m_fluidSimulationSteps; ++i) {
         for (int j = 0; j < exhaustSystemCount; ++j) {
@@ -364,7 +365,7 @@ void PistonEngineSimulator::destroy() {
     m_delayFilters = nullptr;
 }
 
-void PistonEngineSimulator::writeToSynthesizer() {
+void PistonEngineSimulator::produceExhaustEndpoint() {
     const int exhaustSystemCount = m_engine->getExhaustSystemCount();
     for (int i = 0; i < exhaustSystemCount; ++i) {
         m_exhaustFlowStagingBuffer[i] = 0;
@@ -402,5 +403,4 @@ void PistonEngineSimulator::writeToSynthesizer() {
             * (1 / (exhaustLength * exhaustLength));
     }
 
-    synthesizer().writeInput(m_exhaustFlowStagingBuffer);
 }

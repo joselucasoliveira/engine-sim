@@ -44,3 +44,12 @@ gtest_discover_tests(engine-sim-seed-test
     WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/seed-working"
     DISCOVERY_TIMEOUT 30 PROPERTIES LABELS "r2-seed" TIMEOUT 180
     ENVIRONMENT "ENGINE_SIM_TEST_SOURCE=${PROJECT_SOURCE_DIR}")
+
+add_executable(engine-sim-clock-test clock_tests.cpp)
+target_link_libraries(engine-sim-clock-test PRIVATE engine-sim-script-interpreter gtest_main)
+engine_sim_diagnose(engine-sim-clock-test TRUE)
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/clock-working")
+gtest_discover_tests(engine-sim-clock-test
+    WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/clock-working"
+    DISCOVERY_TIMEOUT 30 PROPERTIES LABELS "r2-clock" TIMEOUT 180
+    ENVIRONMENT "ENGINE_SIM_TEST_SOURCE=${PROJECT_SOURCE_DIR}")

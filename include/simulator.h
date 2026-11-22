@@ -13,8 +13,10 @@
 #include "engine.h"
 
 #include <chrono>
+#include <vector>
 
 namespace engine_sim_capture { struct FrameAccess; }
+namespace engine_sim { class PullEngine; }
 
 class Simulator {
 public:
@@ -85,12 +87,16 @@ public:
 protected:
     void initializeSynthesizer();
     virtual void simulateStep_();
-    virtual void writeToSynthesizer() = 0;
+    virtual void produceExhaustEndpoint() = 0;
+    virtual const double *exhaustEndpoint() const = 0;
 
     atg_scs::RigidBodySystem *m_system;
 
 private:
     friend struct engine_sim_capture::FrameAccess;
+    friend class engine_sim::PullEngine;
+    void advanceTick(bool legacyFrame);
+    void validateBodies() const;
     bool beginFrame();
     void resetFrameFlows();
     void beginExactFrame(int ticks);
@@ -123,6 +129,7 @@ private:
     double m_filteredEngineSpeed;
 
     int m_steps;
+    std::vector<double> m_frameIntakeFlows;
 };
 
 #endif /* ATG_ENGINE_SIM_SIMULATOR_H */

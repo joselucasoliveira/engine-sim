@@ -1,6 +1,7 @@
 #include "../include/synthesizer.h"
 
 #include "../include/utilities.h"
+#include "../include/simulation_fault.h"
 
 #include <algorithm>
 #include <cassert>
@@ -132,6 +133,7 @@ void Synthesizer::initializeImpulseResponse(
 
 void Synthesizer::startAudioRenderingThread() {
     std::lock_guard<std::mutex> lock(m_lock0);
+    if (m_direct) throw std::logic_error("Synchronous synthesis owns its sample clock");
     if (m_thread != nullptr) return;
     if (m_inputChannelCount == 0) throw std::logic_error("Initialize synthesis before starting its worker");
     m_run = true;
@@ -179,6 +181,7 @@ void Synthesizer::destroy() {
     std::vector<int16_t>().swap(m_renderedAudio);
     m_stagedFrames = m_pendingFrames = m_activeFrames = 0;
     m_nonFiniteCaptureCount = nullptr;
+    m_direct = false;
 }
 
 int Synthesizer::readAudioOutput(int samples, int16_t *buffer) {
@@ -220,6 +223,7 @@ void Synthesizer::waitProcessed() {
 }
 
 void Synthesizer::writeInput(const double *data) {
+    if (m_direct) throw std::logic_error("Synchronous synthesis does not accept queued input");
     if (m_inputChannelCount == 0 || data == nullptr) throw std::invalid_argument("Missing synthesis input");
     for (int i = 0; i < m_inputChannelCount; ++i) {
         if (!std::isfinite(data[i])) throw std::invalid_argument("Nonfinite synthesis input");
@@ -295,6 +299,7 @@ void Synthesizer::audioRenderingThread() {
 }
 
 void Synthesizer::renderAudio() {
+    if (m_direct) throw std::logic_error("Synchronous synthesis does not render queued blocks");
     if (m_workerRunning) throw std::logic_error("Synchronous rendering requires a stopped worker");
     processBlock(false);
 }
@@ -316,11 +321,7 @@ bool Synthesizer::processBlock(bool waitForWork) {
     lock.unlock();
 
     // The worker owns DSP histories and scratch. Producer/device locks are free.
-    for (int i = 0; i < m_inputChannelCount; ++i) {
-        m_filters[i].airNoiseLowPass.setCutoffFrequency(
-            m_renderParameters.airNoiseFrequencyCutoff, m_audioSampleRate);
-        m_filters[i].jitterFilter.setJitterScale(m_renderParameters.inputSampleNoise);
-    }
+    applyAudioParameters();
     for (size_t i = 0; i < count; ++i) m_renderedAudio[i] = renderAudio(static_cast<int>(i));
 
     lock.lock();
@@ -396,40 +397,35 @@ void Synthesizer::setInputSampleRate(double sampleRate) {
 }
 
 int16_t Synthesizer::renderAudio(int inputSample) {
+    float signal = 0;
+    for (int i = 0; i < m_inputChannelCount; ++i) {
+        signal += renderChannel(i, m_inputChannels[i].transferBuffer[inputSample]);
+    }
+    return finishSample(signal, false);
+}
+
+float Synthesizer::renderChannel(int i, float input) {
     const float airNoise = m_renderParameters.airNoise;
     const float dF_F_mix = m_renderParameters.dF_F_mix;
     const float convAmount = m_renderParameters.convolution;
 
-    float signal = 0;
-    for (int i = 0; i < m_inputChannelCount; ++i) {
-        const float jitteredSample =
-            m_filters[i].jitterFilter.fast_f(m_inputChannels[i].transferBuffer[inputSample]);
+    const float jitteredSample = m_filters[i].jitterFilter.fast_f(input);
+    const float f_in = jitteredSample;
+    const float f_dc = m_filters[i].inputDcFilter.fast_f(f_in);
+    const float f = f_in - f_dc;
+    const float f_p = m_filters[i].derivative.f(f_in);
 
-        const float f_in = jitteredSample;
-        const float f_dc = m_filters[i].inputDcFilter.fast_f(f_in);
-        const float f = f_in - f_dc;
-        const float f_p = m_filters[i].derivative.f(f_in);
+    const float noise = static_cast<float>(2.0 * m_filters[i].airNoise.uniform() - 1.0);
+    const float r = m_filters->airNoiseLowPass.fast_f(noise);
+    const float r_mixed = airNoise * r + (1 - airNoise);
 
-        const float noise = static_cast<float>(2.0 * m_filters[i].airNoise.uniform() - 1.0);
-        const float r =
-            m_filters->airNoiseLowPass.fast_f(noise);
-        const float r_mixed =
-            airNoise * r + (1 - airNoise);
+    float v_in = f_p * dF_F_mix + f * r_mixed * (1 - dF_F_mix);
+    if (std::fpclassify(v_in) == FP_SUBNORMAL) v_in = 0;
+    return convAmount * m_filters[i].convolution.f(v_in) + (1 - convAmount) * v_in;
+}
 
-        float v_in =
-            f_p * dF_F_mix
-            + f * r_mixed * (1 - dF_F_mix);
-        if (std::fpclassify(v_in) == FP_SUBNORMAL) {
-            v_in = 0;
-        }
-
-        const float v =
-            convAmount * m_filters[i].convolution.f(v_in)
-            + (1 - convAmount) * v_in;
-
-        signal += v;
-    }
-
+int16_t Synthesizer::finishSample(float signal, bool rejectNonfinite) {
+    if (rejectNonfinite && !std::isfinite(signal)) throw engine_sim::SimulationFault("nonfinite mixed synthesis signal");
     signal = m_antialiasing.fast_f(signal);
 
     m_levelingFilter.p_target = m_renderParameters.levelerTarget;
@@ -437,10 +433,48 @@ int16_t Synthesizer::renderAudio(int inputSample) {
     if (m_nonFiniteCaptureCount != nullptr && !std::isfinite(v_leveled)) {
         ++*m_nonFiniteCaptureCount;
     }
-    if (!std::isfinite(v_leveled)) return 0;
+    if (!std::isfinite(v_leveled)) {
+        if (rejectNonfinite) throw engine_sim::SimulationFault("nonfinite signal before quantization");
+        return 0;
+    }
     if (v_leveled >= INT16_MAX) return INT16_MAX;
     if (v_leveled <= INT16_MIN) return INT16_MIN;
     return static_cast<int16_t>(std::lround(v_leveled));
+}
+
+void Synthesizer::applyAudioParameters() {
+    for (int i = 0; i < m_inputChannelCount; ++i) {
+        m_filters[i].airNoiseLowPass.setCutoffFrequency(
+            m_renderParameters.airNoiseFrequencyCutoff, m_audioSampleRate);
+        m_filters[i].jitterFilter.setJitterScale(m_renderParameters.inputSampleNoise);
+    }
+}
+
+void Synthesizer::beginSynchronous() {
+    if (m_direct || m_thread != nullptr || m_inputChannelCount == 0
+        || m_stagedFrames != 0 || m_pendingFrames != 0 || m_renderedSamples != 0) {
+        throw std::logic_error("Synchronous synthesis requires a fresh prepared instance");
+    }
+    m_direct = true;
+    m_renderParameters = m_audioParameters;
+    applyAudioParameters();
+}
+
+int16_t Synthesizer::renderNativeFrame(const double *data) {
+    if (!m_direct || data == nullptr) throw std::logic_error("Synchronous synthesis is not prepared");
+    float signal = 0;
+    for (int i = 0; i < m_inputChannelCount; ++i) {
+        const float value = static_cast<float>(data[i]);
+        if (!std::isfinite(value)) throw engine_sim::SimulationFault("nonfinite native synthesis input");
+        const float filtered = m_filters[i].antialiasing.fast_f(value);
+        if (!std::isfinite(filtered)) throw engine_sim::SimulationFault("nonfinite interpolated synthesis input");
+        const float channel = renderChannel(i, filtered);
+        if (!std::isfinite(channel)) throw engine_sim::SimulationFault("nonfinite synthesis channel");
+        signal += channel;
+    }
+    const auto sample = finishSample(signal, true);
+    ++m_renderedSamples;
+    return sample;
 }
 
 double Synthesizer::getLevelerGain() {
@@ -456,4 +490,8 @@ Synthesizer::AudioParameters Synthesizer::getAudioParameters() {
 void Synthesizer::setAudioParameters(const AudioParameters &params) {
     std::lock_guard<std::mutex> lock(m_lock0);
     m_audioParameters = params;
+    if (m_direct) {
+        m_renderParameters = params;
+        applyAudioParameters();
+    }
 }
