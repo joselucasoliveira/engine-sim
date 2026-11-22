@@ -367,25 +367,79 @@ public:
         source=audio->CreateSource(audioBuffer);
         if (!source) throw desktop::DesktopError("audio", "source creation failed");
         checked(source->SetPan(0),"audio pan"); checked(source->SetVolume(1),"audio volume");
+        resetAudioQueue();
     }
     void setAudioPlaying(bool playing) override {
         if (virtualMode) { virtualSink.setPlaying(playing); return; }
         if (!source) throw desktop::DesktopError("audio", "source is not open");
         checked(source->SetMode(playing?ysAudioSource::Mode::Loop:ysAudioSource::Mode::Stop),"audio mode");
+        ringPlaying=playing; ringPoll=std::chrono::steady_clock::now();
     }
     void quiesceAudio() noexcept override {
-        virtualSink.quiesce();
+        virtualSink.quiesce(); ringPlaying=false;
         if (source) source->SetMode(ysAudioSource::Mode::Stop);
+    }
+    void setAudioSourcePaused(bool value) override { ringPaused=value; }
+    void resetAudioQueue() override {
+        if (virtualMode) { virtualSink.shutdown(); virtualSink.open(); return; }
+        if (!source) throw desktop::DesktopError("audio reset", "source is not open");
+        checked(source->SetMode(ysAudioSource::Mode::Stop),"audio reset stop");
+        void *data=nullptr; SampleOffset count=0;
+        checked(source->LockEntireBuffer(&data,&count),"audio reset lock");
+        std::fill_n(static_cast<std::int16_t *>(data),count,0);
+        checked(source->UnlockBuffer(data,count),"audio reset unlock");
+        source->Seek(0);
+        ringTags.fill(0); std::fill_n(ringTags.begin(),4410,2);
+        ringPosition=0; ringConsumed=0; ringWritten=4410;
+        ringSubmitted=ringConsumedSource=ringStarvation=ringPauseSilence=0;
+        ringPriming=4410; ++ringEpoch; ringPlaying=false; ringPaused=false;
     }
     desktop::AudioOffset audioCursor() override {
         if (virtualMode) return virtualSink.cursor();
+        return audioProgress().cursor;
+    }
+    desktop::AudioProgress audioProgress() override {
+        if (virtualMode) { desktop::AudioProgress value; value.cursor=virtualSink.cursor(); return value; }
         if (!source) throw desktop::DesktopError("audio", "source is not open");
-        const auto position=source->GetCurrentWritePosition();
-        if (runEvidence) {
-            if (haveCursor) runEvidence->audioConsumedInput+=(position+44100-lastCursor)%44100;
-            lastCursor=position; haveCursor=true;
+        const auto now=std::chrono::steady_clock::now();
+        if (ringPlaying && now-ringPoll>=std::chrono::seconds(1))
+            throw desktop::DesktopError("audio progress", "one-second cursor deadline exceeded");
+        ringPoll=now;
+        const auto position=source->GetCurrentPosition();
+        const auto advanced=(position+44100-ringPosition)%44100;
+        for (unsigned i=0;i<advanced;++i) {
+            const auto tag=ringTags[(ringPosition+i)%44100];
+            if (tag==1) ++ringConsumedSource;
+            else if (tag==0) { if (ringPaused) ++ringPauseSilence; else ++ringStarvation; }
+            ringTags[(ringPosition+i)%44100]=0;
         }
-        return position;
+        if (advanced) {
+            // Retire every played cell before the looping native ring can replay it.
+            auto span=lockAudio(ringPosition,advanced);
+            std::fill_n(span.first,span.firstCount,0); std::fill_n(span.second,span.secondCount,0);
+            checked(source->UnlockBufferSegments(span.first,span.firstCount,span.second,span.secondCount),"retire audio cells");
+        }
+        ringPosition=position; ringConsumed+=advanced;
+        if (ringConsumed>ringWritten) {
+            if (!ringPaused) throw desktop::DesktopError("audio progress", "device exhausted the bounded source lead");
+            ringWritten=ringConsumed;
+        }
+        if (ringPaused && ringWritten-ringConsumed<4410) {
+            const auto count=4410-(ringWritten-ringConsumed);
+            for (std::uint64_t i=0;i<count;++i) ringTags[(ringWritten+i)%44100]=3;
+            ringWritten+=count; ringPauseSilence+=count;
+        }
+        desktop::AudioProgress value;
+        value.queueKnown=value.writeOffsetKnown=true;
+        value.cursor=position; value.queued=static_cast<desktop::AudioOffset>(ringWritten-ringConsumed);
+        value.writeOffset=static_cast<desktop::AudioOffset>(ringWritten%44100);
+        const auto safe=(source->GetCurrentWritePosition()+44100-position)%44100;
+        value.writable=value.queued>=safe?44100-value.queued:0;
+        value.consumed=ringConsumed; value.submittedSource=ringSubmitted;
+        value.consumedSource=ringConsumedSource; value.starvationSilence=ringStarvation;
+        value.pauseSilence=ringPauseSilence; value.primingSilence=ringPriming; value.epoch=ringEpoch;
+        if (runEvidence) runEvidence->audioConsumedInput=ringConsumed;
+        return value;
     }
     desktop::AudioSegments lockAudio(desktop::AudioOffset offset,desktop::AudioOffset count) override {
         if (virtualMode) return virtualSink.lock(offset,count);
@@ -401,6 +455,9 @@ public:
             runEvidence->nonzeroFedToBackend=runEvidence->nonzeroSource;
         }
         checked(source->UnlockBufferSegments(segments.first,segments.firstCount,segments.second,segments.secondCount),"audio unlock");
+        const auto count=static_cast<std::uint64_t>(segments.firstCount)+segments.secondCount;
+        for (std::uint64_t i=0;i<count;++i) ringTags[(ringWritten+i)%44100]=1;
+        ringWritten+=count; ringSubmitted+=count;
     }
     void readScreen(std::uint8_t *rgba,std::size_t capacity) override {
         const auto required=static_cast<std::size_t>(engine.GetScreenWidth())*engine.GetScreenHeight()*4;
@@ -435,6 +492,12 @@ private:
     desktop::VirtualAudio virtualSink;
     desktop::AudioOffset lastCursor=0;
     bool haveCursor=false;
+    std::array<std::uint8_t,44100> ringTags{};
+    desktop::AudioOffset ringPosition=0;
+    std::uint64_t ringConsumed=0,ringWritten=0,ringSubmitted=0,ringConsumedSource=0;
+    std::uint64_t ringStarvation=0,ringPauseSilence=0,ringPriming=0,ringEpoch=0;
+    bool ringPlaying=false,ringPaused=false;
+    std::chrono::steady_clock::time_point ringPoll;
     std::array<WORD,static_cast<std::size_t>(desktop::Key::Count)> injectedKeys{};
     void snapshot() {
         auto *window=engine.GetGameWindow();

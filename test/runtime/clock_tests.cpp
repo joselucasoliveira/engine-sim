@@ -143,6 +143,71 @@ TEST(Clock, LongCountsAndPartitions) {
     }
 }
 
+TEST(Clock, DesktopRetimingPreservesPartialTicksAndPartitionedTimeline) {
+    struct RetimedSource : ClockSource {
+        std::uint64_t ticks = 0;
+        std::vector<double> inputs;
+        void latch() override {}
+        bool tick(double *out) override { out[0] = static_cast<double>(++ticks % 257); return true; }
+        bool native(const double *in, std::int16_t &out) override {
+            inputs.push_back(in[0]); out = static_cast<std::int16_t>(std::lround(in[0])); return true;
+        }
+    };
+    const std::vector<std::pair<std::size_t, std::uint32_t>> edges{
+        {0, 10000}, {1, 400000}, {13, 400}, {1001, 44100}, {1049, 30000},
+        {1100, 10001}, {4000, 96000}, {7000, 400000}, {9001, 400}, {11000, 10000}};
+    const auto run = [&](std::size_t partition, bool checkReference) {
+        RetimedSource source;
+        SampleClock clock(10000, {0.0}, source, SampleClock::Profile::Desktop);
+        std::vector<float> pcm(12001);
+        std::uint32_t frequency = 10000, pending = 0;
+        std::uint64_t ticks = 0;
+        long double start = 0, end = 1.0L / frequency;
+        for (std::size_t e = 0; e < edges.size(); ++e) {
+            // Only the final request takes effect. Zero-sized calls cannot consume it.
+            clock.requestDesktopFrequency(12345);
+            clock.render(nullptr, 0);
+            clock.requestDesktopFrequency(edges[e].second);
+            pending = edges[e].second == frequency ? 0 : edges[e].second;
+            const auto stop = e + 1 < edges.size() ? edges[e + 1].first : pcm.size();
+            for (auto n = edges[e].first; n < stop;) {
+                const auto count = std::min(partition, stop - n);
+                clock.render(pcm.data() + n, count);
+                if (checkReference) for (auto frame = n; frame < n + count; ++frame) {
+                    const long double left = static_cast<long double>(frame) / rate;
+                    const long double right = static_cast<long double>(frame + 1) / rate;
+                    if (std::abs(left - start) < 1e-14L && pending) {
+                        frequency = pending; pending = 0; end = start + 1.0L / frequency;
+                    }
+                    const auto fraction = (left - start) / (end - start);
+                    const auto previous = ticks ? (ticks - 1) % 257 : 0;
+                    const auto current = ticks % 257;
+                    EXPECT_NEAR(source.inputs[frame], static_cast<double>((1 - fraction) * previous + fraction * current), 1e-7);
+                    while (end <= right + 1e-14L) {
+                        ++ticks; start = end;
+                        if (pending) { frequency = pending; pending = 0; }
+                        end = start + 1.0L / frequency;
+                    }
+                }
+                n += count;
+                if (checkReference) EXPECT_EQ(clock.counts().ticks, ticks);
+            }
+        }
+        EXPECT_EQ(source.ticks, clock.counts().ticks);
+        EXPECT_EQ(clock.counts().frames, pcm.size());
+        return std::make_pair(pcm, source.inputs);
+    };
+    const auto expected = run(1, true);
+    EXPECT_EQ(run(257, false), expected);
+    EXPECT_EQ(run(SampleClock::MaximumBlock, false), expected);
+    Source source;
+    SampleClock publicClock(10000, {0.0}, source);
+    EXPECT_THROW(publicClock.requestDesktopFrequency(400), std::invalid_argument);
+    SampleClock desktopClock(400, {0.0}, source, SampleClock::Profile::Desktop);
+    EXPECT_THROW(desktopClock.requestDesktopFrequency(399), std::invalid_argument);
+    EXPECT_THROW(desktopClock.requestDesktopFrequency(400001), std::invalid_argument);
+}
+
 TEST(Clock, ZeroInvalidAndCounterCapacityDoNotAdvance) {
     Source source;
     SampleClock clock(44100, {0.0}, source);

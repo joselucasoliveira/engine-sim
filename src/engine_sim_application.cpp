@@ -65,12 +65,41 @@ struct EngineSimApplication::UserInterface {
     InfoCluster *info = nullptr;
 };
 
+struct EngineSimApplication::DesktopControls {
+    struct Values {
+        double demand = 0, clutch = 0, dynoSpeed = 0;
+        bool ignition = false, starter = false, dyno = false, hold = false;
+        int frequency = 10000;
+    } pending, applied;
+    Simulator &simulator;
+    explicit DesktopControls(Simulator &value) : simulator(value) { capture(); applied = pending; }
+    void capture() {
+        pending = {simulator.getEngine()->getSpeedControl(), simulator.getTransmission()->getClutchPressure(),
+            simulator.m_dyno.m_rotationSpeed, simulator.getEngine()->getIgnitionModule()->m_enabled,
+            simulator.m_starterMotor.m_enabled, simulator.m_dyno.m_enabled, simulator.m_dyno.m_hold,
+            simulator.getSimulationFrequency()};
+    }
+    void apply(const Values &value, bool requestedFrequency) {
+        simulator.getEngine()->setSpeedControl(value.demand);
+        simulator.getEngine()->getIgnitionModule()->m_enabled = value.ignition;
+        simulator.m_starterMotor.m_enabled = value.starter;
+        simulator.getTransmission()->setClutchPressure(value.clutch);
+        simulator.m_dyno.m_rotationSpeed = value.dynoSpeed;
+        simulator.m_dyno.m_enabled = value.dyno;
+        simulator.m_dyno.m_hold = value.hold;
+        if (requestedFrequency) simulator.setSimulationFrequency(value.frequency);
+    }
+};
+
 struct EngineSimApplication::PendingSession {
     std::unique_ptr<EngineSession> session;
     std::vector<SimulationObject *> objects;
     std::unique_ptr<UserInterface> ui;
+    std::unique_ptr<DesktopControls> controls;
+    std::unique_ptr<engine_sim::PullEngine> pull;
+    std::unique_ptr<desktop::AudioPacer> pacer;
     ~PendingSession() {
-        if (session != nullptr && session->simulator != nullptr) session->simulator->endAudioRenderingThread();
+        pacer.reset(); pull.reset(); controls.reset();
         ui.reset();
         releaseObjects(objects);
         session.reset();
@@ -158,10 +187,8 @@ void EngineSimApplication::initialize() {
     m_shaders.SetClearColor(desktop::color::srgbiToLinear(0x34, 0x98, 0xdb));
     if (!loadScript()) throw std::runtime_error(m_loadError);
 
-    m_audioBuffer.initialize(44100, 44100);
-    m_audioBuffer.m_writePointer = (int)(44100 * 0.1);
-
     m_host->openAudio();
+    m_audioOpen = true;
     m_host->setAudioPlaying(m_simulator->getEngine() != nullptr);
 
 #ifdef ATG_ENGINE_SIM_DISCORD_ENABLED
@@ -212,75 +239,41 @@ void EngineSimApplication::process(float frame_dt) {
 
     m_simulator->setSimulationSpeed(speed);
 
-    const double avgFramerate = clamp(m_host->GetAverageFramerate(), 30.0f, 1000.0f);
-    m_simulator->startFrame(1 / avgFramerate);
+    m_audioSpeedDivisor = static_cast<unsigned>(std::lround(1.0 / speed));
+    serviceDesktopAudio(frame_dt, m_paused);
+}
 
-    auto proc_t0 = std::chrono::steady_clock::now();
-    const int iterationCount = m_simulator->getFrameIterationCount();
-    while (m_simulator->simulateStep()) {
-        m_oscCluster->sample();
+void EngineSimApplication::serviceDesktopAudio(float seconds, bool manual) {
+    m_pullEngine->requestDesktopFrequency(m_desktopControls->pending.frequency);
+    const double exact = m_manualFrameFraction + clamp(static_cast<double>(seconds), 1.0 / 200, 1.0 / 30) * 44100;
+    const auto frames = manual ? static_cast<std::uint32_t>(std::floor(exact)) : 0;
+    const auto rejected = m_audioPacer->statistics().rejectedManualSteps;
+    m_pullEngine->beginPresentation();
+    bool ok;
+    try { ok = m_audioPacer->service(*m_host, m_audioSpeedDivisor, m_paused, frames); }
+    catch (...) { m_pullEngine->endPresentation(); throw; }
+    m_pullEngine->endPresentation();
+    const auto &stats = m_audioPacer->statistics();
+    if (manual && ok && stats.rejectedManualSteps == rejected) m_manualFrameFraction = exact - frames;
+    if (stats.rejectedManualSteps != rejected) std::cerr << "Manual step rejected: audio queue is full\n";
+    if (!ok) {
+        m_host->quiesceAudio();
+        throw desktop::DesktopError("pull audio", m_audioPacer->fault());
     }
+    m_performanceCluster->addInputBufferUsageSample(static_cast<double>(stats.ready + stats.reserved) / desktop::AudioPacer::Capacity);
+    m_performanceCluster->addAudioLatencySample(static_cast<double>(stats.deviceQueued + stats.ready) / desktop::AudioPacer::Target);
+}
 
-    auto proc_t1 = std::chrono::steady_clock::now();
-
-    m_simulator->endFrame();
-
-    auto duration = proc_t1 - proc_t0;
-    if (iterationCount > 0) {
-        m_performanceCluster->addTimePerTimestepSample(
-            (duration.count() / 1E9) / iterationCount);
-    }
-
-    const desktop::AudioOffset safeWritePosition = m_host->audioCursor();
-    const desktop::AudioOffset writePosition = m_audioBuffer.m_writePointer;
-
-    desktop::AudioOffset targetWritePosition =
-        m_audioBuffer.getBufferIndex(safeWritePosition, (int)(44100 * 0.1));
-    desktop::AudioOffset maxWrite = m_audioBuffer.offsetDelta(writePosition, targetWritePosition);
-
-    desktop::AudioOffset currentLead = m_audioBuffer.offsetDelta(safeWritePosition, writePosition);
-    desktop::AudioOffset newLead = m_audioBuffer.offsetDelta(safeWritePosition, targetWritePosition);
-
-    if (currentLead > 44100 * 0.5) {
-        m_audioBuffer.m_writePointer = m_audioBuffer.getBufferIndex(safeWritePosition, (int)(44100 * 0.05));
-        currentLead = m_audioBuffer.offsetDelta(safeWritePosition, m_audioBuffer.m_writePointer);
-        maxWrite = m_audioBuffer.offsetDelta(m_audioBuffer.m_writePointer, targetWritePosition);
-    }
-
-    if (currentLead > newLead) {
-        maxWrite = 0;
-    }
-
-    maxWrite = std::min<desktop::AudioOffset>(maxWrite, m_audioScratch.size());
-    int16_t *samples = m_audioScratch.data();
-    const int readSamples = m_simulator->readAudioOutput(maxWrite, samples);
-
-    for (desktop::AudioOffset i = 0; i < (desktop::AudioOffset)readSamples && i < maxWrite; ++i) {
-        const int16_t sample = samples[i];
-        if (m_oscillatorSampleOffset % 4 == 0) {
-            m_oscCluster->getAudioWaveformOscilloscope()->addDataPoint(
-                m_oscillatorSampleOffset,
-                sample / (float)(INT16_MAX));
+void EngineSimApplication::observeReadyAudio(void *context, const std::int16_t *samples, std::size_t count) noexcept {
+    auto &app = *static_cast<EngineSimApplication *>(context);
+    for (std::size_t i = 0; i < count; ++i) {
+        if (app.m_oscillatorSampleOffset % 4 == 0) {
+            app.m_oscCluster->getAudioWaveformOscilloscope()->addDataPoint(app.m_oscillatorSampleOffset,
+                samples[i] / static_cast<float>(INT16_MAX));
         }
-
-        m_audioBuffer.writeSample(sample, m_audioBuffer.m_writePointer, (int)i);
-
-        m_oscillatorSampleOffset = (m_oscillatorSampleOffset + 1) % (44100 / 10);
+        app.m_oscillatorSampleOffset = (app.m_oscillatorSampleOffset + 1) % (44100 / 10);
     }
-
-    if (readSamples > 0) {
-        const auto segments = m_host->lockAudio(m_audioBuffer.m_writePointer, readSamples);
-        m_audioBuffer.copyBuffer(segments.first, m_audioBuffer.m_writePointer, segments.firstCount);
-        m_audioBuffer.copyBuffer(segments.second,
-            m_audioBuffer.getBufferIndex(m_audioBuffer.m_writePointer, segments.firstCount), segments.secondCount);
-        m_host->unlockAudio(segments);
-        m_audioBuffer.commitBlock(readSamples);
-    }
-
-    m_performanceCluster->addInputBufferUsageSample(
-        (double)m_simulator->getSynthesizerInputLatency() / m_simulator->getSynthesizerInputLatencyTarget());
-    m_performanceCluster->addAudioLatencySample(
-        m_audioBuffer.offsetDelta(m_host->audioCursor(), m_audioBuffer.m_writePointer) / (44100 * 0.1));
+    if (app.m_audioObservation.ready) app.m_audioObservation.ready(app.m_audioObservation.context, samples, count);
 }
 
 void EngineSimApplication::render() {
@@ -355,6 +348,7 @@ void EngineSimApplication::run() {
         updateScreenSizeStability();
 
         processEngineInput();
+        m_desktopControls->capture();
 
         if (m_host->ProcessKeyDown(desktop::Key::Insert) &&
             m_host->GetGameWindow()->IsActive()) {
@@ -373,6 +367,7 @@ void EngineSimApplication::run() {
         if (!m_paused || m_host->ProcessKeyDown(desktop::Key::Right)) {
             process(m_host->GetFrameLength());
         }
+        else serviceDesktopAudio(m_host->GetFrameLength(), false);
 
         m_userInterface->manager.update(m_host->GetFrameLength());
 
@@ -389,14 +384,14 @@ void EngineSimApplication::run() {
         stopRecording();
     }
 
-    m_simulator->endAudioRenderingThread();
+    m_host->quiesceAudio();
 }
 
 void EngineSimApplication::destroy() {
     if (m_destroyed) return;
     m_destroyed = true;
-    if (m_session != nullptr) m_session->simulator->endAudioRenderingThread();
     if (m_host) m_host->quiesceAudio();
+    m_audioPacer.reset(); m_pullEngine.reset(); m_desktopControls.reset();
     m_userInterface.reset();
     destroyObjects();
     m_session.reset();
@@ -405,7 +400,7 @@ void EngineSimApplication::destroy() {
     if (m_host) { m_host->shutdown(); m_host.reset(); }
     m_windowCreated = false;
     m_geometryGenerator.destroy();
-    m_audioBuffer.destroy();
+    m_audioOpen = false;
 }
 
 bool EngineSimApplication::loadEngine(Engine *engine, Vehicle *vehicle, Transmission *transmission) {
@@ -446,13 +441,30 @@ bool EngineSimApplication::loadEngine(EngineDefinition definition) {
         buildObjects(engine, candidate.objects);
         candidate.ui = prepareUserInterface(engine, simulator);
         const int maxDepth = engine->getMaxDepth();
-        simulator->startAudioRenderingThread();
+        candidate.controls = std::make_unique<DesktopControls>(*simulator);
+        auto *commands = candidate.controls.get();
+        candidate.pull = std::make_unique<engine_sim::PullEngine>(*simulator,
+            [commands] { commands->applied = commands->pending; }, engine_sim::SampleClock::Profile::Desktop);
+        candidate.pull->setTickCommands([commands] { commands->apply(commands->applied, false); },
+            [commands] { commands->apply(commands->pending, true); });
+        auto *scope = candidate.ui->oscilloscope;
+        candidate.pull->setTickObserver([scope](const Simulator &) { scope->sample(); });
+        auto *pull = candidate.pull.get();
+        candidate.pacer = std::make_unique<desktop::AudioPacer>([pull] {
+            float sample;
+            pull->render(&sample, 1);
+            return sample;
+        });
+        candidate.pacer->setObservation({observeReadyAudio, this});
 
-        if (m_session != nullptr) m_session->simulator->endAudioRenderingThread();
-        if (m_host) m_host->quiesceAudio();
+        if (m_audioOpen) { m_host->quiesceAudio(); m_host->resetAudioQueue(); }
         m_session.swap(candidate.session);
         m_objects.swap(candidate.objects);
         m_userInterface.swap(candidate.ui);
+        m_desktopControls.swap(candidate.controls);
+        m_pullEngine.swap(candidate.pull);
+        m_audioPacer.swap(candidate.pacer);
+        m_manualFrameFraction = 0;
         bindSession();
         m_viewParameters.Layer1 = maxDepth;
         palette.accepted = true;

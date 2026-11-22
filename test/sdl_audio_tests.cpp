@@ -81,6 +81,55 @@ TEST(DesktopAudio, OrderedSourceWrapBoundedQueueAndSeparateSilence) {
            << "\nSDL-input-consumed=" << stats.consumedInput << "\nmax-queued-frames=" << stats.maxQueuedFrames
            << "\njoin-nanoseconds=" << stats.joinNanoseconds << '\n';
 }
+// Independently clocked SDL seam: pump observes actual source deficit without
+// depending on dummy-driver wall scheduling or the presentation frame rate.
+std::atomic<int> controlledQueued{0};
+bool controlledPut(SDL_AudioStream *, const void *, int bytes) { controlledQueued.fetch_add(bytes); return true; }
+int controlledQueue(SDL_AudioStream *) { return controlledQueued.load(); }
+bool controlledResume(SDL_AudioStream *) { return true; }
+TEST(DesktopAudio, CompleteOccupancyTagsAndLowQueueDoNotInventStarvation) {
+    Audio audio; auto value = options();
+    controlledQueued.store(0);
+    value.put = controlledPut; value.queued = controlledQueue; value.resume = controlledResume;
+    audio.open(value); audio.setPlaying(true);
+    controlledQueued.store(4000 * 2);
+    ASSERT_TRUE(eventually([&] { return audio.statistics().consumedInput == 410; }));
+    EXPECT_EQ(audio.progress().queued, 4000u);
+    std::this_thread::sleep_for(10ms);
+    EXPECT_EQ(audio.statistics().putFrames, Audio::Watermark);
+    EXPECT_EQ(audio.statistics().starvationSilence, 0u);
+    std::array<std::int16_t, 37> samples{}; samples.fill(1234);
+    submit(audio, samples.data(), samples.size());
+    ASSERT_TRUE(eventually([&] { return audio.statistics().pumpedSource == samples.size(); }));
+    EXPECT_EQ(audio.progress().queued, 4037u); // FIFO + SDL exactly once.
+    controlledQueued.store(1 * 2);
+    ASSERT_TRUE(eventually([&] { return audio.statistics().consumedInput == 4446; }));
+    EXPECT_EQ(audio.statistics().consumedSource, 36u);
+    EXPECT_EQ(audio.statistics().starvationSilence, 0u);
+    audio.setSourcePaused(true); controlledQueued.store(0);
+    ASSERT_TRUE(eventually([&] { return audio.statistics().pauseSilence > 0; }));
+    EXPECT_EQ(audio.statistics().consumedSource, 37u);
+    EXPECT_EQ(audio.statistics().starvationSilence, 0u);
+    audio.quiesce(); audio.shutdown();
+}
+TEST(DesktopAudio, ResetRetiresSourceWithoutReportingItAsConsumedOrDropped) {
+    Audio audio; audio.open(options());
+    std::array<std::int16_t, 101> samples{};
+    submit(audio, samples.data(), samples.size());
+    EXPECT_EQ(audio.progress().queued, Audio::Watermark + samples.size());
+    audio.resetQueue();
+    EXPECT_EQ(audio.progress().queued, Audio::Watermark);
+    EXPECT_EQ(audio.progress().epoch, 1u);
+    EXPECT_EQ(audio.statistics().retiredSource, samples.size());
+    EXPECT_EQ(audio.statistics().consumedSource, 0u);
+    EXPECT_EQ(audio.statistics().discardedSource, 0u);
+    EXPECT_EQ(audio.statistics().primingSilence, 2 * Audio::Watermark);
+    submit(audio, samples.data(), 37);
+    audio.resetQueue();
+    EXPECT_EQ(audio.statistics().retiredSource, samples.size() + 37);
+    EXPECT_EQ(audio.statistics().epoch, 2u);
+    EXPECT_EQ(audio.statistics().consumedInput, 0u);
+}
 TEST(DesktopAudio, SourceCapacityInvalidSpansAndRepeatedLifetime) {
     Audio audio;
     for (int iteration = 0; iteration < 6; ++iteration) {
@@ -185,6 +234,9 @@ public:
     void setAudioPlaying(bool value) override { audio.setPlaying(value); }
     void quiesceAudio() noexcept override { audio.quiesce(); }
     desktop::AudioOffset audioCursor() override { return audio.cursor(); }
+    desktop::AudioProgress audioProgress() override { return audio.progress(); }
+    void setAudioSourcePaused(bool value) override { audio.setSourcePaused(value); }
+    void resetAudioQueue() override { audio.resetQueue(); }
     desktop::AudioSegments lockAudio(desktop::AudioOffset offset, desktop::AudioOffset count) override { return audio.lock(offset,count); }
     void unlockAudio(const desktop::AudioSegments &span) override {
         expected.insert(expected.end(),span.first,span.first+span.firstCount);

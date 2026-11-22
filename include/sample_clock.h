@@ -25,20 +25,31 @@ public:
 // Private C++ backend. A source tick and a native sample each run exactly once.
 class SampleClock {
 public:
+    enum class Profile { Public, Desktop };
     static constexpr std::uint32_t NativeRate = 44100;
     static constexpr std::size_t MaximumBlock = 65536;
-    SampleClock(std::uint32_t frequency, const std::vector<double> &rest, ClockSource &source);
+    SampleClock(std::uint32_t frequency, const std::vector<double> &rest, ClockSource &source,
+        Profile profile = Profile::Public);
     SampleClock(const SampleClock &) = delete;
     SampleClock &operator=(const SampleClock &) = delete;
     void render(float *output, std::size_t count);
     const ClockCounts &counts() const { return m_counts; }
     std::size_t lastWritten() const { return m_written; }
     bool faulted() const { return m_faulted; }
+    void requestDesktopFrequency(std::uint32_t frequency);
+    std::uint32_t tickFrequency() const { return m_frequency; }
 
 private:
     friend struct ClockTestAccess;
     void validateSpan(float *output, std::size_t count) const;
     void interval(float *output);
+    void finishTick();
+    void startTick();
+    double position() const;
+    long double precisePosition() const;
+    std::uint32_t advanceFixed();
+    std::uint32_t advanceVariable();
+    std::uint32_t changeFrequencyWithinInterval(long double remaining);
     std::uint32_t m_frequency;
     std::uint32_t m_phase = 0;
     ClockSource &m_source;
@@ -47,6 +58,10 @@ private:
     std::size_t m_written = 0;
     bool m_tickActive = false;
     bool m_faulted = false;
+    Profile m_profile;
+    std::uint32_t m_pendingFrequency = 0, m_variablePhase = 0;
+    long double m_offset = 0;
+    bool m_variable = false;
 };
 }
 #endif

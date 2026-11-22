@@ -89,6 +89,9 @@ public:
     void setAudioPlaying(bool value) override { audio.setPlaying(value); }
     void quiesceAudio() noexcept override { audio.quiesce(); }
     AudioOffset audioCursor() override { return audio.cursor(); }
+    AudioProgress audioProgress() override { return audio.progress(); }
+    void setAudioSourcePaused(bool paused) override { audio.setSourcePaused(paused); }
+    void resetAudioQueue() override { audio.resetQueue(); }
     AudioSegments lockAudio(AudioOffset offset, AudioOffset count) override { return audio.lock(offset,count); }
     void unlockAudio(const AudioSegments &segments) override { audio.unlock(segments); if (runEvidence) runEvidence->source(segments); }
     void readScreen(std::uint8_t *rgba, std::size_t capacity) override {

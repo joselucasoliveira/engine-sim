@@ -15,9 +15,10 @@ std::vector<double> preparedRest(Simulator &simulator) {
 }
 }
 
-PullEngine::PullEngine(Simulator &simulator, ControlLatch controls)
+PullEngine::PullEngine(Simulator &simulator, ControlLatch controls, SampleClock::Profile profile)
     : m_simulator(simulator), m_controls(std::move(controls)),
-      m_clock(simulator.getSimulationFrequency(), preparedRest(simulator), *this) {
+      m_clock(simulator.getSimulationFrequency(), preparedRest(simulator), *this, profile),
+      m_flowTotals(simulator.getEngine()->getIntakeCount()) {
     m_simulator.synthesizer().beginSynchronous();
 }
 
@@ -26,14 +27,41 @@ void PullEngine::latch() {
 }
 
 bool PullEngine::tick(double *endpoint) {
+    m_simulator.setSimulationFrequency(static_cast<int>(m_clock.tickFrequency()));
+    if (m_beforeTick) m_beforeTick();
     m_simulator.advanceTick(false);
+    if (m_presenting) {
+        ++m_simulator.m_steps; ++m_simulator.m_currentIteration;
+        const auto dt = m_simulator.getTimestep();
+        m_presentationSeconds += dt;
+        for (std::size_t i = 0; i < m_flowTotals.size(); ++i) {
+            m_flowTotals[i] += m_simulator.getEngine()->getIntake(static_cast<int>(i))->m_flowRate * dt;
+        }
+    }
     std::copy_n(m_simulator.exhaustEndpoint(), m_simulator.getEngine()->getExhaustSystemCount(), endpoint);
     if (m_observer) m_observer(m_simulator);
+    if (m_afterTick) m_afterTick();
     return true;
 }
 
 bool PullEngine::native(const double *input, std::int16_t &sample) {
     sample = m_simulator.synthesizer().renderNativeFrame(input);
     return true;
+}
+
+void PullEngine::beginPresentation() {
+    m_simulator.m_steps = m_simulator.m_currentIteration = 0;
+    std::fill(m_flowTotals.begin(), m_flowTotals.end(), 0.0);
+    m_presentationSeconds = 0;
+    m_presenting = true;
+}
+
+void PullEngine::endPresentation() {
+    if (m_presentationSeconds > 0) {
+        for (std::size_t i = 0; i < m_flowTotals.size(); ++i) {
+            m_simulator.getEngine()->getIntake(static_cast<int>(i))->m_flowRate = m_flowTotals[i] / m_presentationSeconds;
+        }
+    }
+    m_presenting = false;
 }
 }

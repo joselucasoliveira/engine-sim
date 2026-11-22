@@ -12,7 +12,7 @@ class PullEngine final : private ClockSource {
 public:
     using ControlLatch = std::function<void()>;
     using TickObserver = std::function<void(const Simulator &)>;
-    PullEngine(Simulator &simulator, ControlLatch controls);
+    PullEngine(Simulator &simulator, ControlLatch controls, SampleClock::Profile profile = SampleClock::Profile::Public);
     PullEngine(const PullEngine &) = delete;
     PullEngine &operator=(const PullEngine &) = delete;
     void render(float *output, std::size_t count) { m_clock.render(output, count); }
@@ -20,6 +20,10 @@ public:
     std::size_t lastWritten() const { return m_clock.lastWritten(); }
     bool faulted() const { return m_clock.faulted(); }
     void setTickObserver(TickObserver observer) { m_observer = std::move(observer); }
+    void setTickCommands(ControlLatch before, ControlLatch after) { m_beforeTick = std::move(before); m_afterTick = std::move(after); }
+    void requestDesktopFrequency(std::uint32_t frequency) { m_clock.requestDesktopFrequency(frequency); }
+    void beginPresentation();
+    void endPresentation();
 
 private:
     void latch() override;
@@ -28,7 +32,11 @@ private:
     Simulator &m_simulator;
     ControlLatch m_controls;
     TickObserver m_observer;
+    ControlLatch m_beforeTick, m_afterTick;
     SampleClock m_clock;
+    std::vector<double> m_flowTotals;
+    double m_presentationSeconds = 0;
+    bool m_presenting = false;
 };
 }
 #endif

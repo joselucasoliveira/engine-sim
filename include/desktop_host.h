@@ -63,6 +63,15 @@ struct AudioSegments {
     std::int16_t *first = nullptr, *second = nullptr;
     AudioOffset firstCount = 0, secondCount = 0;
 };
+struct AudioProgress {
+    bool queueKnown = false;
+    bool writeOffsetKnown = false;
+    AudioOffset writeOffset = 0;
+    AudioOffset cursor = 0, queued = 0, writable = 44100;
+    std::uint64_t consumed = 0, submittedSource = 0, consumedSource = 0;
+    std::uint64_t discardedSource = 0, starvationSilence = 0, pauseSilence = 0;
+    std::uint64_t primingSilence = 0, epoch = 0;
+};
 class DesktopError : public std::runtime_error {
 public:
     DesktopError(const std::string &operation, const std::string &reason)
@@ -108,6 +117,9 @@ public:
     virtual void setAudioPlaying(bool playing) = 0;
     virtual void quiesceAudio() noexcept = 0;
     virtual AudioOffset audioCursor() = 0;
+    virtual AudioProgress audioProgress() { AudioProgress value; value.cursor = audioCursor(); return value; }
+    virtual void setAudioSourcePaused(bool) {}
+    virtual void resetAudioQueue() {}
     virtual AudioSegments lockAudio(AudioOffset offset, AudioOffset count) = 0;
     virtual void unlockAudio(const AudioSegments &segments) = 0;
     virtual void readScreen(std::uint8_t *rgb, std::size_t capacity) = 0;

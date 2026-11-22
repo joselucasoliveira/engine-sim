@@ -241,7 +241,7 @@ if (DISCORD_ENABLED)
 endif ()
 
 if (BUILD_TESTING OR ENGINE_SIM_BUILD_DESKTOP)
-    add_library(engine-sim-host STATIC src/desktop_math.cpp src/desktop_host.cpp)
+    add_library(engine-sim-host STATIC src/desktop_math.cpp src/desktop_host.cpp src/desktop_audio_pacer.cpp)
     target_include_directories(engine-sim-host PUBLIC include)
     target_compile_features(engine-sim-host PUBLIC cxx_std_17)
     if (NOT MSVC)
@@ -397,15 +397,23 @@ if (BUILD_TESTING)
     endif ()
     if (PIRANHA_ENABLED)
         add_subdirectory(test/script)
+        add_executable(engine-sim-pacing-test test/desktop_audio_pacing_tests.cpp)
+        target_link_libraries(engine-sim-pacing-test PRIVATE gtest_main engine-sim-host engine-sim-script-interpreter)
+        engine_sim_diagnose(engine-sim-pacing-test TRUE)
+        file(MAKE_DIRECTORY "${PROJECT_BINARY_DIR}/pacing-working")
+        gtest_discover_tests(engine-sim-pacing-test DISCOVERY_TIMEOUT 30
+            WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/pacing-working"
+            PROPERTIES LABELS "r2-desktop-pacing" TIMEOUT 180
+            ENVIRONMENT "ENGINE_SIM_TEST_SOURCE=${PROJECT_SOURCE_DIR}")
     endif ()
 endif ()
 
 if (ENGINE_SIM_BUILD_CAPTURE)
     add_subdirectory(tools/capture)
-    if (BUILD_TESTING)
-        enable_language(C)
-        add_subdirectory(test/runtime)
-    endif ()
+endif ()
+if (BUILD_TESTING AND (ENGINE_SIM_BUILD_CAPTURE OR ENGINE_SIM_BUILD_DESKTOP))
+    enable_language(C)
+    add_subdirectory(test/runtime)
 endif ()
 
 foreach(target IN ITEMS engine-sim engine-sim-desktop-run-test engine-sim-sdl-audio engine-sim-sdl-audio-test engine-sim-sdl-renderer engine-sim-sdl-render-test engine-sim-sdl-window engine-sim-sdl-window-test engine-sim-host engine-sim-host-test engine-sim-host-application-test engine-sim-frontend engine-sim-script-interpreter engine-sim-app engine-sim-test

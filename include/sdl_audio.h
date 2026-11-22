@@ -35,6 +35,7 @@ public:
         std::uint64_t starvationBlocks = 0, overflows = 0, latePolls = 0;
         std::uint64_t maxQueuedFrames = 0, minQueuedFrames = 0, maxSourceFrames = 0;
         std::uint64_t joinNanoseconds = 0;
+        std::uint64_t consumedSource = 0, pauseSilence = 0, retiredSource = 0, epoch = 0;
     };
     static constexpr AudioOffset Capacity = 44100, Watermark = 4410, Block = 1024;
     SdlAudioOutput();
@@ -44,9 +45,12 @@ public:
     void open(const Options &options);
     void setPlaying(bool playing);
     void quiesce() noexcept; // Join before the simulator or stream can be released.
+    void resetQueue();
+    void setSourcePaused(bool paused);
     void shutdown() noexcept;
     void check() const;
     AudioOffset cursor() const; // SDL input consumed, not a physical playback clock.
+    AudioProgress progress() const;
     AudioSegments lock(AudioOffset offset, AudioOffset count);
     void unlock(const AudioSegments &segments);
     DeviceInfo deviceInfo() const;

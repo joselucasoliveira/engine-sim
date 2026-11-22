@@ -8,7 +8,8 @@
 #include "ui_manager.h"
 #include "dynamometer.h"
 #include "oscilloscope.h"
-#include "audio_buffer.h"
+#include "desktop_audio_pacer.h"
+#include "pull_engine.h"
 #include "convolution_filter.h"
 #include "shaders.h"
 #include "engine_view.h"
@@ -38,12 +39,15 @@ class EngineSimApplication {
         static std::string s_buildVersion;
         struct UserInterface;
         struct PendingSession;
+        struct DesktopControls;
         bool loadEngine(EngineDefinition definition);
         void buildObjects(Engine *engine, std::vector<SimulationObject *> &objects);
         std::unique_ptr<UserInterface> prepareUserInterface(Engine *engine, Simulator *simulator);
         void bindSession();
         void updatePalette();
         void reportLoadFailure(const std::string &message);
+        void serviceDesktopAudio(float seconds, bool manual);
+        static void observeReadyAudio(void *context, const std::int16_t *samples, std::size_t count) noexcept;
 
     public:
         EngineSimApplication();
@@ -100,6 +104,9 @@ class EngineSimApplication {
         int getScreenHeight() const { return m_screenHeight; }
 
         Simulator *getSimulator() { return m_simulator; }
+        const desktop::AudioPacer::Statistics &audioStatistics() const { return m_audioPacer->statistics(); }
+        const engine_sim::ClockCounts &sourceCounts() const { return m_pullEngine->counts(); }
+        void setAudioObservation(desktop::AudioPacer::Observation value) { m_audioObservation = value; }
         InfoCluster *getInfoCluster() { return m_infoCluster; }
         ApplicationSettings* getAppSettings() { return &m_applicationSettings; }
 
@@ -151,6 +158,13 @@ class EngineSimApplication {
 
         std::unique_ptr<EngineSession> m_session;
         std::unique_ptr<UserInterface> m_userInterface;
+        std::unique_ptr<DesktopControls> m_desktopControls;
+        std::unique_ptr<engine_sim::PullEngine> m_pullEngine;
+        std::unique_ptr<desktop::AudioPacer> m_audioPacer;
+        desktop::AudioPacer::Observation m_audioObservation;
+        double m_manualFrameFraction = 0;
+        unsigned m_audioSpeedDivisor = 1;
+        bool m_audioOpen = false;
         EngineView *m_engineView;
         RightGaugeCluster *m_rightGaugeCluster;
         OscilloscopeCluster *m_oscCluster;
@@ -192,9 +206,6 @@ class EngineSimApplication {
         desktop::Vector m_red;
         desktop::Vector m_green;
         desktop::Vector m_blue;
-
-        AudioBuffer m_audioBuffer;
-        std::array<std::int16_t, 44100> m_audioScratch{};
 
         int m_oscillatorSampleOffset;
         int m_screen;

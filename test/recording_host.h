@@ -161,6 +161,7 @@ public:
     }
     void quiesceAudio() noexcept override { playing=false; }
     desktop::AudioOffset audioCursor() override { return cursor; }
+    void resetAudioQueue() override { ring.fill(0); cursor=0; }
     desktop::AudioSegments lockAudio(desktop::AudioOffset offset,desktop::AudioOffset count) override {
         if (!opened || offset>=ring.size() || count>ring.size()) throw desktop::DesktopError("audio","invalid span");
         const auto first=std::min<desktop::AudioOffset>(count,static_cast<desktop::AudioOffset>(ring.size())-offset);

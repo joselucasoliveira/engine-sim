@@ -33,6 +33,11 @@ struct SdlAudioOutput::State {
     std::atomic<std::uint64_t> submitted{0}, pumped{0}, discarded{0}, attempted{0}, put{0}, consumed{0};
     std::atomic<std::uint64_t> priming{0}, silence{0}, starvations{0}, overflows{0}, late{0};
     std::atomic<std::uint64_t> maxQueue{0}, minQueue{Watermark}, maxSource{0}, joinTime{0};
+    mutable std::mutex accountingMutex;
+    std::array<std::uint8_t, Capacity> sourceTags{};
+    std::atomic<std::uint64_t> consumedSource{0}, pauseSilence{0}, retiredSource{0}, retiredInput{0}, epoch{0};
+    std::atomic<bool> sourcePaused{false};
+    std::uint64_t accountedInput = 0;
     static bool watch(void *context, SDL_Event *event) {
         auto &s = *static_cast<State *>(context);
         if (event->type == SDL_EVENT_AUDIO_DEVICE_REMOVED && !event->adevice.recording) {
@@ -59,6 +64,19 @@ struct SdlAudioOutput::State {
         put.fetch_add(frames, std::memory_order_relaxed);
         return true;
     }
+    bool account(int bytes) noexcept {
+        if (bytes < 0 || bytes % 2 != 0) return false;
+        const auto queued = static_cast<std::uint64_t>(bytes / 2);
+        const auto total = put.load(std::memory_order_relaxed);
+        if (queued > total || queued > Watermark || total - queued < accountedInput) return false;
+        const auto end = total - queued;
+        std::uint64_t real = 0;
+        for (auto i = accountedInput; i < end; ++i) real += sourceTags[i % Capacity];
+        consumedSource.fetch_add(real);
+        accountedInput = end;
+        consumed.store(end - retiredInput.load(), std::memory_order_release);
+        return true;
+    }
     void run() noexcept {
         using Clock = std::chrono::steady_clock;
         auto previous = Clock::now();
@@ -66,30 +84,44 @@ struct SdlAudioOutput::State {
             const auto now = Clock::now();
             if (now - previous > std::chrono::milliseconds(100)) late.fetch_add(1, std::memory_order_relaxed);
             previous = now;
-            const int bytes = options.queued ? options.queued(stream) : SDL_GetAudioStreamQueued(stream);
-            if (bytes < 0 || bytes % 2 != 0) { fail("query stream queue"); break; }
-            const auto queued = static_cast<std::uint64_t>(bytes / 2);
-            const auto total = put.load(std::memory_order_relaxed);
-            if (queued > total || queued > Watermark) { SDL_SetError("invalid bounded input queue"); fail("query stream queue"); break; }
-            consumed.store(total - queued, std::memory_order_release);
-            minQueue.store(std::min(minQueue.load(), queued));
-            maxQueue.store(std::max(maxQueue.load(), queued));
-            if (queued < Watermark) {
-                const auto count = std::min<std::uint64_t>(Block, Watermark - queued);
+            bool fed = false;
+            {
+              std::lock_guard<std::mutex> accounting(accountingMutex);
+              const int bytes = options.queued ? options.queued(stream) : SDL_GetAudioStreamQueued(stream);
+              if (!account(bytes)) { SDL_SetError("invalid bounded input queue"); fail("query stream queue"); break; }
+              const auto queued = static_cast<std::uint64_t>(bytes / 2);
+              minQueue.store(std::min(minQueue.load(), queued));
+              maxQueue.store(std::max(maxQueue.load(), queued));
+              if (queued < Watermark) {
+                const auto budget = std::min<std::uint64_t>(Block, Watermark - queued);
                 const auto read = tail.load(std::memory_order_relaxed);
                 const auto available = head.load(std::memory_order_acquire) - read;
-                const auto source = std::min(count, available);
+                const auto source = std::min(budget, available);
+                const bool paused = sourcePaused.load(std::memory_order_acquire);
+                // A low queue is demand, not missing source. Keep its existing
+                // PCM until the owner supplies more; never refill it with zeros.
+                const auto count = source ? source : (paused || queued == 0 ? budget : 0);
+                if (count) {
                 for (std::uint64_t i = 0; i < source; ++i) block[i] = fifo[(read + i) % Capacity];
                 std::fill(block.begin() + source, block.begin() + count, 0);
                 tail.store(read + source, std::memory_order_release);
+                const auto position = put.load();
                 if (!putData(block.data(), static_cast<int>(count))) {
                     discarded.fetch_add(source); fail("feed stream"); break;
                 }
+                for (std::uint64_t i = 0; i < count; ++i) sourceTags[(position + i) % Capacity] = i < source;
                 pumped.fetch_add(source);
                 if (options.observeSource && source) options.observeSource(options.observer, block.data(), source);
-                if (source < count) { silence.fetch_add(count - source); starvations.fetch_add(1); }
+                if (source < count) {
+                    if (paused) pauseSilence.fetch_add(count - source);
+                    else { silence.fetch_add(count - source); starvations.fetch_add(1); }
+                }
                 maxQueue.store(std::max(maxQueue.load(), queued + count));
-            } else {
+                fed = true;
+                }
+              }
+            }
+            if (!fed) {
                 std::unique_lock<std::mutex> lock(waitMutex);
                 wake.wait_for(lock, std::chrono::milliseconds(1), [this] { return stop.load(); });
             }
@@ -169,6 +201,27 @@ void SdlAudioOutput::quiesce() noexcept {
     if (s.pump.joinable()) s.pump.join();
     s.joinTime.store(static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start).count()));
 }
+void SdlAudioOutput::setSourcePaused(bool paused) {
+    state->sourcePaused.store(paused, std::memory_order_release);
+    state->wake.notify_all();
+}
+void SdlAudioOutput::resetQueue() {
+    auto &s = *state;
+    s.requireOwner(); check(); quiesce();
+    std::lock_guard<std::mutex> lock(s.accountingMutex);
+    const int bytes = s.options.queued ? s.options.queued(s.stream) : SDL_GetAudioStreamQueued(s.stream);
+    if (!s.account(bytes)) throw DesktopError("reset audio queue", "invalid input queue");
+    if (!SDL_ClearAudioStream(s.stream)) throw DesktopError("reset audio queue", SDL_GetError());
+    s.retiredInput.fetch_add(static_cast<std::uint64_t>(bytes / 2));
+    s.retiredSource.store(s.submitted.load() - s.discarded.load() - s.consumedSource.load());
+    s.accountedInput = s.put.load();
+    s.head.store(0); s.tail.store(0);
+    s.sourceTags.fill(0);
+    std::array<std::int16_t, Watermark> zero{};
+    if (!s.putData(zero.data(), Watermark)) throw DesktopError("prime reset audio", SDL_GetError());
+    s.priming.fetch_add(Watermark);
+    s.epoch.fetch_add(1);
+}
 void SdlAudioOutput::shutdown() noexcept {
     quiesce(); auto &s = *state;
     if (s.watching) { SDL_RemoveEventWatch(State::watch, &s); s.watching = false; }
@@ -198,6 +251,24 @@ void SdlAudioOutput::check() const {
     if (s.failed.load(std::memory_order_acquire)) throw DesktopError("audio pump", s.error);
 }
 AudioOffset SdlAudioOutput::cursor() const { check(); return static_cast<AudioOffset>(state->consumed.load(std::memory_order_acquire) % Capacity); }
+AudioProgress SdlAudioOutput::progress() const {
+    check();
+    const auto &s = *state; s.requireOwner();
+    std::lock_guard<std::mutex> lock(s.accountingMutex);
+    const auto fifo = s.head.load(std::memory_order_acquire) - s.tail.load(std::memory_order_acquire);
+    const auto queued = s.put.load() - s.consumed.load() - s.retiredInput.load();
+    AudioProgress result;
+    result.queueKnown = true;
+    result.cursor = static_cast<AudioOffset>(s.consumed.load() % Capacity);
+    result.queued = static_cast<AudioOffset>(queued + fifo);
+    result.writable = static_cast<AudioOffset>(Capacity - fifo);
+    result.consumed = s.consumed.load();
+    result.submittedSource = s.submitted.load(); result.consumedSource = s.consumedSource.load();
+    result.discardedSource = s.discarded.load(); result.starvationSilence = s.silence.load();
+    result.pauseSilence = s.pauseSilence.load(); result.primingSilence = s.priming.load();
+    result.epoch = s.epoch.load();
+    return result;
+}
 AudioSegments SdlAudioOutput::lock(AudioOffset offset, AudioOffset count) {
     auto &s = *state; s.requireOwner(); check();
     if (!s.stream || s.locked || offset >= Capacity || count > Capacity) throw DesktopError("audio", "invalid or nested source span");
@@ -225,7 +296,8 @@ SdlAudioOutput::Statistics SdlAudioOutput::statistics() const {
     const auto &s = *state;
     return {s.submitted.load(), s.pumped.load(), s.discarded.load(), s.attempted.load(), s.put.load(), s.consumed.load(),
             s.priming.load(), s.silence.load(), s.starvations.load(), s.overflows.load(), s.late.load(),
-            s.maxQueue.load(), s.minQueue.load(), s.maxSource.load(), s.joinTime.load()};
+            s.maxQueue.load(), s.minQueue.load(), s.maxSource.load(), s.joinTime.load(),
+            s.consumedSource.load(), s.pauseSilence.load(), s.retiredSource.load(), s.epoch.load()};
 }
 bool SdlAudioOutput::running() const { return !state->stop.load(std::memory_order_acquire); }
 }
