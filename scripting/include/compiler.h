@@ -7,19 +7,32 @@
 #include "../../include/engine_session.h"
 #include "piranha.h"
 
+#include <filesystem>
+#include <functional>
 #include <iosfwd>
 #include <memory>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
 namespace es_script {
 
+    struct PreparationContext {
+        std::filesystem::path entry, libraryRoot, assetRoot;
+    };
+
+    struct ScriptInput {
+        std::filesystem::path resolvedPath;
+        std::string bytes;
+    };
+
     class Compiler {
     public:
         using Output = EngineDefinition;
         using Diagnostic = EngineLoadDiagnostic;
         using Error = EngineLoadError;
+        using InputVerifier = std::function<void(const ScriptInput &)>;
         const Diagnostic &getLastError() const { return m_lastError; }
 
     private:
@@ -30,11 +43,11 @@ namespace es_script {
         ~Compiler();
 
         static Output *output();
+        static Output prepare(const PreparationContext &context, std::vector<ScriptInput> &inputs,
+            const InputVerifier &verify = {});
 
-        void initialize();
-        void initialize(const std::vector<piranha::IrPath> &libraryRoots);
-        bool compile(const piranha::IrPath &path);
-        bool compile(const piranha::IrPath &path, std::ostream &diagnostics,
+        void initialize(const std::vector<std::string> &libraryRoots);
+        bool compile(const std::string &path, std::ostream &diagnostics,
             std::vector<std::string> *resolvedScripts = nullptr);
         Output execute();
         void destroy();
@@ -44,14 +57,15 @@ namespace es_script {
         void resetCompilation();
 
     private:
-        LanguageRules m_rules;
+        std::unique_lock<std::recursive_mutex> m_preparation;
+        std::unique_ptr<LanguageRules> m_rules;
         piranha::Compiler *m_compiler;
         std::unique_ptr<piranha::NodeProgram> m_program;
-        std::vector<piranha::IrPath> m_libraryRoots;
+        piranha::Compiler::SourceObserver m_sourceObserver;
+        std::vector<std::string> m_libraryRoots;
         std::string m_entryPath;
         Diagnostic m_lastError;
-        bool m_initialized = false;
-        bool m_rulesInitialized = false;
+        bool m_resourceFailure = false;
         bool m_compiled = false;
     };
 

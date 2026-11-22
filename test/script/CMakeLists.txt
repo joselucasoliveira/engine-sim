@@ -50,3 +50,12 @@ gtest_discover_tests(engine-sim-load-test
 
 configure_file(discovered_properties.cmake.in discovered_properties.cmake @ONLY)
 set_property(DIRECTORY APPEND PROPERTY TEST_INCLUDE_FILES "${CMAKE_CURRENT_BINARY_DIR}/discovered_properties.cmake")
+
+find_package(Python3 3.9 COMPONENTS Interpreter REQUIRED)
+add_executable(engine-sim-parser-preparation-test preparation_tests.cpp)
+target_link_libraries(engine-sim-parser-preparation-test PRIVATE engine-sim-script-interpreter)
+engine_sim_diagnose(engine-sim-parser-preparation-test TRUE)
+add_test(NAME RuntimeParserPreparation
+    COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/preparation_probe.py"
+        "$<TARGET_FILE:engine-sim-parser-preparation-test>" "${PROJECT_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}")
+set_tests_properties(RuntimeParserPreparation PROPERTIES LABELS "r2-parser;script" TIMEOUT 300)

@@ -1,0 +1,403 @@
+--- a/flex-bison/scanner.l
++++ b/flex-bison/scanner.l
+@@ -2,7 +2,11 @@
+ /* C++ string header, for string ops below */
+ #include <string>
+ #include <sstream>
+-#include <iostream>
++#include <charconv>
++#include <cmath>
++#include <limits>
++#include <locale>
++#include <stdexcept>
+
+ /* Implementation of yyFlexScanner */
+ #include "../include/scanner.h"
+@@ -31,7 +35,6 @@
+ #include <stdint.h>
+ }
+
+-%option debug
+ %option nodefault
+ %option yyclass="piranha::Scanner"
+ %option noyywrap
+@@ -74,23 +77,29 @@
+                         return (token::LABEL);
+                     }
+ 0[xX]{H}+           {
+-                        unsigned int value;
+-                        value = std::stoul(yytext, nullptr, 16);
+-
+-                        buildValue<int>((int)value, location);
++                        unsigned int value = 0;
++                        const char *end = yytext + yyleng;
++                        const auto parsed = std::from_chars(yytext + 2, end, value, 16);
++                        if (parsed.ec != std::errc{} || parsed.ptr != end) LexerError("Hexadecimal literal outside 32-bit range");
++                        const unsigned int signedMax = std::numeric_limits<int>::max();
++                        const int bits = value <= signedMax ? static_cast<int>(value) :
++                            -1 - static_cast<int>(std::numeric_limits<unsigned int>::max() - value);
++                        buildValue<int>(bits, location);
+                         return (token::INT);
+                     }
+ {D}+                {
+-                        unsigned int value;
+-                        value = std::stoul(yytext, nullptr, 10);
+-
+-                        buildValue<int>((int)value, location);
++                        int value = 0;
++                        const char *end = yytext + yyleng;
++                        const auto parsed = std::from_chars(yytext, end, value, 10);
++                        if (parsed.ec != std::errc{} || parsed.ptr != end) LexerError("Integer literal outside signed range");
++                        buildValue<int>(value, location);
+                         return (token::INT);
+                     }
+ {D}+"."{D}+         {
+-                        double value;
+-                        value = std::stod(yytext);
+-
++                        double value = 0;
++                        std::istringstream input(std::string(yytext, yyleng));
++                        input.imbue(std::locale::classic());
++                        if (!(input >> value) || !input.eof() || !std::isfinite(value)) LexerError("Invalid decimal literal");
+                         buildValue<double>(value, location);
+                         return (token::FLOAT);
+                     }
+@@ -125,11 +134,16 @@
+ "::"                { DEFAULT_BUILD(location); return (token::NAMESPACE_POINTER); }
+ "="                 { DEFAULT_BUILD(location); return ('='); }
+
+-[ \t\v\n\f]         { }
++[ \t\v\n\r\f]         { }
+ "//"[^\n]*          { }
+ "/*"                { comment(); }
+ .                   { BUILD_INVALID(location); return (token::UNRECOGNIZED); }
+ %%
++
++void piranha::Scanner::LexerError(const char *message) {
++    const int line = m_loc == nullptr ? 1 : m_loc->lineStart;
++    throw std::runtime_error("line " + std::to_string(line) + ": " + message);
++}
+
+ void piranha::Scanner::comment(void) {
+     char c, prev = 0;
+--- a/include/compiler.h
++++ b/include/compiler.h
+@@ -4,6 +4,8 @@
+ #include "path.h"
+ #include "error_list.h"
+
++#include <functional>
++#include <utility>
+ #include <vector>
+ #include <string>
+
+@@ -21,6 +23,8 @@
+
+         IrCompilationUnit *compile(const IrPath &scriptPath);
+         void free();
++        using SourceObserver = std::function<void(const Path &, const std::string &)>;
++        void setSourceObserver(SourceObserver observer) { m_sourceObserver = std::move(observer); }
+         IrCompilationUnit *getUnit(const IrPath &scriptPath) const;
+
+         int getUnitCount() const { return (int)m_units.size(); }
+@@ -54,6 +58,7 @@
+
+         std::vector<IrPath> m_searchPaths;
+         std::string m_extension;
++        SourceObserver m_sourceObserver;
+     };
+
+ } /* namespace piranha */
+--- a/include/ir_compilation_unit.h
++++ b/include/ir_compilation_unit.h
+@@ -7,6 +7,7 @@
+
+ #include <string>
+ #include <cstddef>
++#include <functional>
+ #include <istream>
+ #include <vector>
+
+@@ -38,7 +39,8 @@
+
+         void build(NodeProgram *program);
+
+-        ParseResult parseFile(const Path &filename, IrCompilationUnit *topLevel = nullptr);
++        ParseResult parseFile(const Path &filename,
++            const std::function<void(const Path &, const std::string &)> &observe = {});
+         ParseResult parse(const char *sdl, IrCompilationUnit *topLevel = nullptr);
+         ParseResult parse(std::istream &iss, IrCompilationUnit *topLevel = nullptr);
+
+--- a/include/scanner.h
++++ b/include/scanner.h
+@@ -34,6 +34,7 @@
+             piranha::Parser::semantic_type *lval, piranha::Parser::location_type *location);
+
+     private:
++        void LexerError(const char *message) override;
+         void comment();
+         void count();
+         void countChar(char c);
+--- a/src/compiler.cpp
++++ b/src/compiler.cpp
+@@ -5,6 +5,9 @@
+ #include "../include/compilation_error.h"
+ #include "../include/language_rules.h"
+ #include "../include/memory_tracker.h"
++
++#include <memory>
++#include <stdexcept>
+
+ piranha::Compiler::Compiler(const LanguageRules *rules) {
+     m_rules = rules;
+@@ -21,17 +24,27 @@
+     scriptPath.getParentPath(&rootDir);
+
+     if (newUnit == nullptr) {
+-        newUnit = TRACK(new IrCompilationUnit());
+-        newUnit->setErrorList(&m_errorList);
+-        IrCompilationUnit::ParseResult parseResult = newUnit->parseFile(scriptPath);
+-
+-        if (parseResult == IrCompilationUnit::ParseResult::IoError) {
+-            delete TRACK(newUnit);
++        const auto dispose = [](IrCompilationUnit *unit) {
++            unit->free();
++            delete FTRACK(unit);
++        };
++        std::unique_ptr<IrCompilationUnit, decltype(dispose)> pending(TRACK(new IrCompilationUnit()), dispose);
++        pending->setErrorList(&m_errorList);
++        const int errorsBeforeParse = m_errorList.getErrorCount();
++        const auto parseResult = pending->parseFile(scriptPath, m_sourceObserver);
++        if (parseResult == IrCompilationUnit::ParseResult::IoError) return nullptr;
++        if (parseResult == IrCompilationUnit::ParseResult::Fail) {
++            if (m_errorList.getErrorCount() == errorsBeforeParse) {
++                throw std::runtime_error(scriptPath.toString() + ": script parse failed");
++            }
++            m_units.push_back(pending.get());
++            pending.release();
+             return nullptr;
+         }
+
+-        newUnit->setRules(m_rules);
+-        m_units.push_back(newUnit);
++        pending->setRules(m_rules);
++        m_units.push_back(pending.get());
++        newUnit = pending.release();
+
+         const int importCount = newUnit->getImportStatementCount();
+         for (int i = 0; i < importCount; i++) {
+@@ -42,6 +55,11 @@
+                 libName += m_extension;
+             }
+
++            const auto reportMissing = [&] {
++                auto code = ErrorCode::FileOpenFailed;
++                code.info += ": " + libName;
++                newUnit->addCompilationError(TRACK(new CompilationError(*s->getSummaryToken(), code)));
++            };
+             Path importPath(libName);
+             Path fullImportPath = importPath.isAbsolute()
+                 ? importPath // TODO: Warn about use of absolute path
+@@ -49,24 +67,23 @@
+
+             if (!fullImportPath.exists()) {
+                 Path resolvedPath;
+-                bool fileFound = resolvePath(importPath, &resolvedPath);
++                bool fileFound = !importPath.isAbsolute() && resolvePath(importPath, &resolvedPath);
+
+                 if (!fileFound) {
+-                    newUnit->addCompilationError(TRACK(new CompilationError(*s->getSummaryToken(),
+-                        ErrorCode::FileOpenFailed)));
++                    reportMissing();
+                     continue;
+                 }
+                 else fullImportPath = resolvedPath;
+             }
+
+             // Recursively build
++            const int errorsBeforeImport = m_errorList.getErrorCount();
+             IrCompilationUnit *importUnit = analyze(fullImportPath);
+             s->setUnit(importUnit);
+-            if (importUnit == nullptr) {
+-                newUnit->addCompilationError(TRACK(new CompilationError(*s->getSummaryToken(),
+-                    ErrorCode::FileOpenFailed)));
++            if (importUnit == nullptr && m_errorList.getErrorCount() == errorsBeforeImport) {
++                reportMissing();
+             }
+-            else newUnit->addDependency(importUnit);
++            else if (importUnit != nullptr) newUnit->addDependency(importUnit);
+         }
+     }
+
+@@ -75,6 +92,8 @@
+
+ piranha::IrCompilationUnit *piranha::Compiler::compile(const IrPath &scriptPath) {
+     IrCompilationUnit *topLevel = analyze(scriptPath);
++
++    if (m_errorList.getErrorCount() != 0) return topLevel;
+
+     // Resolution step
+     resolve();
+@@ -115,11 +134,6 @@
+ }
+
+ bool piranha::Compiler::resolvePath(const IrPath &path, IrPath *target) const {
+-    if (path.exists()) {
+-        *target = path;
+-        return true;
+-    }
+-
+     int searchPathCount = getSearchPathCount();
+     for (int i = 0; i < searchPathCount; i++) {
+         IrPath total = m_searchPaths[i].append(path);
+--- a/src/int_conversions.cpp
++++ b/src/int_conversions.cpp
+@@ -1,4 +1,7 @@
+ #include "int_conversions.h"
++
++#include <locale>
++#include <stdexcept>
+
+ // CONVERSION =============================================
+ // string -> int
+@@ -14,9 +17,12 @@
+     std::string value;
+     m_input->fullCompute((void *)&value);
+
+-    piranha::native_int intValue;
+-    std::stringstream ss(value);
+-    ss >> intValue;
++    piranha::native_int intValue = 0;
++    std::istringstream input(value);
++    input.imbue(std::locale::classic());
++    if (!(input >> intValue) || !(input >> std::ws).eof()) {
++        throw std::runtime_error("Invalid string-to-integer conversion");
++    }
+
+     piranha::native_int *target = reinterpret_cast<native_int *>(_target);
+     *target = intValue;
+--- a/src/ir_compilation_unit.cpp
++++ b/src/ir_compilation_unit.cpp
+@@ -14,6 +14,8 @@
+ #include <cassert>
+ #include <sstream>
+ #include <algorithm>
++#include <filesystem>
++#include <iterator>
+
+ piranha::IrCompilationUnit::~IrCompilationUnit() {
+     /* void */
+@@ -34,16 +36,22 @@
+ }
+
+ piranha::IrCompilationUnit::ParseResult piranha::IrCompilationUnit::parseFile(
+-    const Path &filename, IrCompilationUnit *topLevel)
++    const Path &filename,
++    const std::function<void(const Path &, const std::string &)> &observe)
+ {
+     m_path = filename;
+-
+-    std::ifstream inFile(filename.toString());
+-    if (!inFile.good()) {
+-        return ParseResult::IoError;
+-    }
+-
+-    return parseHelper(inFile);
++    std::ifstream inFile(std::filesystem::u8path(filename.toString()), std::ios::binary);
++    if (!inFile) return ParseResult::IoError;
++    const std::string bytes((std::istreambuf_iterator<char>(inFile)), std::istreambuf_iterator<char>());
++    if (observe) observe(filename, bytes);
++    if (bytes.find('\0') != std::string::npos) {
++        throw std::runtime_error(filename.toString() + ": script contains a NUL byte");
++    }
++    std::istringstream input(bytes);
++    try { return parseHelper(input); }
++    catch (const std::runtime_error &error) {
++        throw std::runtime_error(filename.toString() + ": " + error.what());
++    }
+ }
+
+ piranha::IrCompilationUnit::ParseResult piranha::IrCompilationUnit::parse(
+@@ -145,12 +153,8 @@
+     std::istream &stream, IrCompilationUnit *topLevel)
+ {
+     if (m_scanner != nullptr) delete FTRACK(m_scanner);
+-    try {
+-        m_scanner = TRACK(new piranha::Scanner(&stream));
+-    }
+-    catch (std::bad_alloc) {
+-        return ParseResult::Fail;
+-    }
++    m_scanner = nullptr;
++    m_scanner = TRACK(new piranha::Scanner(&stream));
+
+     struct ParseAllocations {
+         std::vector<IrParserStructure *> nodes;
+--- a/src/path.cpp
++++ b/src/path.cpp
+@@ -3,6 +3,7 @@
+ #include "../include/memory_tracker.h"
+
+ #include <boost/filesystem.hpp>
++#include <filesystem>
+
+ piranha::Path::Path(const std::string &path) {
+     m_path = nullptr;
+@@ -33,13 +34,13 @@
+ }
+
+ std::string piranha::Path::toString() const {
+-    return m_path->string();
++    return std::filesystem::path(m_path->native()).u8string();
+ }
+
+ void piranha::Path::setPath(const std::string &path) {
++    auto *replacement = TRACK(new boost::filesystem::path(std::filesystem::u8path(path).native()));
+     if (m_path != nullptr) delete FTRACK(m_path);
+-
+-    m_path = TRACK(new boost::filesystem::path(path));
++    m_path = replacement;
+ }
+
+ bool piranha::Path::operator==(const Path &path) const {
+@@ -51,25 +52,24 @@
+ }
+
+ void piranha::Path::getParentPath(Path *path) const {
+-    path->m_path = TRACK(new boost::filesystem::path);
+-    *path->m_path = m_path->parent_path();
++    *path = Path(m_path->parent_path());
+ }
+
+ const piranha::Path &piranha::Path::operator=(const Path &b) {
+-    if (m_path != nullptr) delete FTRACK(m_path);
+-
+-    m_path = TRACK(new boost::filesystem::path);
+-    *m_path = b.getBoostPath();
+-
++    if (this != &b) {
++        auto *replacement = TRACK(new boost::filesystem::path(b.getBoostPath()));
++        if (m_path != nullptr) delete FTRACK(m_path);
++        m_path = replacement;
++    }
+     return *this;
+ }
+
+ std::string piranha::Path::getExtension() const {
+-    return m_path->extension().string();
++    return std::filesystem::path(m_path->extension().native()).u8string();
+ }
+
+ std::string piranha::Path::getStem() const {
+-    return m_path->stem().string();
++    return std::filesystem::path(m_path->stem().native()).u8string();
+ }
+
+ bool piranha::Path::isAbsolute() const {
+@@ -77,5 +77,5 @@
+ }
+
+ bool piranha::Path::exists() const {
+-    return boost::filesystem::exists(*m_path);
++    return boost::filesystem::is_regular_file(*m_path);
+ }

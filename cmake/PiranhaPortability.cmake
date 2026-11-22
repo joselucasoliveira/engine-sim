@@ -1,5 +1,14 @@
 # Project only the sources and generator inputs needed by the locked Piranha library.
 function(engine_sim_project_piranha original projected)
+    set(preparation_sources
+        "include/compiler.h=350a1c5bcd87c24b4826b630419b3ca5b2404b14f795a28ebe7b0dd4614fcbe3"
+        "include/ir_compilation_unit.h=078be63376e4789dd20e487ea203f1bc09bacb51659f55134b07556adc7a13d8"
+        "include/scanner.h=5290df4114456d40f07af879ac51817140c5f42efa6be1237f75f09b0b01c684"
+        "src/compiler.cpp=4ccbc34e4a0c38a7d2d9f509a6dcd2f8750095205d169c8603f9fe8500b4602a"
+        "src/path.cpp=c1f572d036768b1c049679fb8952c31d7ffb118d76318fce7250ac68ddb14fad"
+        "src/int_conversions.cpp=d92df5411628f6c8e92bddba74bb16cce68f1a1d1ba3c459cef7efadb6d20f27"
+        "flex-bison/scanner.l=70a8a180df2902b6e631e1b42c2a9dc049e1c9cc69636ed6166782f85381aa26"
+    )
     file(GLOB_RECURSE inputs CONFIGURE_DEPENDS RELATIVE "${original}"
         "${original}/include/*.h" "${original}/src/*.cpp"
         "${original}/flex-bison/*.l" "${original}/flex-bison/*.y")
@@ -11,6 +20,11 @@ function(engine_sim_project_piranha original projected)
         flex-bison/specification.y
         src/ir_compilation_unit.cpp
     )
+    foreach(source IN LISTS preparation_sources)
+        string(REPLACE "=" ";" source "${source}")
+        list(GET source 0 path)
+        list(APPEND patched "${path}")
+    endforeach ()
     foreach(input IN LISTS inputs)
         if (NOT input IN_LIST patched)
             configure_file("${original}/${input}" "${projected}/${input}" COPYONLY)
@@ -112,7 +126,33 @@ T *trackParserNode(std::vector<piranha::IrParserStructure *> &nodes, T *node) {
 
     if (m_parser->parse() != 0) {]=])
     string(REPLACE "${original_parser}" "${scope}" unit "${unit}")
-    file(CONFIGURE OUTPUT "${projected}/src/ir_compilation_unit.cpp" CONTENT "${unit}" @ONLY)
+    engine_sim_project_piranha_preparation("${original}" "${projected}" "${unit}" ${preparation_sources})
+endfunction()
+
+function(engine_sim_project_piranha_preparation original projected unit)
+    find_package(Git REQUIRED)
+    set(patch "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../scripting/piranha/preparation.patch")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${patch}")
+    set(scratch "${projected}-preparation")
+    set(paths src/ir_compilation_unit.cpp)
+    string(REGEX REPLACE "[ \t]+\n" "\n" unit "${unit}")
+    file(WRITE "${scratch}/src/ir_compilation_unit.cpp" "${unit}")
+    foreach(source IN LISTS ARGN)
+        string(REPLACE "=" ";" source "${source}")
+        list(GET source 0 path)
+        list(GET source 1 hash)
+        engine_sim_read_piranha_source(contents "${original}/${path}" "${hash}")
+        string(REGEX REPLACE "[ \t]+\n" "\n" contents "${contents}")
+        file(WRITE "${scratch}/${path}" "${contents}")
+        list(APPEND paths "${path}")
+    endforeach ()
+    execute_process(COMMAND "${GIT_EXECUTABLE}" -c core.autocrlf=false apply
+        --no-index --ignore-space-change --whitespace=error -- "${patch}"
+        WORKING_DIRECTORY "${scratch}"
+        COMMAND_ERROR_IS_FATAL ANY)
+    foreach(path IN LISTS paths)
+        configure_file("${scratch}/${path}" "${projected}/${path}" COPYONLY)
+    endforeach ()
 endfunction()
 
 function(engine_sim_read_piranha_source output path expected)

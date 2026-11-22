@@ -136,7 +136,7 @@ inline void stressLifecycle(const std::filesystem::path &resources, const std::f
         stressRequire(count > 0, "lifecycle produced no PCM");
         frames += count;
         auto *original = active.get();
-        stressRequire(compiler.compile(invalidEntry.u8string()), "negative lifecycle fixture failed to compile");
+        stressRequire(compiler.compile(invalidEntry.u8string(), diagnostics), "negative lifecycle fixture failed to compile");
         bool rejected = false;
         try { auto invalid = EngineSession::prepare(compiler.execute(), reader); active.swap(invalid); }
         catch (const EngineLoadError &) { rejected = true; }
