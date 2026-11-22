@@ -2,6 +2,7 @@
 #define ATG_ENGINE_SIM_UI_CYLINDER_PRESSURE_GAUGE_H
 
 #include "ui_element.h"
+#include "desktop_engine_views.h"
 
 #include "engine.h"
 #include "gauge.h"
@@ -17,7 +18,7 @@ class CylinderPressureGauge : public UiElement {
         virtual void update(float dt);
         virtual void render();
 
-        Engine *m_engine;
+        desktop::ViewHandle<Engine> m_engine;
 
     protected:
         std::vector<Gauge *> m_gauges;

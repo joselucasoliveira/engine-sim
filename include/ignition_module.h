@@ -37,7 +37,7 @@ class IgnitionModule : public Part {
         bool getIgnitionEvent(int index) const;
         void resetIgnitionEvents();
 
-        double getTimingAdvance();
+        double getTimingAdvance() const;
 
         bool m_enabled;
 

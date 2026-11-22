@@ -2,6 +2,7 @@
 #define ATG_ENGINE_SIM_FUEL_CLUSTER_H
 
 #include "ui_element.h"
+#include "desktop_engine_views.h"
 
 #include "engine.h"
 #include "simulator.h"
@@ -17,8 +18,8 @@ class FuelCluster : public UiElement {
         virtual void update(float dt);
         virtual void render();
 
-        Engine *m_engine;
-        Simulator *m_simulator;
+        desktop::ViewHandle<Engine> m_engine;
+        desktop::ViewHandle<Simulator> m_simulator;
 
     private:
         double getTotalVolumeFuelConsumed() const;

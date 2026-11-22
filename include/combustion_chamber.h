@@ -54,8 +54,10 @@ class CombustionChamber : public atg_scs::ForceGenerator {
         void setRandomSeed(std::uint64_t seed, std::uint32_t cylinder) { m_random.reset(seed, 1, cylinder); }
         virtual void apply(atg_scs::SystemState *system);
 
-        CylinderHead *getCylinderHead() const { return m_head; }
-        Piston *getPiston() const { return m_piston; }
+        CylinderHead *getCylinderHead() { return m_head; }
+        const CylinderHead *getCylinderHead() const { return m_head; }
+        Piston *getPiston() { return m_piston; }
+        const Piston *getPiston() const { return m_piston; }
 
         double getFrictionForce() const;
         double getVolume() const;

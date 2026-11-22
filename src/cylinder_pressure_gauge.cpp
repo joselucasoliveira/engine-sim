@@ -46,8 +46,8 @@ void CylinderPressureGauge::render() {
     }
 
     for (int i = 0; i < m_engine->getCylinderCount(); ++i) {
-        Piston *piston = m_engine->getPiston(i);
-        CombustionChamber *chamber = m_engine->getChamber(i);
+        const Piston *piston = m_engine->getPiston(i);
+        const CombustionChamber *chamber = m_engine->getChamber(i);
         const int bankIndex = piston->getCylinderBank()->getIndex();
 
         const Bounds &b = grid.get(body, bankIndex, 0);

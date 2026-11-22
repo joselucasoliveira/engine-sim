@@ -40,14 +40,14 @@ void Crankshaft::destroy() {
     m_rodJournalAngles = nullptr;
 }
 
-void Crankshaft::getRodJournalPositionLocal(int i, double *x, double *y) {
+void Crankshaft::getRodJournalPositionLocal(int i, double *x, double *y) const {
     const double theta = m_rodJournalAngles[i];
 
     *x = std::cos(theta) * m_throw;
     *y = std::sin(theta) * m_throw;
 }
 
-void Crankshaft::getRodJournalPositionGlobal(int i, double *x, double *y) {
+void Crankshaft::getRodJournalPositionGlobal(int i, double *x, double *y) const {
     double lx, ly;
     getRodJournalPositionLocal(i, &lx, &ly);
 
@@ -69,7 +69,7 @@ double Crankshaft::getAngle() const {
     return m_body.theta - m_tdc;
 }
 
-double Crankshaft::getCycleAngle(double offset) {
+double Crankshaft::getCycleAngle(double offset) const {
     const double wrapped = std::fmod(-getAngle() + offset, 4 * constants::pi);
     return (wrapped < 0)
         ? wrapped + 4 * constants::pi

@@ -2,6 +2,7 @@
 #define ATG_ENGINE_SIM_PERFORMANCE_CLUSTER_H
 
 #include "ui_element.h"
+#include "desktop_engine_views.h"
 
 #include "engine.h"
 #include "gauge.h"
@@ -22,7 +23,7 @@ class PerformanceCluster : public UiElement {
         virtual void update(float dt);
         virtual void render();
 
-        void setSimulator(Simulator *simulator) { m_simulator = simulator; }
+        void setSimulator(desktop::ViewHandle<Simulator> simulator) { m_simulator = simulator; }
         void addTimePerTimestepSample(double sample);
         void addAudioLatencySample(double sample);
         void addInputBufferUsageSample(double sample);
@@ -41,7 +42,7 @@ class PerformanceCluster : public UiElement {
         double m_audioLatency;
         double m_inputBufferUsage;
 
-        Simulator *m_simulator;
+        desktop::ViewHandle<Simulator> m_simulator;
 };
 
 #endif /* ATG_ENGINE_SIM_PERFORMANCE_CLUSTER_H */

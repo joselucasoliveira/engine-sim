@@ -2,6 +2,7 @@
 #define ATG_ENGINE_SIM_MIXER_CLUSTER_H
 
 #include "ui_element.h"
+#include "desktop_engine_views.h"
 
 #include "engine.h"
 #include "gauge.h"
@@ -22,10 +23,10 @@ class MixerCluster : public UiElement {
         virtual void update(float dt);
         virtual void render();
 
-        void setSimulator(Simulator *simulator) { m_simulator = simulator; }
+        void setSimulator(desktop::ViewHandle<Simulator> simulator) { m_simulator = simulator; }
 
     protected:
-        Simulator *m_simulator;
+        desktop::ViewHandle<Simulator> m_simulator;
 
     protected:
         LabeledGauge

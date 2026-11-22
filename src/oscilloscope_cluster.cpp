@@ -241,7 +241,7 @@ void OscilloscopeCluster::update(float dt) {
     m_torque = m_torque * 0.95 + 0.05 * torque;
     m_power = m_power * 0.95 + 0.05 * power;
 
-    Engine *engine = m_simulator->getEngine();
+    const Engine *engine = m_simulator->getEngine();
     if (engine != nullptr) {
         if (m_updateTimer <= 0 && m_simulator->m_dyno.m_enabled) {
             m_updateTimer = m_updatePeriod;
@@ -306,62 +306,25 @@ void OscilloscopeCluster::render() {
     UiElement::render();
 }
 
-void OscilloscopeCluster::sample() {
-    Engine *engine = m_simulator->getEngine();
-    if (engine == nullptr) return;
-
-    const double cylinderPressure = engine->getChamber(0)->m_system.pressure()
-        + engine->getChamber(0)->m_system.dynamicPressure(-1.0, 0.0);
-
-    if (m_simulator->getCurrentIteration() % 2 == 0) {
-        double cycleAngle = engine->getCrankshaft(0)->getCycleAngle();
-        if (!engine->isSpinningCw()) {
-            cycleAngle = 4 * constants::pi - cycleAngle;
-        }
-
-        getTotalExhaustFlowOscilloscope()->addDataPoint(
-            cycleAngle,
-            m_simulator->getTotalExhaustFlow() / m_simulator->getTimestep());
-        getCylinderPressureScope()->addDataPoint(
-            engine->getCrankshaft(0)->getCycleAngle(constants::pi),
-            std::sqrt(cylinderPressure));
-        getExhaustFlowOscilloscope()->addDataPoint(
-            cycleAngle,
-            engine->getChamber(0)->getLastTimestepExhaustFlow() / m_simulator->getTimestep());
-        getIntakeFlowOscilloscope()->addDataPoint(
-            cycleAngle,
-            engine->getChamber(0)->getLastTimestepIntakeFlow() / m_simulator->getTimestep());
-        getCylinderMoleculesScope()->addDataPoint(
-            cycleAngle,
-            engine->getChamber(0)->m_system.n());
-        getExhaustValveLiftOscilloscope()->addDataPoint(
-            cycleAngle,
-            engine->getChamber(0)->getCylinderHead()->exhaustValveLift(
-                engine->getChamber(0)->getPiston()->getCylinderIndex()));
-        getIntakeValveLiftOscilloscope()->addDataPoint(
-            cycleAngle,
-            engine->getChamber(0)->getCylinderHead()->intakeValveLift(
-                engine->getChamber(0)->getPiston()->getCylinderIndex()));
-        getPvScope()->addDataPoint(
-            engine->getChamber(0)->getVolume(),
-            std::sqrt(engine->getChamber(0)->m_system.pressure()));
-    }
-
+void OscilloscopeCluster::sample(const desktop::ScopeObservation &point) {
+    getTotalExhaustFlowOscilloscope()->addDataPoint(point.cycle, point.exhaust);
+    getCylinderPressureScope()->addDataPoint(point.pressureCycle, point.pressure);
+    getExhaustFlowOscilloscope()->addDataPoint(point.cycle, point.cylinderExhaust);
+    getIntakeFlowOscilloscope()->addDataPoint(point.cycle, point.intake);
+    getCylinderMoleculesScope()->addDataPoint(point.cycle, point.molecules);
+    getExhaustValveLiftOscilloscope()->addDataPoint(point.cycle, point.exhaustLift);
+    getIntakeValveLiftOscilloscope()->addDataPoint(point.cycle, point.intakeLift);
+    getPvScope()->addDataPoint(point.volume, point.staticPressure);
     m_exhaustFlowScope->m_yMin = m_intakeFlowScope->m_yMin =
         std::fmin(m_intakeFlowScope->m_yMin, m_exhaustFlowScope->m_yMin);
     m_exhaustFlowScope->m_yMax = m_intakeFlowScope->m_yMax =
         std::fmax(m_intakeFlowScope->m_yMax, m_exhaustFlowScope->m_yMax);
-
-    m_torqueScope->m_yMin = m_powerScope->m_yMin =
-        std::fmin(m_torqueScope->m_yMin, m_powerScope->m_yMin);
-    m_torqueScope->m_yMax = m_powerScope->m_yMax =
-        std::fmax(m_torqueScope->m_yMax, m_powerScope->m_yMax);
-
-    m_powerScope->m_xMax = m_torqueScope->m_xMax =
-        std::fmax(m_powerScope->m_xMax, units::toRpm(engine->getSpeed()));
+    m_torqueScope->m_yMin = m_powerScope->m_yMin = std::fmin(m_torqueScope->m_yMin, m_powerScope->m_yMin);
+    m_torqueScope->m_yMax = m_powerScope->m_yMax = std::fmax(m_torqueScope->m_yMax, m_powerScope->m_yMax);
+    m_powerScope->m_xMax = m_torqueScope->m_xMax = std::fmax(m_powerScope->m_xMax, point.rpm);
 }
 
-void OscilloscopeCluster::setSimulator(Simulator *simulator) {
+void OscilloscopeCluster::setSimulator(desktop::ViewHandle<Simulator> simulator) {
     m_simulator = simulator;
 }
 

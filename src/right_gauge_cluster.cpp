@@ -186,7 +186,7 @@ void RightGaugeCluster::render() {
     UiElement::render();
 }
 
-void RightGaugeCluster::setEngine(Engine *engine) {
+void RightGaugeCluster::setEngine(desktop::ViewHandle<Engine> engine) {
     m_engine = engine;
 }
 

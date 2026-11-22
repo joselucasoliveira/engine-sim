@@ -107,7 +107,7 @@ void IgnitionModule::resetIgnitionEvents() {
     }
 }
 
-double IgnitionModule::getTimingAdvance() {
+double IgnitionModule::getTimingAdvance() const {
     return m_timingCurve->sampleTriangle(-m_crankshaft->m_body.v_theta);
 }
 

@@ -63,8 +63,8 @@ public:
 private:
     void process(float seconds) override {
         if (evidence) {
-            if (previous && previous!=getSimulator()) ++evidence->acceptedReloads;
-            previous=getSimulator();
+            if (previous && previous!=viewGeneration()) ++evidence->acceptedReloads;
+            previous=viewGeneration();
         }
         EngineSimApplication::process(seconds);
         if (!evidence) return;
@@ -77,7 +77,7 @@ private:
         if (m_targetSpeedSetting==1.0) evidence->throttleChanged=true;
     }
     std::shared_ptr<RunEvidence> evidence;
-    Simulator *previous=nullptr;
+    std::uint64_t previous=0;
 };
 }
 RunOptions parseRunOptions(const std::vector<std::string> &arguments) {

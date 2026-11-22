@@ -2,6 +2,7 @@
 #define ATG_ENGINE_SIM_AFR_CLUSTER_H
 
 #include "ui_element.h"
+#include "desktop_engine_views.h"
 
 #include "engine.h"
 #include "gauge.h"
@@ -21,7 +22,7 @@ class AfrCluster : public UiElement {
         virtual void update(float dt);
         virtual void render();
 
-        Engine *m_engine;
+        desktop::ViewHandle<Engine> m_engine;
 
     protected:
         LabeledGauge *m_intakeAfrGauge;

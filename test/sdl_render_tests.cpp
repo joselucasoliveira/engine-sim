@@ -113,7 +113,7 @@ TEST_F(DesktopRender, VisibleLoadDiagnosticRetainsRunningRadialAndRecoversOnNati
     const std::string source="import \"engine_sim.mr\"\nimport \"engines/atg-video-2/09_radial_9.mr\"\nmain()\n";
     std::ofstream(entry)<<source;
     auto host=std::make_unique<render_test::RenderingHost>(data,scratch,24);host->startEngine=true;
-    Simulator *original=nullptr;bool rejected=false,recovered=false;
+    const Simulator *original=nullptr;bool rejected=false,recovered=false;
     host->beforeEvents=[&](std::size_t frame,SDL_Window *window) {
         if (frame==4) std::ofstream(entry)<<"invalid !!!\n";
         if (frame==9) std::ofstream(entry)<<source;

@@ -477,12 +477,12 @@ int16_t Synthesizer::renderNativeFrame(const double *data) {
     return sample;
 }
 
-double Synthesizer::getLevelerGain() {
+double Synthesizer::getLevelerGain() const {
     std::lock_guard<std::mutex> lock(m_lock0);
     return m_publishedGain;
 }
 
-Synthesizer::AudioParameters Synthesizer::getAudioParameters() {
+Synthesizer::AudioParameters Synthesizer::getAudioParameters() const {
     std::lock_guard<std::mutex> lock(m_lock0);
     return m_audioParameters;
 }

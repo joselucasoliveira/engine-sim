@@ -45,6 +45,25 @@ class Admission(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.check_xml('<testcase name="Unexpected.first"/>', {"Known": 1})
 
+    def test_desktop_requires_views_without_replacing_legacy_cases(self):
+        expected = verify.expected_suites("desktop", False)
+        self.assertEqual(expected["HostApplication"], 8)
+        self.assertEqual(expected["ViewsApplication"], 4)
+        self.assertEqual(expected["DesktopPacing"], 8)
+        self.assertEqual(expected["CaptureMechanics"], 1)
+        self.assertEqual(expected["DesktopAudio"], 9)
+        cases = ''.join(f'<testcase name="{suite}.case{i}"/>'
+                        for suite, count in expected.items() for i in range(count))
+        self.assertEqual(self.check_xml(cases, expected)["cases"], sum(expected.values()))
+        with self.assertRaises(ValueError):
+            self.check_xml(cases.replace('<testcase name="ViewsApplication.case0"/>', ''), expected)
+
+    def test_profile_admission_preserves_its_selected_scope(self):
+        self.assertNotIn("ViewsApplication", verify.expected_suites("core", False))
+        self.assertNotIn("ViewsApplication", verify.expected_suites("desktop-tsan", False))
+        self.assertEqual(verify.expected_suites("desktop-tsan", False)["DesktopAudio"], 9)
+        self.assertNotIn("DesktopAudio", verify.expected_suites("desktop-windows", True))
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
@@ -58,4 +77,4 @@ if __name__ == "__main__":
         result = unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromTestCase(Admission))
         (options.out / "result.json").write_text(json.dumps({"cases": result.testsRun, "failures": len(result.failures),
             "errors": len(result.errors), "skipped": len(result.skipped)}, indent=2) + "\n")
-        sys.exit(0 if result.wasSuccessful() and result.testsRun == 6 else 1)
+        sys.exit(0 if result.wasSuccessful() and result.testsRun == 8 else 1)

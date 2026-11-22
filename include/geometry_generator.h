@@ -14,7 +14,7 @@ public:
         int BaseVertex = -1;
         int FaceCount = -1;
 
-        desktop::Vertex *VertexData = nullptr;
+        const desktop::Vertex *VertexData = nullptr;
     };
 
     struct LineRingParameters {
@@ -68,7 +68,7 @@ public:
         float center_x = 0.0f, center_y = 0.0f;
         float baseRadius = 1.0f;
         float rollerRadius = 1.0f;
-        Function *lift = nullptr;
+        const Function *lift = nullptr;
         float maxEdgeLength = 0.1f;
         float smallestAngle = desktop::math::Constants::PI * 0.95f;
     };
@@ -129,6 +129,9 @@ public:
     int getCurrentIndexCount() const { return m_state.indexPointer; }
 
     void reset();
+    void swap(GeometryGenerator &other) noexcept;
+    bool appendGeometry(const desktop::Vertex *vertices, int vertexCount,
+                        const unsigned short *indices, int indexCount);
 
     bool generateFilledCircle(
         const desktop::Vector &normal,

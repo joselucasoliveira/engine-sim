@@ -33,12 +33,12 @@ void SimulationObject::destroy() {
     /* void */
 }
 
-Piston *SimulationObject::getForemostPiston(CylinderBank *bank, int layer) {
-    Engine *engine = m_app->getSimulator()->getEngine();
-    Piston *frontmostPiston = nullptr;
+const Piston *SimulationObject::getForemostPiston(const CylinderBank *bank, int layer) {
+    auto engine = m_app->engineObservation();
+    const Piston *frontmostPiston = nullptr;
     const int cylinderCount = engine->getCylinderCount();
     for (int i = 0; i < cylinderCount; ++i) {
-        Piston *piston = engine->getPiston(i);
+        const Piston *piston = engine->getPiston(i);
         if (piston->getCylinderBank() == bank) {
             if (piston->getRod()->getJournal() >= layer) {
                 if (frontmostPiston == nullptr
@@ -58,7 +58,7 @@ void SimulationObject::resetShader() {
 }
 
 void SimulationObject::setTransform(
-    atg_scs::RigidBody *rigidBody,
+    const atg_scs::RigidBody *rigidBody,
     float scale,
     float lx,
     float ly,
@@ -66,7 +66,8 @@ void SimulationObject::setTransform(
     float z)
 {
     double p_x, p_y;
-    rigidBody->localToWorld(lx, ly, &p_x, &p_y);
+    auto transform = *rigidBody;
+    transform.localToWorld(lx, ly, &p_x, &p_y);
 
     const desktop::Matrix rot = desktop::math::RotationTransform(
             desktop::math::Constants::ZAxis,
@@ -89,4 +90,39 @@ desktop::Vector SimulationObject::tintByLayer(const desktop::Vector &col, int la
     }
 
     return result;
+}
+
+void SimulationObject::generatePresentationGeometry() {
+    const auto shapes = staticShapes();
+    if (!shapes[0]) { generateGeometry(); return; }
+    auto *generator = m_app->getGeometryGenerator();
+    const float scale = m_app->pixelsToUnits(1);
+    const int vertex = generator->getCurrentVertexCount(), index = generator->getCurrentIndexCount();
+    if (m_geometryScale != scale) {
+        generateGeometry();
+        m_cachedVertices.assign(generator->getVertexData() + vertex,
+            generator->getVertexData() + generator->getCurrentVertexCount());
+        m_cachedIndices.assign(generator->getIndexData() + index,
+            generator->getIndexData() + generator->getCurrentIndexCount());
+        m_cachedShapes.clear();
+        for (const auto *shape : shapes) {
+            if (!shape) continue;
+            auto local = *shape;
+            local.BaseVertex -= vertex; local.BaseIndex -= index; local.VertexData = nullptr;
+            m_cachedShapes.push_back(local);
+        }
+        m_geometryScale = scale;
+    }
+    else {
+        if (!generator->appendGeometry(m_cachedVertices.data(), static_cast<int>(m_cachedVertices.size()),
+                m_cachedIndices.data(), static_cast<int>(m_cachedIndices.size())))
+            throw desktop::DesktopError("geometry", "Cached engine geometry exceeds presentation capacity");
+        std::size_t i = 0;
+        for (auto *shape : shapes) {
+            if (!shape) continue;
+            *shape = m_cachedShapes[i++];
+            shape->BaseVertex += vertex; shape->BaseIndex += index;
+            shape->VertexData = generator->getVertexData() + shape->BaseVertex;
+        }
+    }
 }

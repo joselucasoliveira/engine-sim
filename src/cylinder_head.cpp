@@ -107,3 +107,11 @@ Camshaft *CylinderHead::getExhaustCamshaft() {
 Camshaft *CylinderHead::getIntakeCamshaft() {
     return m_valvetrain->getActiveIntakeCamshaft();
 }
+
+const Camshaft *CylinderHead::getExhaustCamshaft() const {
+    return m_valvetrain->getActiveExhaustCamshaft();
+}
+
+const Camshaft *CylinderHead::getIntakeCamshaft() const {
+    return m_valvetrain->getActiveIntakeCamshaft();
+}

@@ -31,8 +31,10 @@ class Piston : public Part {
         double relativeY() const;
 
         double calculateCylinderWallForce() const;
-        inline ConnectingRod *getRod() const { return m_rod; }
-        inline CylinderBank *getCylinderBank() const { return m_bank; }
+        inline ConnectingRod *getRod() { return m_rod; }
+        inline const ConnectingRod *getRod() const { return m_rod; }
+        inline CylinderBank *getCylinderBank() { return m_bank; }
+        inline const CylinderBank *getCylinderBank() const { return m_bank; }
         inline int getCylinderIndex() const { return m_cylinderIndex; }
         inline double getCompressionHeight() const { return m_compressionHeight; }
         inline double getDisplacement() const { return m_displacement; }

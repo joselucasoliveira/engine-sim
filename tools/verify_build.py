@@ -20,8 +20,13 @@ CORE = {"GasSystemTests": 19, "FunctionTests": 5, "SynthesizerTests": 7, "RingBu
         "SceneReader": 4, "HostContract": 4}
 SCRIPT = {"ScriptTests": 5, "Lifecycle": 5, "Displacement": 2, "Load": 8,
           "HostApplication": 8, "DesktopRun": 5, "ImpulseReference": 1}
-SDL = {"DesktopInput": 8, "DesktopRender": 5, "DesktopAudio": 7}
-CAPTURE = {"CaptureQuick": 1, "CaptureComparator": 1, "CaptureStress": 1, "StagedResources": 1}
+SDL = {"DesktopInput": 8, "DesktopRender": 5, "DesktopAudio": 9}
+# Additive suites are explicit: missing/extra cases still fail admission. Keep
+# historical suites and their counts rather than inferring a green total.
+FOUNDATION = {"RuntimeParserPreparation": 1, "Preparation": 6, "Seed": 1,
+              "SeedEngines": 2, "Clock": 8, "RuntimeCAbi": 1, "RuntimeCxxAbi": 1,
+              "DesktopPacing": 8, "ViewsApplication": 4}
+CAPTURE = {"CaptureMechanics": 1, "CaptureQuick": 1, "CaptureComparator": 1, "CaptureStress": 1, "StagedResources": 1}
 PRESETS = ("core", "capture", "desktop", "desktop-windows", "asan", "tsan", "desktop-asan", "desktop-tsan", "win-asan")
 
 
@@ -33,10 +38,11 @@ def expected_suites(preset, windows):
     if preset == "tsan":
         return {"ThreadedSynthesis": 5, "Load": 2}
     if preset == "desktop-tsan":
-        return {"ThreadedSynthesis": 5, "Load": 2, "DesktopAudio": 7, "DesktopRun": 5}
+        return {"ThreadedSynthesis": 5, "Load": 2, "DesktopAudio": 9, "DesktopRun": 5}
     result = dict(CORE)
     if preset != "core":
         result.update(SCRIPT)
+        result.update(FOUNDATION)
     if preset in ("capture", "desktop", "desktop-windows", "asan", "desktop-asan", "win-asan"):
         result.update(CAPTURE)
     if not windows and preset in ("desktop", "desktop-asan"):

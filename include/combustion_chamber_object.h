@@ -2,6 +2,7 @@
 #define ATG_ENGINE_SIM_COMBUSTION_CHAMBER_OBJECT_H
 
 #include "simulation_object.h"
+#include "desktop_engine_views.h"
 
 #include "combustion_chamber.h"
 #include "geometry_generator.h"
@@ -16,7 +17,7 @@ class CombustionChamberObject : public SimulationObject {
         virtual void process(float dt);
         virtual void destroy();
 
-        CombustionChamber *m_chamber;
+        desktop::ViewHandle<CombustionChamber> m_chamber;
 
     protected:
         GeometryGenerator::GeometryIndices m_indices;

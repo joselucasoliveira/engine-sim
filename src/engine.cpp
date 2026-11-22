@@ -134,15 +134,17 @@ void Engine::destroy() {
     while (!m_resources.empty()) m_resources.pop_back();
 }
 
-Crankshaft *Engine::getOutputCrankshaft() const {
+const Crankshaft *Engine::getOutputCrankshaft() const {
     return &m_crankshafts[0];
 }
+
+Crankshaft *Engine::getOutputCrankshaft() { return &m_crankshafts[0]; }
 
 void Engine::setSpeedControl(double s) {
     m_throttle->setSpeedControl(s);
 }
 
-double Engine::getSpeedControl() {
+double Engine::getSpeedControl() const {
     return m_throttle->getSpeedControl();
 }
 

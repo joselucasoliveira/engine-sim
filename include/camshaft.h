@@ -41,7 +41,8 @@ class Camshaft : public Part {
 
         double getAngle() const;
 
-        Function *getLobeProfile() const { return m_lobeProfile; }
+        Function *getLobeProfile() { return m_lobeProfile; }
+        const Function *getLobeProfile() const { return m_lobeProfile; }
         double getAdvance() const { return m_advance; }
         double getBaseRadius() const { return m_baseRadius; }
 

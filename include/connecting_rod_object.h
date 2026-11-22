@@ -2,6 +2,7 @@
 #define ATG_ENGINE_SIM_CONNECTING_ROD_OBJECT_H
 
 #include "simulation_object.h"
+#include "desktop_engine_views.h"
 
 #include "connecting_rod.h"
 #include "geometry_generator.h"
@@ -12,11 +13,12 @@ class ConnectingRodObject : public SimulationObject {
         virtual ~ConnectingRodObject();
 
         virtual void generateGeometry();
+        std::array<GeometryGenerator::GeometryIndices *, 8> staticShapes() override { return {&m_connectingRodBody, &m_pins}; }
         virtual void render(const ViewParameters *view);
         virtual void process(float dt);
         virtual void destroy();
 
-        ConnectingRod *m_connectingRod;
+        desktop::ViewHandle<ConnectingRod> m_connectingRod;
 
     protected:
         GeometryGenerator::GeometryIndices

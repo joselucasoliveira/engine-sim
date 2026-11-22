@@ -50,14 +50,16 @@ class CylinderHead : public Part {
         double intakeValveLift(int cylinder) const;
         double exhaustValveLift(int cylinder) const;
 
-        inline ExhaustSystem *getExhaustSystem(int cylinderIndex) const { return m_cylinders[cylinderIndex].exhaustSystem; }
+        inline ExhaustSystem *getExhaustSystem(int cylinderIndex) { return m_cylinders[cylinderIndex].exhaustSystem; }
+        inline const ExhaustSystem *getExhaustSystem(int cylinderIndex) const { return m_cylinders[cylinderIndex].exhaustSystem; }
         void setAllExhaustSystems(ExhaustSystem *system);
         void setExhaustSystem(int i, ExhaustSystem *system);
 
         inline double getSoundAttenuation(int cylinderIndex) const { return m_cylinders[cylinderIndex].soundAttenuation; }
         void setSoundAttenuation(int i, double soundAttenuation);
 
-        inline Intake *getIntake(int cylinderIndex) const { return m_cylinders[cylinderIndex].intake; }
+        inline Intake *getIntake(int cylinderIndex) { return m_cylinders[cylinderIndex].intake; }
+        inline const Intake *getIntake(int cylinderIndex) const { return m_cylinders[cylinderIndex].intake; }
         void setAllIntakes(Intake *intake);
         void setIntake(int i, Intake *intake);
 
@@ -67,7 +69,8 @@ class CylinderHead : public Part {
 
         inline bool getFlipDisplay() const { return m_flipDisplay; }
         inline double getCombustionChamberVolume() const { return m_combustionChamberVolume; }
-        inline CylinderBank *getCylinderBank() const { return m_bank; }
+        inline CylinderBank *getCylinderBank() { return m_bank; }
+        inline const CylinderBank *getCylinderBank() const { return m_bank; }
 
         double getIntakeRunnerVolume() const { return m_intakeRunnerVolume; }
         double getIntakeRunnerCrossSectionArea() const { return m_intakeRunnerCrossSectionArea; }
@@ -75,7 +78,9 @@ class CylinderHead : public Part {
         double getExhaustRunnerCrossSectionArea() const { return m_exhaustRunnerCrossSectionArea; }
 
         Camshaft *getExhaustCamshaft();
+        const Camshaft *getExhaustCamshaft() const;
         Camshaft *getIntakeCamshaft();
+        const Camshaft *getIntakeCamshaft() const;
 
     protected:
         Cylinder *m_cylinders;

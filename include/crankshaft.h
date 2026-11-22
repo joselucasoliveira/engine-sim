@@ -25,14 +25,14 @@ class Crankshaft : public Part {
         virtual void destroy();
         inline int getRodJournalCount() const { return m_rodJournalCount; }
         void setRodJournalAngle(int i, double angle);
-        void getRodJournalPositionLocal(int i, double *x, double *y);
-        void getRodJournalPositionGlobal(int i, double *x, double *y);
-        double getRodJournalAngle(int i) { return m_rodJournalAngles[i]; }
+        void getRodJournalPositionLocal(int i, double *x, double *y) const;
+        void getRodJournalPositionGlobal(int i, double *x, double *y) const;
+        double getRodJournalAngle(int i) const { return m_rodJournalAngles[i]; }
 
         void resetAngle();
 
         double getAngle() const;
-        double getCycleAngle(double offset = 0.0);
+        double getCycleAngle(double offset = 0.0) const;
 
         inline double getTdc() const { return m_tdc; }
         inline double getThrow() const { return m_throw; }

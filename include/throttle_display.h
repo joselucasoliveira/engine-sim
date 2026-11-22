@@ -2,6 +2,7 @@
 #define ATG_ENGINE_SIM_THROTTLE_DISPLAY_H
 
 #include "ui_element.h"
+#include "desktop_engine_views.h"
 
 #include "engine.h"
 #include "geometry_generator.h"
@@ -17,7 +18,7 @@ class ThrottleDisplay : public UiElement {
         virtual void update(float dt);
         virtual void render();
 
-        Engine *m_engine;
+        desktop::ViewHandle<Engine> m_engine;
 
     protected:
         void renderThrottle(const Bounds &bounds);

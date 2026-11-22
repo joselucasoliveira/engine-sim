@@ -52,10 +52,14 @@ public:
     int getFrameIterationCount() const { return m_steps; }
 
     Synthesizer &synthesizer() { return m_synthesizer; }
+    const Synthesizer &synthesizer() const { return m_synthesizer; }
 
-    Engine *getEngine() const { return m_engine; }
-    Transmission *getTransmission() const { return m_transmission; }
-    Vehicle *getVehicle() const { return m_vehicle; }
+    Engine *getEngine() { return m_engine; }
+    const Engine *getEngine() const { return m_engine; }
+    Transmission *getTransmission() { return m_transmission; }
+    const Transmission *getTransmission() const { return m_transmission; }
+    Vehicle *getVehicle() { return m_vehicle; }
+    const Vehicle *getVehicle() const { return m_vehicle; }
     atg_scs::RigidBodySystem *getSystem() { return m_system; }
 
     void setSimulationFrequency(int frequency) { m_simulationFrequency = frequency; }

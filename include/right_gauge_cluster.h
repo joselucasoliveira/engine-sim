@@ -2,6 +2,7 @@
 #define ATG_ENGINE_SIM_RIGHT_GAUGE_CLUSTER_H
 
 #include "ui_element.h"
+#include "desktop_engine_views.h"
 
 #include "engine.h"
 #include "simulator.h"
@@ -23,11 +24,11 @@ class RightGaugeCluster : public UiElement {
         virtual void update(float dt);
         virtual void render();
 
-        void setEngine(Engine *engine);
+        void setEngine(desktop::ViewHandle<Engine> engine);
         void setUnits();
         double getManifoldPressureWithUnits(double ambientPressure);
 
-        Simulator *m_simulator;
+        desktop::ViewHandle<Simulator> m_simulator;
 
     private:
         double getRpm() const;
@@ -36,7 +37,7 @@ class RightGaugeCluster : public UiElement {
         double getManifoldPressure() const;
 
     protected:
-        Engine *m_engine;
+        desktop::ViewHandle<Engine> m_engine;
 
         void renderTachSpeedCluster(const Bounds &bounds);
         void renderFuelAirCluster(const Bounds &bounds);

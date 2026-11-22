@@ -39,9 +39,9 @@ class ConnectingRod : public Part {
 
         inline int getRodJournalCount() const { return m_rodJournalCount; }
         void setRodJournalAngle(int i, double angle);
-        void getRodJournalPositionLocal(int i, double *x, double *y);
-        void getRodJournalPositionGlobal(int i, double *x, double *y);
-        double getRodJournalAngle(int i) { return m_rodJournalAngles[i]; }
+        void getRodJournalPositionLocal(int i, double *x, double *y) const;
+        void getRodJournalPositionGlobal(int i, double *x, double *y) const;
+        double getRodJournalAngle(int i) const { return m_rodJournalAngles[i]; }
 
         inline double getSlaveThrow() const { return m_slaveThrow; }
         inline double getCenterOfMass() const { return m_centerOfMass; }
@@ -50,9 +50,12 @@ class ConnectingRod : public Part {
         inline double getMomentOfInertia() const { return m_I; }
         inline int getJournal() const { return m_journal; }
         int getLayer() const;
-        inline ConnectingRod *getMasterRod() const { return m_master; }
-        inline Crankshaft *getCrankshaft() const { return m_crankshaft; }
-        inline Piston *getPiston() const { return m_piston; }
+        inline ConnectingRod *getMasterRod() { return m_master; }
+        inline const ConnectingRod *getMasterRod() const { return m_master; }
+        inline Crankshaft *getCrankshaft() { return m_crankshaft; }
+        inline const Crankshaft *getCrankshaft() const { return m_crankshaft; }
+        inline Piston *getPiston() { return m_piston; }
+        inline const Piston *getPiston() const { return m_piston; }
 
     protected:
         double m_centerOfMass;

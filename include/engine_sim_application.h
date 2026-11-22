@@ -39,10 +39,9 @@ class EngineSimApplication {
         static std::string s_buildVersion;
         struct UserInterface;
         struct PendingSession;
-        struct DesktopControls;
         bool loadEngine(EngineDefinition definition);
-        void buildObjects(Engine *engine, std::vector<SimulationObject *> &objects);
-        std::unique_ptr<UserInterface> prepareUserInterface(Engine *engine, Simulator *simulator);
+        void buildObjects(desktop::EngineViews &views, std::vector<SimulationObject *> &objects);
+        std::unique_ptr<UserInterface> prepareUserInterface(desktop::EngineViews &views);
         void bindSession();
         void updatePalette();
         void reportLoadFailure(const std::string &message);
@@ -78,7 +77,6 @@ class EngineSimApplication {
         Shaders *getShaders() { return &m_shaders; }
         desktop::TextRenderer *getTextRenderer() { return &m_textRenderer; }
 
-        void createObjects(Engine *engine);
         void destroyObjects();
         desktop::Host *getEngine() { return m_host.get(); }
 
@@ -103,7 +101,12 @@ class EngineSimApplication {
         int getScreenWidth() const { return m_screenWidth; }
         int getScreenHeight() const { return m_screenHeight; }
 
-        Simulator *getSimulator() { return m_simulator; }
+        const Simulator *getSimulator() const { return m_simulator; }
+        desktop::ViewHandle<Engine> engineObservation() const { return m_engineViews->at<Engine>(); }
+        desktop::PresentationLease presentation() const { return m_engineViews->present(); }
+        bool ignitionObserved(int cylinder) const { return m_engineViews->fired(cylinder); }
+        std::uint64_t viewGeneration() const { return engineObservation().generation(); }
+        std::uint64_t evictedScopePoints() const { return m_engineViews->evictedScopePoints(); }
         const desktop::AudioPacer::Statistics &audioStatistics() const { return m_audioPacer->statistics(); }
         const engine_sim::ClockCounts &sourceCounts() const { return m_pullEngine->counts(); }
         void setAudioObservation(desktop::AudioPacer::Observation value) { m_audioObservation = value; }
@@ -126,6 +129,10 @@ class EngineSimApplication {
         int m_lastMouseWheel = 0;
 
     protected:
+        virtual void validatePreparedViews() {}
+        void setMixer(const Synthesizer::AudioParameters &value) {
+            m_desktopControls->setMixer(value); m_desktopControls->flush();
+        }
         virtual void initialize();
         virtual void process(float dt);
         virtual void render();
@@ -158,7 +165,8 @@ class EngineSimApplication {
 
         std::unique_ptr<EngineSession> m_session;
         std::unique_ptr<UserInterface> m_userInterface;
-        std::unique_ptr<DesktopControls> m_desktopControls;
+        std::unique_ptr<desktop::EngineViews> m_engineViews;
+        std::unique_ptr<desktop::EngineCommands> m_desktopControls;
         std::unique_ptr<engine_sim::PullEngine> m_pullEngine;
         std::unique_ptr<desktop::AudioPacer> m_audioPacer;
         desktop::AudioPacer::Observation m_audioObservation;

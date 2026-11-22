@@ -55,7 +55,7 @@ void ConnectingRod::setRodJournalAngle(int i, double angle) {
     m_rodJournalAngles[i] = angle;
 }
 
-void ConnectingRod::getRodJournalPositionLocal(int i, double *x, double *y) {
+void ConnectingRod::getRodJournalPositionLocal(int i, double *x, double *y) const {
     const double journalAngle = getRodJournalAngle(i);
     const double journal_x_local = std::cos(journalAngle) * m_slaveThrow;
     const double journal_y_local = std::sin(journalAngle) * m_slaveThrow;
@@ -64,7 +64,7 @@ void ConnectingRod::getRodJournalPositionLocal(int i, double *x, double *y) {
     *y = journal_y_local + getBigEndLocal();
 }
 
-void ConnectingRod::getRodJournalPositionGlobal(int i, double *x, double *y) {
+void ConnectingRod::getRodJournalPositionGlobal(int i, double *x, double *y) const {
     double lx, ly;
     getRodJournalPositionLocal(i, &lx, &ly);
 

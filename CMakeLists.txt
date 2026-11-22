@@ -282,6 +282,7 @@ if (PIRANHA_ENABLED AND ((BUILD_TESTING AND ENGINE_SIM_BUILD_HOST_TESTS) OR ENGI
         src/desktop_run.cpp
         src/geometry_generator.cpp
         src/simulation_object.cpp
+        src/desktop_engine_views.cpp
         src/piston_object.cpp
         src/connecting_rod_object.cpp
         src/ui_element.cpp
@@ -387,9 +388,12 @@ if (BUILD_TESTING)
             target_sources(engine-sim-host-application-test PRIVATE src/app.manifest)
         endif ()
         file(MAKE_DIRECTORY "${PROJECT_BINARY_DIR}/host-working")
-        gtest_discover_tests(engine-sim-host-application-test DISCOVERY_TIMEOUT 30
+        gtest_discover_tests(engine-sim-host-application-test TEST_FILTER "HostApplication.*" DISCOVERY_TIMEOUT 30
             WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/host-working"
             PROPERTIES LABELS host-contract TIMEOUT 180 ENVIRONMENT "ENGINE_SIM_TEST_RESOURCES=${PROJECT_SOURCE_DIR}")
+        gtest_discover_tests(engine-sim-host-application-test TEST_FILTER "ViewsApplication.*" DISCOVERY_TIMEOUT 30
+            WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/host-working"
+            PROPERTIES LABELS r2-views TIMEOUT 180 ENVIRONMENT "ENGINE_SIM_TEST_RESOURCES=${PROJECT_SOURCE_DIR}")
     endif ()
     add_executable(engine-sim-test
         # Source files

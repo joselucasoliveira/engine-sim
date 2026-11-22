@@ -2,6 +2,7 @@
 #define ATG_ENGINE_SIM_LOAD_SIMULATION_CLUSTER_H
 
 #include "ui_element.h"
+#include "desktop_engine_views.h"
 
 #include "simulator.h"
 #include "labeled_gauge.h"
@@ -18,10 +19,10 @@ class LoadSimulationCluster : public UiElement {
         virtual void render();
         void setUnits();
 
-        void setSimulator(Simulator *simulator) { m_simulator = simulator; }
+        void setSimulator(desktop::ViewHandle<Simulator> simulator) { m_simulator = simulator; }
 
     private:
-        Transmission *getTransmission() const { return m_simulator->getTransmission(); }
+        const Transmission *getTransmission() const { return m_simulator->getTransmission(); }
 
     protected:
         void drawCurrentGear(const Bounds &bounds);
@@ -47,7 +48,7 @@ class LoadSimulationCluster : public UiElement {
         std::string m_powerUnits;
         std::string m_torqueUnits;
 
-        Simulator *m_simulator;
+        desktop::ViewHandle<Simulator> m_simulator;
 };
 
 #endif /* ATG_ENGINE_SIM_LOAD_SIMULATION_CLUSTER_H */

@@ -105,8 +105,8 @@ class Synthesizer {
 
         int16_t renderAudio(int inputOffset);
 
-        double getLevelerGain();
-        AudioParameters getAudioParameters();
+        double getLevelerGain() const;
+        AudioParameters getAudioParameters() const;
         void setAudioParameters(const AudioParameters &params);
 
     //protected:

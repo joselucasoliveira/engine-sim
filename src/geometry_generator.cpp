@@ -1,5 +1,7 @@
 #include "../include/geometry_generator.h"
 #include <stdexcept>
+#include <algorithm>
+#include <utility>
 
 GeometryGenerator::GeometryGenerator() {
     m_vertexData = nullptr;
@@ -1016,4 +1018,20 @@ desktop::Vector GeometryGenerator::findOrthogonal(const desktop::Vector &v) {
     }
 
     return desktop::math::Normalize(desktop::math::Cross(v, base));
+}
+
+bool GeometryGenerator::appendGeometry(const desktop::Vertex *vertices, int vertexCount,
+        const unsigned short *indices, int indexCount) {
+    if (!checkCapacity(vertexCount, indexCount)) return false;
+    std::copy(vertices, vertices + vertexCount, m_vertexData + m_state.vertexPointer);
+    std::copy(indices, indices + indexCount, m_indexData + m_state.indexPointer);
+    m_state.vertexPointer += vertexCount; m_state.indexPointer += indexCount;
+    return true;
+}
+
+void GeometryGenerator::swap(GeometryGenerator &other) noexcept {
+    using std::swap;
+    swap(m_vertexData, other.m_vertexData); swap(m_indexData, other.m_indexData);
+    swap(m_vertexBufferSize, other.m_vertexBufferSize); swap(m_indexBufferSize, other.m_indexBufferSize);
+    swap(m_state, other.m_state);
 }

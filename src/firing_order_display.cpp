@@ -46,7 +46,7 @@ void FiringOrderDisplay::update(float dt) {
         }
 
         for (int i = 0; i < m_cylinderCount; ++i) {
-            if (m_engine->getChamber(i)->popLitLastFrame() || m_engine->getChamber(i)->isLit()) {
+            if (m_app->ignitionObserved(i) || m_engine->getChamber(i)->isLit()) {
                 m_cylinderLit[i] = 0.05f + 0.95f * m_cylinderLit[i];
             }
             else {
@@ -79,8 +79,8 @@ void FiringOrderDisplay::render() {
     const desktop::Vector fixed = mix(background, m_app->getForegroundColor(), 0.02f);
     const desktop::Vector cold = mix(background, m_app->getForegroundColor(), 0.001f);
 
-    std::vector<CylinderBank *> orderedBanks;
-    std::map<CylinderBank *, int> bankToIndex;
+    std::vector<const CylinderBank *> orderedBanks;
+    std::map<const CylinderBank *, int> bankToIndex;
     for (int i = 0; i < banks; ++i) {
         orderedBanks.push_back(m_engine->getCylinderBank(i));
     }
@@ -88,7 +88,7 @@ void FiringOrderDisplay::render() {
     std::sort(
         orderedBanks.begin(),
         orderedBanks.end(),
-        [](CylinderBank *a, CylinderBank *b) {
+        [](const CylinderBank *a, const CylinderBank *b) {
             return a->getAngle() < b->getAngle();
         });
     for (int i = 0; i < banks; ++i) {
@@ -97,9 +97,9 @@ void FiringOrderDisplay::render() {
 
     if (m_engine != nullptr) {
         for (int i = 0; i < m_engine->getCylinderCount(); ++i) {
-            Piston *piston = m_engine->getPiston(i);
-            CombustionChamber *chamber = m_engine->getChamber(i);
-            CylinderBank *bank = piston->getCylinderBank();
+            const Piston *piston = m_engine->getPiston(i);
+            const CombustionChamber *chamber = m_engine->getChamber(i);
+            const CylinderBank *bank = piston->getCylinderBank();
             const int bankIndex = bankToIndex[bank];
             const double lit = m_cylinderLit[i];
 

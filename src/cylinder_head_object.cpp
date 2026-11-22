@@ -6,7 +6,6 @@
 
 CylinderHeadObject::CylinderHeadObject() {
     m_head = nullptr;
-    m_engine = nullptr;
 }
 
 CylinderHeadObject::~CylinderHeadObject() {
@@ -14,49 +13,7 @@ CylinderHeadObject::~CylinderHeadObject() {
 }
 
 void CylinderHeadObject::generateGeometry() {
-    /* void */
-}
-
-void CylinderHeadObject::render(const ViewParameters *view) {
-    if (view->Sublayer != 0) return;
-
-    resetShader();
-
-    CylinderBank *bank = m_head->getCylinderBank();
-    const double s = (float)bank->getBore() / 2.0f;
-    const double boreSurfaceArea =
-        constants::pi * bank->getBore() * bank->getBore() / 4.0;
-    const double chamberHeight = m_head->getCombustionChamberVolume() / boreSurfaceArea;
-
-    Piston *frontmostPiston = getForemostPiston(bank, view->Layer0);
-    if (frontmostPiston == nullptr) return;
-
-    const double theta = bank->getAngle();
-    double x, y;
-    bank->getPositionAboveDeck(chamberHeight, &x, &y);
-
-    const desktop::Matrix scale = desktop::math::ScaleTransform(desktop::math::LoadScalar((float)s));
-    const desktop::Matrix rotation = desktop::math::RotationTransform(
-            desktop::math::Constants::ZAxis, (float)theta);
-    const desktop::Matrix translation = desktop::math::TranslationTransform(
-            desktop::math::LoadVector((float)x, (float)y));
-    const desktop::Matrix T_headObject = desktop::math::MatMult(translation, rotation);
-    const desktop::Matrix T_head = desktop::math::MatMult(
-            T_headObject,
-            scale);
-
-    const desktop::Vector col = m_app->getPink();  desktop::math::Add(
-        desktop::math::Mul(m_app->getForegroundColor(), desktop::math::LoadScalar(0.01f)),
-        desktop::math::Mul(m_app->getBackgroundColor(), desktop::math::LoadScalar(0.99f))
-    );
-    const desktop::Vector moving = m_app->getForegroundColor();
-
-    GeometryGenerator::GeometryIndices
-        valveShadow,
-        valveRoller,
-        valveRollerShadow,
-        valveRollerPin,
-        camCenter;
+    const double s = (float)m_head->getCylinderBank()->getBore() / 2.0f;
     GeometryGenerator *gen = m_app->getGeometryGenerator();
     GeometryGenerator::Line2dParameters params;
 
@@ -91,7 +48,7 @@ void CylinderHeadObject::render(const ViewParameters *view) {
     params.x1 = 0.5f;
     gen->generateLine2d(params);
 
-    gen->endShape(&valveShadow);
+    gen->endShape(&m_valveShadow);
 
     constexpr float rollerRadius = (float)units::distance(300.0, units::thou);
     GeometryGenerator::Circle2dParameters circleParams;
@@ -100,24 +57,62 @@ void CylinderHeadObject::render(const ViewParameters *view) {
     circleParams.center_y = 1.99f;
     gen->startShape();
     gen->generateCircle2d(circleParams);
-    gen->endShape(&valveRoller);
+    gen->endShape(&m_valveRoller);
 
     circleParams.radius = (rollerRadius + m_app->pixelsToUnits(5.0f) / 2) / (float)s;
     gen->startShape();
     gen->generateCircle2d(circleParams);
-    gen->endShape(&valveRollerShadow);
+    gen->endShape(&m_valveRollerShadow);
 
     circleParams.radius = (rollerRadius * 0.25f) / (float)s;
     gen->startShape();
     gen->generateCircle2d(circleParams);
-    gen->endShape(&valveRollerPin);
+    gen->endShape(&m_valveRollerPin);
 
     circleParams.radius = (rollerRadius * 0.25f);
     circleParams.center_x = 0.0f;
     circleParams.center_y = 0.0f;
     gen->startShape();
     gen->generateCircle2d(circleParams);
-    gen->endShape(&camCenter);
+    gen->endShape(&m_camCenter);
+
+}
+
+void CylinderHeadObject::render(const ViewParameters *view) {
+    if (view->Sublayer != 0) return;
+
+    resetShader();
+
+    const CylinderBank *bank = m_head->getCylinderBank();
+    const double s = (float)bank->getBore() / 2.0f;
+    const double boreSurfaceArea =
+        constants::pi * bank->getBore() * bank->getBore() / 4.0;
+    const double chamberHeight = m_head->getCombustionChamberVolume() / boreSurfaceArea;
+
+    const Piston *frontmostPiston = getForemostPiston(bank, view->Layer0);
+    if (frontmostPiston == nullptr) return;
+
+    const double theta = bank->getAngle();
+    double x, y;
+    bank->getPositionAboveDeck(chamberHeight, &x, &y);
+
+    const desktop::Matrix scale = desktop::math::ScaleTransform(desktop::math::LoadScalar((float)s));
+    const desktop::Matrix rotation = desktop::math::RotationTransform(
+            desktop::math::Constants::ZAxis, (float)theta);
+    const desktop::Matrix translation = desktop::math::TranslationTransform(
+            desktop::math::LoadVector((float)x, (float)y));
+    const desktop::Matrix T_headObject = desktop::math::MatMult(translation, rotation);
+    const desktop::Matrix T_head = desktop::math::MatMult(
+            T_headObject,
+            scale);
+
+    const desktop::Vector col = m_app->getPink();  desktop::math::Add(
+        desktop::math::Mul(m_app->getForegroundColor(), desktop::math::LoadScalar(0.01f)),
+        desktop::math::Mul(m_app->getBackgroundColor(), desktop::math::LoadScalar(0.99f))
+    );
+    const desktop::Vector moving = m_app->getForegroundColor();
+
+    constexpr float rollerRadius = (float)units::distance(300.0, units::thou);
 
     m_app->getShaders()->SetObjectTransform(T_head);
     m_app->getShaders()->SetBaseColor(col);
@@ -127,7 +122,7 @@ void CylinderHeadObject::render(const ViewParameters *view) {
         0x0);
     m_app->getShaders()->SetObjectTransform(T_head);
     m_app->getShaders()->SetBaseColor(m_app->getBackgroundColor());
-    m_app->drawGenerated(valveShadow, 0x1);
+    m_app->drawGenerated(m_valveShadow, 0x1);
 
     const double intakeValvePosition = (m_head->getFlipDisplay())
         ? 0.5f
@@ -152,11 +147,11 @@ void CylinderHeadObject::render(const ViewParameters *view) {
         m_app->getAssetManager()->GetModelAsset("Valve"),
         0x33);
     m_app->getShaders()->SetBaseColor(m_app->getBackgroundColor());
-    m_app->drawGenerated(valveRollerShadow, 0x33);
+    m_app->drawGenerated(m_valveRollerShadow, 0x33);
     m_app->getShaders()->SetBaseColor(m_app->getBlue());
-    m_app->drawGenerated(valveRoller, 0x33);
+    m_app->drawGenerated(m_valveRoller, 0x33);
     m_app->getShaders()->SetBaseColor(m_app->getBackgroundColor());
-    m_app->drawGenerated(valveRollerPin, 0x33);
+    m_app->drawGenerated(m_valveRollerPin, 0x33);
 
     const double exhaustLift = (float)m_head->exhaustValveLift(layer);
     const desktop::Matrix T_exhaustValve = desktop::math::MatMult(
@@ -175,14 +170,14 @@ void CylinderHeadObject::render(const ViewParameters *view) {
         m_app->getAssetManager()->GetModelAsset("Valve"),
         0x33);
     m_app->getShaders()->SetBaseColor(m_app->getBackgroundColor());
-    m_app->drawGenerated(valveRollerShadow, 0x33);
+    m_app->drawGenerated(m_valveRollerShadow, 0x33);
     m_app->getShaders()->SetBaseColor(m_app->getYellow());
-    m_app->drawGenerated(valveRoller, 0x33);
+    m_app->drawGenerated(m_valveRoller, 0x33);
     m_app->getShaders()->SetBaseColor(m_app->getBackgroundColor());
-    m_app->drawGenerated(valveRollerPin, 0x33);
+    m_app->drawGenerated(m_valveRollerPin, 0x33);
 
-    Camshaft *intakeCam = m_head->getIntakeCamshaft();
-    Camshaft *exhaustCam = m_head->getExhaustCamshaft();
+    const Camshaft *intakeCam = m_head->getIntakeCamshaft();
+    const Camshaft *exhaustCam = m_head->getExhaustCamshaft();
     GeometryGenerator::GeometryIndices intake, intakeShadow, exhaust;
     generateCamshaft(intakeCam, 0.0, rollerRadius, &intake);
     generateCamshaft(intakeCam, m_app->pixelsToUnits(5.0) / 2, rollerRadius, &intakeShadow);
@@ -207,7 +202,7 @@ void CylinderHeadObject::render(const ViewParameters *view) {
     m_app->getShaders()->SetBaseColor(m_app->getYellow());
     m_app->drawGenerated(exhaust);
     m_app->getShaders()->SetBaseColor(m_app->getBackgroundColor());
-    m_app->drawGenerated(camCenter);
+    m_app->drawGenerated(m_camCenter);
 
     desktop::Matrix T_intakeCam = desktop::math::MatMult(
         T_headObject,
@@ -232,7 +227,7 @@ void CylinderHeadObject::render(const ViewParameters *view) {
     m_app->getShaders()->SetBaseColor(m_app->getBlue());
     m_app->drawGenerated(intake);
     m_app->getShaders()->SetBaseColor(m_app->getBackgroundColor());
-    m_app->drawGenerated(camCenter);
+    m_app->drawGenerated(m_camCenter);
 }
 
 void CylinderHeadObject::process(float dt) {
@@ -244,7 +239,7 @@ void CylinderHeadObject::destroy() {
 }
 
 void CylinderHeadObject::generateCamshaft(
-    Camshaft *camshaft,
+    const Camshaft *camshaft,
     double padding,
     double rollerRadius,
     GeometryGenerator::GeometryIndices *indices)

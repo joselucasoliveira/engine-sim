@@ -68,9 +68,10 @@ class Engine : public Part {
 
         std::string getName() const { return m_name; }
 
-        virtual Crankshaft *getOutputCrankshaft() const;
+        virtual Crankshaft *getOutputCrankshaft();
+        virtual const Crankshaft *getOutputCrankshaft() const;
         virtual void setSpeedControl(double s);
-        virtual double getSpeedControl();
+        virtual double getSpeedControl() const;
         virtual void setThrottle(double throttle);
         virtual double getThrottle() const;
         virtual double getThrottlePlateAngle() const;
@@ -104,15 +105,24 @@ class Engine : public Part {
         int getIntakeCount() const { return m_intakeCount; }
         int getMaxDepth() const;
 
-        Crankshaft *getCrankshaft(int i) const { return &m_crankshafts[i]; }
-        CylinderBank *getCylinderBank(int i) const { return &m_cylinderBanks[i]; }
-        CylinderHead *getHead(int i) const { return &m_heads[i]; }
-        Piston *getPiston(int i) const { return &m_pistons[i]; }
-        ConnectingRod *getConnectingRod(int i) const { return &m_connectingRods[i]; }
+        Crankshaft *getCrankshaft(int i) { return &m_crankshafts[i]; }
+        const Crankshaft *getCrankshaft(int i) const { return &m_crankshafts[i]; }
+        CylinderBank *getCylinderBank(int i) { return &m_cylinderBanks[i]; }
+        const CylinderBank *getCylinderBank(int i) const { return &m_cylinderBanks[i]; }
+        CylinderHead *getHead(int i) { return &m_heads[i]; }
+        const CylinderHead *getHead(int i) const { return &m_heads[i]; }
+        Piston *getPiston(int i) { return &m_pistons[i]; }
+        const Piston *getPiston(int i) const { return &m_pistons[i]; }
+        ConnectingRod *getConnectingRod(int i) { return &m_connectingRods[i]; }
+        const ConnectingRod *getConnectingRod(int i) const { return &m_connectingRods[i]; }
         IgnitionModule *getIgnitionModule() { return &m_ignitionModule; }
-        ExhaustSystem *getExhaustSystem(int i) const { return &m_exhaustSystems[i]; }
-        Intake *getIntake(int i) const { return &m_intakes[i]; }
-        CombustionChamber *getChamber(int i) const { return &m_combustionChambers[i]; }
+        const IgnitionModule *getIgnitionModule() const { return &m_ignitionModule; }
+        ExhaustSystem *getExhaustSystem(int i) { return &m_exhaustSystems[i]; }
+        const ExhaustSystem *getExhaustSystem(int i) const { return &m_exhaustSystems[i]; }
+        Intake *getIntake(int i) { return &m_intakes[i]; }
+        const Intake *getIntake(int i) const { return &m_intakes[i]; }
+        CombustionChamber *getChamber(int i) { return &m_combustionChambers[i]; }
+        const CombustionChamber *getChamber(int i) const { return &m_combustionChambers[i]; }
         Fuel *getFuel() { return &m_fuel; }
 
         double getSimulationFrequency() const { return m_initialSimulationFrequency; }

@@ -65,44 +65,20 @@ struct EngineSimApplication::UserInterface {
     InfoCluster *info = nullptr;
 };
 
-struct EngineSimApplication::DesktopControls {
-    struct Values {
-        double demand = 0, clutch = 0, dynoSpeed = 0;
-        bool ignition = false, starter = false, dyno = false, hold = false;
-        int frequency = 10000;
-    } pending, applied;
-    Simulator &simulator;
-    explicit DesktopControls(Simulator &value) : simulator(value) { capture(); applied = pending; }
-    void capture() {
-        pending = {simulator.getEngine()->getSpeedControl(), simulator.getTransmission()->getClutchPressure(),
-            simulator.m_dyno.m_rotationSpeed, simulator.getEngine()->getIgnitionModule()->m_enabled,
-            simulator.m_starterMotor.m_enabled, simulator.m_dyno.m_enabled, simulator.m_dyno.m_hold,
-            simulator.getSimulationFrequency()};
-    }
-    void apply(const Values &value, bool requestedFrequency) {
-        simulator.getEngine()->setSpeedControl(value.demand);
-        simulator.getEngine()->getIgnitionModule()->m_enabled = value.ignition;
-        simulator.m_starterMotor.m_enabled = value.starter;
-        simulator.getTransmission()->setClutchPressure(value.clutch);
-        simulator.m_dyno.m_rotationSpeed = value.dynoSpeed;
-        simulator.m_dyno.m_enabled = value.dyno;
-        simulator.m_dyno.m_hold = value.hold;
-        if (requestedFrequency) simulator.setSimulationFrequency(value.frequency);
-    }
-};
-
 struct EngineSimApplication::PendingSession {
     std::unique_ptr<EngineSession> session;
     std::vector<SimulationObject *> objects;
     std::unique_ptr<UserInterface> ui;
-    std::unique_ptr<DesktopControls> controls;
+    std::unique_ptr<desktop::EngineViews> views;
+    std::unique_ptr<desktop::EngineCommands> controls;
     std::unique_ptr<engine_sim::PullEngine> pull;
     std::unique_ptr<desktop::AudioPacer> pacer;
     ~PendingSession() {
         pacer.reset(); pull.reset(); controls.reset();
+        if (views) views->invalidate();
         ui.reset();
         releaseObjects(objects);
-        session.reset();
+        views.reset(); session.reset();
     }
 };
 
@@ -189,7 +165,7 @@ void EngineSimApplication::initialize() {
 
     m_host->openAudio();
     m_audioOpen = true;
-    m_host->setAudioPlaying(m_simulator->getEngine() != nullptr);
+    m_host->setAudioPlaying(engineObservation().valid());
 
 #ifdef ATG_ENGINE_SIM_DISCORD_ENABLED
     // Create a global instance of discord-rpc
@@ -237,7 +213,7 @@ void EngineSimApplication::process(float frame_dt) {
         m_displayAngle = 0.0f;
     }
 
-    m_simulator->setSimulationSpeed(speed);
+    m_desktopControls->setPresentationSpeed(speed);
 
     m_audioSpeedDivisor = static_cast<unsigned>(std::lround(1.0 / speed));
     serviceDesktopAudio(frame_dt, m_paused);
@@ -278,7 +254,7 @@ void EngineSimApplication::observeReadyAudio(void *context, const std::int16_t *
 
 void EngineSimApplication::render() {
     for (SimulationObject *object : m_objects) {
-        object->generateGeometry();
+        object->generatePresentationGeometry();
     }
 
     m_viewParameters.Sublayer = 0;
@@ -347,8 +323,8 @@ void EngineSimApplication::run() {
 
         updateScreenSizeStability();
 
-        processEngineInput();
-        m_desktopControls->capture();
+        { auto input = presentation(); processEngineInput(); }
+        m_desktopControls->flush();
 
         if (m_host->ProcessKeyDown(desktop::Key::Insert) &&
             m_host->GetGameWindow()->IsActive()) {
@@ -369,9 +345,14 @@ void EngineSimApplication::run() {
         }
         else serviceDesktopAudio(m_host->GetFrameLength(), false);
 
-        m_userInterface->manager.update(m_host->GetFrameLength());
-
-        renderScene();
+        m_engineViews->collectIgnition(*m_simulator);
+        desktop::ScopeObservation point;
+        while (m_engineViews->popScope(point)) m_oscCluster->sample(point);
+        {
+            auto phase = presentation();
+            m_userInterface->manager.update(m_host->GetFrameLength());
+            renderScene();
+        }
 
         m_host->EndFrame();
 
@@ -392,8 +373,10 @@ void EngineSimApplication::destroy() {
     m_destroyed = true;
     if (m_host) m_host->quiesceAudio();
     m_audioPacer.reset(); m_pullEngine.reset(); m_desktopControls.reset();
+    if (m_engineViews) m_engineViews->invalidate();
     m_userInterface.reset();
     destroyObjects();
+    m_engineViews.reset();
     m_session.reset();
     bindSession();
 
@@ -415,6 +398,7 @@ bool EngineSimApplication::loadEngine(Engine *engine, Vehicle *vehicle, Transmis
 bool EngineSimApplication::loadEngine(EngineDefinition definition) {
     const auto path = definition.sourcePath;
     try {
+        if (m_engineViews) m_engineViews->requireQuiescent();
         PendingSession candidate;
         candidate.session = EngineSession::prepare(std::move(definition), readSessionImpulse);
         // Widget initialization reads the palette and units. Roll back those values
@@ -438,17 +422,36 @@ bool EngineSimApplication::loadEngine(EngineDefinition definition) {
 
         auto *engine = candidate.session->definition.engine.get();
         auto *simulator = candidate.session->simulator.get();
-        buildObjects(engine, candidate.objects);
-        candidate.ui = prepareUserInterface(engine, simulator);
+        candidate.views = std::make_unique<desktop::EngineViews>(*simulator);
+        buildObjects(*candidate.views, candidate.objects);
+        candidate.ui = prepareUserInterface(*candidate.views);
+        {
+            // Stage CPU geometry against a detached buffer and viewport. A failure
+            // cannot disturb the active frame's vertices or its visual bindings.
+            GeometryGenerator staging;
+            staging.initialize(100000, 200000);
+            auto *previousView = m_engineView;
+            candidate.ui->engineView->setBounds(previousView ? previousView->m_bounds
+                : Bounds(1280, 360, {0, 360}));
+            m_geometryGenerator.swap(staging);
+            m_engineView = candidate.ui->engineView;
+            struct DrawingRollback {
+                EngineSimApplication &application; GeometryGenerator &buffer; EngineView *previous;
+                ~DrawingRollback() { application.m_geometryGenerator.swap(buffer); application.m_engineView = previous; }
+            } drawing{*this, staging, previousView};
+            auto phase = candidate.views->present();
+            for (auto *object : candidate.objects) object->generatePresentationGeometry();
+            validatePreparedViews();
+        }
         const int maxDepth = engine->getMaxDepth();
-        candidate.controls = std::make_unique<DesktopControls>(*simulator);
+        candidate.controls = std::make_unique<desktop::EngineCommands>(*simulator, *candidate.views);
         auto *commands = candidate.controls.get();
         candidate.pull = std::make_unique<engine_sim::PullEngine>(*simulator,
-            [commands] { commands->applied = commands->pending; }, engine_sim::SampleClock::Profile::Desktop);
+            [commands] { commands->latch(); }, engine_sim::SampleClock::Profile::Desktop);
         candidate.pull->setTickCommands([commands] { commands->apply(commands->applied, false); },
             [commands] { commands->apply(commands->pending, true); });
-        auto *scope = candidate.ui->oscilloscope;
-        candidate.pull->setTickObserver([scope](const Simulator &) { scope->sample(); });
+        auto *observations = candidate.views.get();
+        candidate.pull->setTickObserver([observations](const Simulator &sim) { observations->sampleTick(sim); });
         auto *pull = candidate.pull.get();
         candidate.pacer = std::make_unique<desktop::AudioPacer>([pull] {
             float sample;
@@ -458,7 +461,9 @@ bool EngineSimApplication::loadEngine(EngineDefinition definition) {
         candidate.pacer->setObservation({observeReadyAudio, this});
 
         if (m_audioOpen) { m_host->quiesceAudio(); m_host->resetAudioQueue(); }
+        if (m_engineViews) { m_engineViews->requireQuiescent(); m_engineViews->invalidate(); }
         m_session.swap(candidate.session);
+        m_engineViews.swap(candidate.views);
         m_objects.swap(candidate.objects);
         m_userInterface.swap(candidate.ui);
         m_desktopControls.swap(candidate.controls);
@@ -545,33 +550,27 @@ void EngineSimApplication::updatePalette() {
     m_green = desktop::color::srgbiToLinear(m_applicationSettings.colorGreen);
 }
 
-void EngineSimApplication::createObjects(Engine *engine) {
-    PendingSession candidate;
-    buildObjects(engine, candidate.objects);
-    m_objects.swap(candidate.objects);
-}
-
-void EngineSimApplication::buildObjects(Engine *engine, std::vector<SimulationObject *> &objects) {
-    if (engine == nullptr) throw std::invalid_argument("Cannot build display objects without an engine");
+void EngineSimApplication::buildObjects(desktop::EngineViews &views, std::vector<SimulationObject *> &objects) {
+    auto phase = views.present();
+    auto engine = views.at<Engine>();
     for (int i = 0; i < engine->getCylinderCount(); ++i) {
         auto *rod = appendObject<ConnectingRodObject>(objects, this);
-        rod->m_connectingRod = engine->getConnectingRod(i);
+        rod->m_connectingRod = views.at<ConnectingRod>(i);
         auto *piston = appendObject<PistonObject>(objects, this);
-        piston->m_piston = engine->getPiston(i);
+        piston->m_piston = views.at<Piston>(i);
         auto *chamber = appendObject<CombustionChamberObject>(objects, this);
-        chamber->m_chamber = engine->getChamber(i);
+        chamber->m_chamber = views.at<CombustionChamber>(i);
     }
     for (int i = 0; i < engine->getCrankshaftCount(); ++i) {
         auto *shaft = appendObject<CrankshaftObject>(objects, this);
-        shaft->m_crankshaft = engine->getCrankshaft(i);
+        shaft->m_crankshaft = views.at<Crankshaft>(i);
     }
     for (int i = 0; i < engine->getCylinderBankCount(); ++i) {
         auto *bank = appendObject<CylinderBankObject>(objects, this);
-        bank->m_bank = engine->getCylinderBank(i);
-        bank->m_head = engine->getHead(i);
+        bank->m_bank = views.at<CylinderBank>(i);
+        bank->m_head = views.at<CylinderHead>(i);
         auto *head = appendObject<CylinderHeadObject>(objects, this);
-        head->m_head = engine->getHead(i);
-        head->m_engine = engine;
+        head->m_head = views.at<CylinderHead>(i);
     }
 }
 
@@ -603,7 +602,11 @@ bool EngineSimApplication::loadScript() {
 }
 
 void EngineSimApplication::processEngineInput() {
-    if (m_iceEngine == nullptr) {
+    auto engine = engineObservation();
+    auto simulator = m_engineViews->at<Simulator>();
+    auto &commands = *m_desktopControls;
+    auto state = commands.pending;
+    if (engine == nullptr) {
         return;
     }
 
@@ -620,10 +623,10 @@ void EngineSimApplication::processEngineInput() {
             ? 0.001
             : 0.01;
 
-        Synthesizer::AudioParameters audioParams = m_simulator->synthesizer().getAudioParameters();
+        Synthesizer::AudioParameters audioParams = commands.mixer();
         audioParams.volume = clamp(audioParams.volume + mouseWheelDelta * rate * dt);
 
-        m_simulator->synthesizer().setAudioParameters(audioParams);
+        commands.setMixer(audioParams);
         fineControlInUse = true;
 
         m_infoCluster->setLogMessage("[Z] - Set volume to " + std::to_string(audioParams.volume));
@@ -633,10 +636,10 @@ void EngineSimApplication::processEngineInput() {
             ? 0.001
             : 0.01;
 
-        Synthesizer::AudioParameters audioParams = m_simulator->synthesizer().getAudioParameters();
+        Synthesizer::AudioParameters audioParams = commands.mixer();
         audioParams.convolution = clamp(audioParams.convolution + mouseWheelDelta * rate * dt);
 
-        m_simulator->synthesizer().setAudioParameters(audioParams);
+        commands.setMixer(audioParams);
         fineControlInUse = true;
 
         m_infoCluster->setLogMessage("[X] - Set convolution level to " + std::to_string(audioParams.convolution));
@@ -646,10 +649,10 @@ void EngineSimApplication::processEngineInput() {
             ? 0.00001
             : 0.001;
 
-        Synthesizer::AudioParameters audioParams = m_simulator->synthesizer().getAudioParameters();
+        Synthesizer::AudioParameters audioParams = commands.mixer();
         audioParams.dF_F_mix = clamp(audioParams.dF_F_mix + mouseWheelDelta * rate * dt);
 
-        m_simulator->synthesizer().setAudioParameters(audioParams);
+        commands.setMixer(audioParams);
         fineControlInUse = true;
 
         m_infoCluster->setLogMessage("[C] - Set high freq. gain to " + std::to_string(audioParams.dF_F_mix));
@@ -659,10 +662,10 @@ void EngineSimApplication::processEngineInput() {
             ? 0.001
             : 0.01;
 
-        Synthesizer::AudioParameters audioParams = m_simulator->synthesizer().getAudioParameters();
+        Synthesizer::AudioParameters audioParams = commands.mixer();
         audioParams.airNoise = clamp(audioParams.airNoise + mouseWheelDelta * rate * dt);
 
-        m_simulator->synthesizer().setAudioParameters(audioParams);
+        commands.setMixer(audioParams);
         fineControlInUse = true;
 
         m_infoCluster->setLogMessage("[V] - Set low freq. noise to " + std::to_string(audioParams.airNoise));
@@ -672,10 +675,10 @@ void EngineSimApplication::processEngineInput() {
             ? 0.001
             : 0.01;
 
-        Synthesizer::AudioParameters audioParams = m_simulator->synthesizer().getAudioParameters();
+        Synthesizer::AudioParameters audioParams = commands.mixer();
         audioParams.inputSampleNoise = clamp(audioParams.inputSampleNoise + mouseWheelDelta * rate * dt);
 
-        m_simulator->synthesizer().setAudioParameters(audioParams);
+        commands.setMixer(audioParams);
         fineControlInUse = true;
 
         m_infoCluster->setLogMessage("[B] - Set high freq. noise to " + std::to_string(audioParams.inputSampleNoise));
@@ -686,23 +689,23 @@ void EngineSimApplication::processEngineInput() {
             : 100.0;
 
         const double newSimulationFrequency = clamp(
-            m_simulator->getSimulationFrequency() + mouseWheelDelta * rate * dt,
+            commands.pending.frequency + mouseWheelDelta * rate * dt,
             400.0, 400000.0);
 
-        m_simulator->setSimulationFrequency(newSimulationFrequency);
+        commands.setFrequency(static_cast<int>(newSimulationFrequency));
         fineControlInUse = true;
 
-        m_infoCluster->setLogMessage("[N] - Set simulation freq to " + std::to_string(m_simulator->getSimulationFrequency()));
+        m_infoCluster->setLogMessage("[N] - Set simulation freq to " + std::to_string(commands.pending.frequency));
     }
-    else if (m_host->IsKeyDown(desktop::Key::G) && m_simulator->m_dyno.m_hold) {
+    else if (m_host->IsKeyDown(desktop::Key::G) && state.hold) {
         if (mouseWheelDelta > 0) {
-            m_dynoSpeed += m_iceEngine->getDynoHoldStep();
+            m_dynoSpeed += engine->getDynoHoldStep();
         }
         else if (mouseWheelDelta < 0) {
-            m_dynoSpeed -= m_iceEngine->getDynoHoldStep();
+            m_dynoSpeed -= engine->getDynoHoldStep();
         }
 
-        m_dynoSpeed = clamp(m_dynoSpeed, m_iceEngine->getDynoMinSpeed(), m_iceEngine->getDynoMaxSpeed());
+        m_dynoSpeed = clamp(m_dynoSpeed, engine->getDynoMinSpeed(), engine->getDynoMaxSpeed());
 
         m_infoCluster->setLogMessage("[G] - Set dyno speed to " + std::to_string(units::toRpm(m_dynoSpeed)));
         fineControlInUse = true;
@@ -732,10 +735,10 @@ void EngineSimApplication::processEngineInput() {
 
     m_speedSetting = m_targetSpeedSetting * 0.5 + 0.5 * m_speedSetting;
 
-    m_iceEngine->setSpeedControl(m_speedSetting);
+    commands.setDemand(m_speedSetting);
     if (m_host->ProcessKeyDown(desktop::Key::M)) {
         const int currentLayer = getViewParameters().Layer0;
-        if (currentLayer + 1 < m_iceEngine->getMaxDepth()) {
+        if (currentLayer + 1 < engine->getMaxDepth()) {
             setViewLayer(currentLayer + 1);
         }
 
@@ -750,84 +753,84 @@ void EngineSimApplication::processEngineInput() {
     }
 
     if (m_host->ProcessKeyDown(desktop::Key::D)) {
-        m_simulator->m_dyno.m_enabled = !m_simulator->m_dyno.m_enabled;
+        state.dyno = !state.dyno;
 
-        const std::string msg = m_simulator->m_dyno.m_enabled
+        const std::string msg = state.dyno
             ? "DYNOMOMETER ENABLED"
             : "DYNOMOMETER DISABLED";
         m_infoCluster->setLogMessage(msg);
     }
 
     if (m_host->ProcessKeyDown(desktop::Key::H)) {
-        m_simulator->m_dyno.m_hold = !m_simulator->m_dyno.m_hold;
+        state.hold = !state.hold;
 
-        const std::string msg = m_simulator->m_dyno.m_hold
-            ? m_simulator->m_dyno.m_enabled ? "HOLD ENABLED" : "HOLD ON STANDBY [ENABLE DYNO. FOR HOLD]"
+        const std::string msg = state.hold
+            ? state.dyno ? "HOLD ENABLED" : "HOLD ON STANDBY [ENABLE DYNO. FOR HOLD]"
             : "HOLD DISABLED";
         m_infoCluster->setLogMessage(msg);
     }
 
-    if (m_simulator->m_dyno.m_enabled) {
-        if (!m_simulator->m_dyno.m_hold) {
-            if (m_simulator->getFilteredDynoTorque() > units::torque(1.0, units::ft_lb)) {
+    if (state.dyno) {
+        if (!state.hold) {
+            if (simulator->getFilteredDynoTorque() > units::torque(1.0, units::ft_lb)) {
                 m_dynoSpeed += units::rpm(500) * dt;
             }
             else {
                 m_dynoSpeed *= (1 / (1 + dt));
             }
 
-            if (m_dynoSpeed > m_iceEngine->getRedline()) {
-                m_simulator->m_dyno.m_enabled = false;
+            if (m_dynoSpeed > engine->getRedline()) {
+                state.dyno = false;
                 m_dynoSpeed = units::rpm(0);
             }
         }
     }
     else {
-        if (!m_simulator->m_dyno.m_hold) {
+        if (!state.hold) {
             m_dynoSpeed = units::rpm(0);
         }
     }
 
-    m_dynoSpeed = clamp(m_dynoSpeed, m_iceEngine->getDynoMinSpeed(), m_iceEngine->getDynoMaxSpeed());
-    m_simulator->m_dyno.m_rotationSpeed = m_dynoSpeed;
+    m_dynoSpeed = clamp(m_dynoSpeed, engine->getDynoMinSpeed(), engine->getDynoMaxSpeed());
+    state.dynoSpeed = m_dynoSpeed;
 
-    const bool prevStarterEnabled = m_simulator->m_starterMotor.m_enabled;
+    const bool prevStarterEnabled = state.starter;
     if (m_host->IsKeyDown(desktop::Key::S)) {
-        m_simulator->m_starterMotor.m_enabled = true;
+        state.starter = true;
     }
     else {
-        m_simulator->m_starterMotor.m_enabled = false;
+        state.starter = false;
     }
 
-    if (prevStarterEnabled != m_simulator->m_starterMotor.m_enabled) {
-        const std::string msg = m_simulator->m_starterMotor.m_enabled
+    if (prevStarterEnabled != state.starter) {
+        const std::string msg = state.starter
             ? "STARTER ENABLED"
             : "STARTER DISABLED";
         m_infoCluster->setLogMessage(msg);
     }
 
     if (m_host->ProcessKeyDown(desktop::Key::A)) {
-        m_simulator->getEngine()->getIgnitionModule()->m_enabled =
-            !m_simulator->getEngine()->getIgnitionModule()->m_enabled;
+        state.ignition =
+            !state.ignition;
 
-        const std::string msg = m_simulator->getEngine()->getIgnitionModule()->m_enabled
+        const std::string msg = state.ignition
             ? "IGNITION ENABLED"
             : "IGNITION DISABLED";
         m_infoCluster->setLogMessage(msg);
     }
 
     if (m_host->ProcessKeyDown(desktop::Key::Up)) {
-        m_simulator->getTransmission()->changeGear(m_simulator->getTransmission()->getGear() + 1);
+        commands.changeGear(commands.gear() + 1);
 
         m_infoCluster->setLogMessage(
-            "UPSHIFTED TO " + std::to_string(m_simulator->getTransmission()->getGear() + 1));
+            "UPSHIFTED TO " + std::to_string(commands.gear() + 1));
     }
     else if (m_host->ProcessKeyDown(desktop::Key::Down)) {
-        m_simulator->getTransmission()->changeGear(m_simulator->getTransmission()->getGear() - 1);
+        commands.changeGear(commands.gear() - 1);
 
-        if (m_simulator->getTransmission()->getGear() != -1) {
+        if (commands.gear() != -1) {
             m_infoCluster->setLogMessage(
-                "DOWNSHIFTED TO " + std::to_string(m_simulator->getTransmission()->getGear() + 1));
+                "DOWNSHIFTED TO " + std::to_string(commands.gear() + 1));
         }
         else {
             m_infoCluster->setLogMessage("SHIFTED TO NEUTRAL");
@@ -857,7 +860,10 @@ void EngineSimApplication::processEngineInput() {
 
     const double clutch_s = dt / (dt + clutchRC);
     m_clutchPressure = m_clutchPressure * (1 - clutch_s) + m_targetClutchPressure * clutch_s;
-    m_simulator->getTransmission()->setClutchPressure(m_clutchPressure);
+    commands.setClutch(m_clutchPressure);
+    commands.setDyno(state.dyno, state.hold, state.dynoSpeed);
+    commands.setStarter(state.starter);
+    commands.setIgnition(state.ignition);
 }
 
 void EngineSimApplication::renderScene() {
@@ -966,7 +972,10 @@ void EngineSimApplication::renderScene() {
 }
 
 std::unique_ptr<EngineSimApplication::UserInterface>
-EngineSimApplication::prepareUserInterface(Engine *engine, Simulator *simulator) {
+EngineSimApplication::prepareUserInterface(desktop::EngineViews &views) {
+    auto phase = views.present();
+    auto engine = views.at<Engine>();
+    auto simulator = views.at<Simulator>();
     if (engine == nullptr || simulator == nullptr) throw std::invalid_argument("Cannot build interface without an engine session");
     auto candidate = std::make_unique<UserInterface>();
     candidate->manager.initialize(this);
@@ -990,7 +999,7 @@ EngineSimApplication::prepareUserInterface(Engine *engine, Simulator *simulator)
 }
 
 void EngineSimApplication::refreshUserInterface() {
-    auto candidate = prepareUserInterface(m_iceEngine, m_simulator);
+    auto candidate = prepareUserInterface(*m_engineViews);
     m_userInterface.swap(candidate);
     bindSession();
 }

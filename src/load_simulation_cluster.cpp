@@ -174,7 +174,7 @@ void LoadSimulationCluster::render() {
        (float)units::toRpm(std::abs(m_simulator->m_dyno.m_rotationSpeed));
     m_dynoSpeedGauge->m_bounds = dynoSpeedBounds;
 
-    Engine *engine = m_simulator->getEngine();
+    const Engine *engine = m_simulator->getEngine();
 
     constexpr float shortenAngle = (float)units::angle(1.0, units::deg);
     const double redline = units::toRpm((engine != nullptr) ? engine->getRedline() : 0);
@@ -300,7 +300,7 @@ void LoadSimulationCluster::updateHpAndTorque(float dt) {
 }
 
 bool LoadSimulationCluster::isIgnitionOn() const {
-    Engine *engine = m_simulator->getEngine();
+    const Engine *engine = m_simulator->getEngine();
     return (engine != nullptr)
         ? engine->getIgnitionModule()->m_enabled
         : false;

@@ -37,8 +37,8 @@ void CylinderTemperatureGauge::update(float dt) {
     double minTemperature = m_minTemperature;
 
     for (int i = 0; i < m_engine->getCylinderCount(); ++i) {
-        Piston *piston = m_engine->getPiston(i);
-        CombustionChamber *chamber = m_engine->getChamber(i);
+        const Piston *piston = m_engine->getPiston(i);
+        const CombustionChamber *chamber = m_engine->getChamber(i);
 
         const double temperature = chamber->m_system.temperature();
         double value = temperature - m_minTemperature;
@@ -72,9 +72,9 @@ void CylinderTemperatureGauge::render() {
     const desktop::Vector cold = mix(background, m_app->getBlue(), 0.001f);
 
     for (int i = 0; i < m_engine->getCylinderCount(); ++i) {
-        Piston *piston = m_engine->getPiston(i);
-        CombustionChamber *chamber = m_engine->getChamber(i);
-        CylinderBank *bank = piston->getCylinderBank();
+        const Piston *piston = m_engine->getPiston(i);
+        const CombustionChamber *chamber = m_engine->getChamber(i);
+        const CylinderBank *bank = piston->getCylinderBank();
         const int bankIndex = bank->getIndex();
 
         const Bounds &b = grid.get(body, bankIndex, 0);

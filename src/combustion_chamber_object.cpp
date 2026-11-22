@@ -14,8 +14,8 @@ CombustionChamberObject::~CombustionChamberObject() {
 
 void CombustionChamberObject::generateGeometry() {
     GeometryGenerator *gen = m_app->getGeometryGenerator();
-    CylinderHead *head = m_chamber->getCylinderHead();
-    CylinderBank *bank = head->getCylinderBank();
+    const CylinderHead *head = m_chamber->getCylinderHead();
+    const CylinderBank *bank = head->getCylinderBank();
 
     const float lineWidth = (float)m_chamber->m_flameEvent.travel_x * 2;
     double flameTop_x, flameTop_y;
@@ -42,10 +42,10 @@ void CombustionChamberObject::generateGeometry() {
 void CombustionChamberObject::render(const ViewParameters *view) {
     resetShader();
 
-    CylinderHead *head = m_chamber->getCylinderHead();
-    CylinderBank *bank = head->getCylinderBank();
+    const CylinderHead *head = m_chamber->getCylinderHead();
+    const CylinderBank *bank = head->getCylinderBank();
 
-    Piston *frontmostPiston = getForemostPiston(bank, view->Layer0);
+    const Piston *frontmostPiston = getForemostPiston(bank, view->Layer0);
     if (m_chamber->getPiston() == frontmostPiston) {
         if (m_chamber->m_lit) {
             m_app->getShaders()->SetBaseColor(

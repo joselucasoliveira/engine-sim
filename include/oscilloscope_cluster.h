@@ -2,6 +2,7 @@
 #define ATG_ENGINE_SIM_OSCILLOSCOPE_CLUSTER_H
 
 #include "ui_element.h"
+#include "desktop_engine_views.h"
 
 #include "simulator.h"
 #include "oscilloscope.h"
@@ -21,8 +22,8 @@ class OscilloscopeCluster : public UiElement {
         virtual void update(float dt);
         virtual void render();
 
-        void sample();
-        void setSimulator(Simulator *simulator);
+        void sample(const desktop::ScopeObservation &point);
+        void setSimulator(desktop::ViewHandle<Simulator> simulator);
 
         Oscilloscope *getTotalExhaustFlowOscilloscope() const { return m_totalExhaustFlowScope; }
         Oscilloscope *getExhaustFlowOscilloscope() const { return m_exhaustFlowScope; }
@@ -43,7 +44,7 @@ class OscilloscopeCluster : public UiElement {
             const std::string &title,
             bool overlay=false);
 
-        Simulator *m_simulator;
+        desktop::ViewHandle<Simulator> m_simulator;
         Oscilloscope
             *m_torqueScope,
             *m_powerScope,

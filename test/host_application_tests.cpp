@@ -1,4 +1,9 @@
 #include <gtest/gtest.h>
+#include "constants.h"
+#include "piston_object.h"
+#include "connecting_rod_object.h"
+#include "cylinder_bank_object.h"
+#include "cylinder_head_object.h"
 #include "engine_sim_application.h"
 #include "recording_host.h"
 #include <chrono>
@@ -7,6 +12,8 @@
 #include <filesystem>
 #include <fstream>
 #include <set>
+#include <thread>
+#include <type_traits>
 
 namespace {
 namespace fs=std::filesystem;
@@ -14,6 +21,12 @@ using desktop::Key;
 using host_test::Input;
 class Application : public EngineSimApplication {
 public:
+    using EngineSimApplication::setMixer;
+    bool failViews=false;
+    void viewHeight(float height) { m_engineView->setBounds(Bounds(1280,height,{0,height})); }
+    desktop::EngineViews &views() { return *m_engineViews; }
+    desktop::EngineCommands &commands() { return *m_desktopControls; }
+    engine_sim::PullEngine &pull() { return *m_pullEngine; }
     int processed=0;
     std::function<void()> beforeProcess;
     void pause(bool value) { m_paused=value; }
@@ -23,6 +36,7 @@ public:
     double throttle() const { return m_targetSpeedSetting; }
     double clutch() const { return m_clutchPressure; }
 private:
+    void validatePreparedViews() override { if (failViews) throw std::runtime_error("Injected detached view preparation failure"); }
     void process(float seconds) override {
         ++processed;
         if (beforeProcess) beforeProcess();
@@ -141,7 +155,7 @@ TEST_F(HostApplication, ControlsPreserveEdgesHoldsClutchThrottleAndFineWheel) {
     backend->inputs[7].hold(Key::Z).hold(Key::Space); backend->inputs[7].wheel=240;
     app.initialize(std::move(backend),{resources,{}});
     auto parameters=app.getSimulator()->synthesizer().getAudioParameters(); parameters.volume=0.25;
-    app.getSimulator()->synthesizer().setAudioParameters(parameters);
+    app.setMixer(parameters);
     const auto layer=app.getViewParameters().Layer0; ASSERT_GT(app.getSimulator()->getEngine()->getMaxDepth(),1);
     struct Snapshot { bool starter,ignition,dyno,hold; int gear,layer; double throttle,clutch; };
     std::vector<Snapshot> snapshots;
@@ -225,4 +239,143 @@ TEST_F(HostApplication, KohlerAndNineCylinderSessionsRenderProducePcmAndRelease)
         app.destroy(); EXPECT_EQ(data->shutdowns,1);
     }
 }
+
+class ViewsApplication : public HostApplication {};
+
+TEST_F(ViewsApplication, HandlesRequireOwnerPhaseAndRetireBeforeTheirGraph) {
+    static_assert(std::is_same_v<decltype(std::declval<desktop::ViewHandle<Engine>>().operator->()), const Engine *>);
+    static_assert(std::is_same_v<decltype(std::declval<const Engine>().getPiston(0)), const Piston *>);
+    static_assert(std::is_same_v<decltype(std::declval<const Piston>().getRod()), const ConnectingRod *>);
+    static_assert(std::is_same_v<decltype(std::declval<const Simulator>().getEngine()), const Engine *>);
+    Application app; app.initialize(host(1),{resources,{}});
+    auto old=app.engineObservation(); auto piston=app.views().at<Piston>(0);
+    EXPECT_THROW(old->getRpm(),std::logic_error);
+    {
+        auto phase=app.presentation();
+        EXPECT_EQ(old->getCylinderCount(),4); EXPECT_GE(piston->getCylinderIndex(),0);
+        EXPECT_THROW(app.commands().flush(),std::logic_error);
+        bool rejected=false;
+        std::thread other([&] { try { (void)old->getRpm(); } catch (const std::logic_error &) { rejected=true; } });
+        other.join(); EXPECT_TRUE(rejected);
+    }
+    EXPECT_THROW(piston->getCylinderIndex(),std::logic_error);
+    desktop::EngineViews replacement(*app.getSimulator());
+    app.views().invalidate();
+    auto fresh=replacement.at<Engine>();
+    EXPECT_NE(old.generation(),fresh.generation());
+    {
+        auto phase=replacement.present(); EXPECT_EQ(fresh->getCylinderCount(),4);
+        EXPECT_THROW(old->getCylinderCount(),std::logic_error);
+    }
+    app.destroy(); EXPECT_FALSE(old.valid()); EXPECT_FALSE(piston.valid());
+    EXPECT_THROW(old->getRpm(),std::logic_error);
+}
+
+TEST_F(ViewsApplication, FailedDetachedViewsKeepPaletteGenerationControlsAndDrawableGeometry) {
+    const std::string valid="import \"engine_sim.mr\"\nimport \"engines/atg-video-2/01_subaru_ej25_eh.mr\"\nmain()\n";
+    const auto script=entry(valid); Application app; auto backend=host(4); auto *control=backend.get();
+    backend->inputs[0].press(Key::A).hold(Key::S);
+    backend->inputs[1].press(Key::Return); backend->inputs[2].press(Key::Return);
+    app.initialize(std::move(backend),{resources,script});
+    auto old=app.engineObservation(); const auto generation=app.viewGeneration();
+    const auto palette=app.getAppSettings()->colorForeground;
+    control->onFrame=[&](std::size_t frame) {
+        if (frame==1) {
+            write(script,valid+"import \"themes/paper.mr\"\nuse_paper_theme(color: 0x123456)\n");
+            app.failViews=true;
+        }
+        if (frame==2) {
+            EXPECT_EQ(app.viewGeneration(),generation); EXPECT_EQ(app.getAppSettings()->colorForeground,palette);
+            auto phase=app.presentation(); EXPECT_TRUE(old->getIgnitionModule()->m_enabled);
+            EXPECT_EQ(old->getCylinderCount(),4); app.failViews=false;
+        }
+        if (frame==3) {
+            EXPECT_NE(app.viewGeneration(),generation); EXPECT_FALSE(old.valid());
+            EXPECT_EQ(app.getAppSettings()->colorForeground,0x123456);
+            auto phase=app.presentation(); EXPECT_THROW(old->getRpm(),std::logic_error);
+        }
+    };
+    app.run(); ASSERT_EQ(recording->frames.size(),4U);
+    EXPECT_TRUE(model(recording->frames[1],"Piston")); EXPECT_TRUE(model(recording->frames[3],"Piston"));
+    EXPECT_EQ(recording->audioModes,(std::vector<bool>{true,false,true}));
+    app.destroy();
+}
+
+TEST_F(ViewsApplication, TickObservationsMatchModelAndEvictOnlyOldDisplayPoints) {
+    Application app; app.initialize(host(1),{resources,{}});
+    auto &views=app.views(); auto &pull=app.pull();
+    std::vector<desktop::ScopeObservation> expected;
+    pull.setTickObserver([&](const Simulator &sim) {
+        views.sampleTick(sim);
+        if (sim.getCurrentIteration()%2) return;
+        const auto *engine=sim.getEngine(); const auto *chamber=engine->getChamber(0);
+        auto cycle=engine->getCrankshaft(0)->getCycleAngle();
+        if (!engine->isSpinningCw()) cycle=4*constants::pi-cycle;
+        expected.push_back({views.observedTicks(),cycle,engine->getCrankshaft(0)->getCycleAngle(constants::pi),
+            sim.getTotalExhaustFlow()/sim.getTimestep(),
+            std::sqrt(chamber->m_system.pressure()+chamber->m_system.dynamicPressure(-1,0)),
+            chamber->getLastTimestepExhaustFlow()/sim.getTimestep(),
+            chamber->getLastTimestepIntakeFlow()/sim.getTimestep(),chamber->m_system.n(),
+            chamber->getCylinderHead()->exhaustValveLift(chamber->getPiston()->getCylinderIndex()),
+            chamber->getCylinderHead()->intakeValveLift(chamber->getPiston()->getCylinderIndex()),
+            chamber->getVolume(),std::sqrt(chamber->m_system.pressure()),units::toRpm(engine->getSpeed())});
+    });
+    app.commands().setStarter(true); app.commands().setIgnition(true); app.commands().flush();
+    std::array<float,257> pcm{};
+    for (int i=0;i<400;++i) pull.render(pcm.data(),pcm.size());
+    ASSERT_GT(expected.size(),desktop::EngineViews::ScopeCapacity);
+    const auto first=expected.size()-desktop::EngineViews::ScopeCapacity;
+    EXPECT_EQ(views.evictedScopePoints(),first);
+    desktop::ScopeObservation point{}; std::size_t i=first;
+    while (views.popScope(point)) {
+        ASSERT_LT(i,expected.size()); const auto &reference=expected[i++];
+        EXPECT_EQ(point.tick,reference.tick); EXPECT_DOUBLE_EQ(point.cycle,reference.cycle);
+        EXPECT_DOUBLE_EQ(point.pressureCycle,reference.pressureCycle); EXPECT_DOUBLE_EQ(point.pressure,reference.pressure);
+        EXPECT_DOUBLE_EQ(point.exhaust,reference.exhaust); EXPECT_DOUBLE_EQ(point.cylinderExhaust,reference.cylinderExhaust);
+        EXPECT_DOUBLE_EQ(point.intake,reference.intake); EXPECT_DOUBLE_EQ(point.molecules,reference.molecules);
+        EXPECT_DOUBLE_EQ(point.exhaustLift,reference.exhaustLift); EXPECT_DOUBLE_EQ(point.intakeLift,reference.intakeLift);
+        EXPECT_DOUBLE_EQ(point.volume,reference.volume); EXPECT_DOUBLE_EQ(point.staticPressure,reference.staticPressure);
+    }
+    EXPECT_EQ(i,expected.size()); EXPECT_EQ(app.sourceCounts().frames,400U*257);
+    EXPECT_EQ(app.getSimulator()->synthesizer().getDroppedInputSamples(),0U);
+    EXPECT_EQ(app.getSimulator()->synthesizer().getDroppedOutputSamples(),0U);
+    app.destroy();
+}
+
+
+TEST_F(ViewsApplication, StaticGeometryCacheMatchesFreshGeometryAfterOffsetsAndResize) {
+    Application app; app.initialize(host(1),{resources,{}});
+    auto phase=app.presentation();
+    PistonObject piston; piston.initialize(&app); piston.m_piston=app.views().at<Piston>(0);
+    ConnectingRodObject rod; rod.initialize(&app); rod.m_connectingRod=app.views().at<ConnectingRod>(0);
+    CylinderBankObject bank; bank.initialize(&app); bank.m_bank=app.views().at<CylinderBank>(0);
+    bank.m_head=app.views().at<CylinderHead>(0);
+    CylinderHeadObject head; head.initialize(&app); head.m_head=app.views().at<CylinderHead>(0);
+    auto *generator=app.getGeometryGenerator();
+    for (auto *object : std::array<SimulationObject *,4>{&piston,&rod,&bank,&head}) {
+        for (float height : {360.0f,720.0f,720.0f}) {
+            app.viewHeight(height);
+            generator->reset(); object->generateGeometry();
+            const auto vertices=generator->getCurrentVertexCount(), indices=generator->getCurrentIndexCount();
+            std::vector<desktop::Vector4> positions;
+            for (int i=0;i<vertices;++i) positions.push_back(generator->getVertexData()[i].Pos);
+            std::vector<unsigned short> faces(generator->getIndexData(),generator->getIndexData()+indices);
+            generator->reset();
+            GeometryGenerator::Circle2dParameters prefix; prefix.radius=1; prefix.maxEdgeLength=0.25f;
+            generator->startShape(); generator->generateCircle2d(prefix);
+            const int vertexBase=generator->getCurrentVertexCount(), indexBase=generator->getCurrentIndexCount();
+            object->generatePresentationGeometry();
+            ASSERT_EQ(generator->getCurrentVertexCount()-vertexBase,vertices);
+            ASSERT_EQ(generator->getCurrentIndexCount()-indexBase,indices);
+            for (int i=0;i<vertices;++i) {
+                const auto &actual=generator->getVertexData()[vertexBase+i].Pos;
+                EXPECT_FLOAT_EQ(actual.x,positions[i].x); EXPECT_FLOAT_EQ(actual.y,positions[i].y);
+                EXPECT_FLOAT_EQ(actual.z,positions[i].z); EXPECT_FLOAT_EQ(actual.w,positions[i].w);
+            }
+            for (int i=0;i<indices;++i) EXPECT_EQ(generator->getIndexData()[indexBase+i],faces[i]);
+        }
+    }
+    // The lease deliberately ends before app's destructor retires its owner.
+}
+
 }
