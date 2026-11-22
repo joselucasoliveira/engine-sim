@@ -100,3 +100,13 @@ if (TARGET engine-sim-runtime)
     gtest_discover_tests(engine-sim-runtime-load-test WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/load-working"
         DISCOVERY_TIMEOUT 30 PROPERTIES LABELS "r2-load" TIMEOUT 180 ENVIRONMENT "ENGINE_SIM_TEST_SOURCE=${PROJECT_SOURCE_DIR}")
 endif ()
+
+if (TARGET engine-sim-runtime)
+    add_executable(engine-sim-drive-test drive_tests.cpp)
+    target_link_libraries(engine-sim-drive-test PRIVATE EngineSim::Runtime engine-sim-script-interpreter gtest_main)
+    target_include_directories(engine-sim-drive-test PRIVATE "${PROJECT_SOURCE_DIR}/src/runtime")
+    engine_sim_diagnose(engine-sim-drive-test TRUE)
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/drive-working")
+    gtest_discover_tests(engine-sim-drive-test WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/drive-working"
+        DISCOVERY_TIMEOUT 30 PROPERTIES LABELS "r2-drive" TIMEOUT 180 ENVIRONMENT "ENGINE_SIM_TEST_SOURCE=${PROJECT_SOURCE_DIR}")
+endif ()

@@ -8,6 +8,7 @@
 
 namespace engine_sim {
 struct RuntimeTestAccess;
+class DrivenShaft;
 class Runtime {
 public:
     explicit Runtime(es_config config) noexcept;
@@ -21,9 +22,11 @@ private:
     friend struct RuntimeTestAccess;
     struct Session {
         Session(PreparedEngine value, std::uint32_t outputHz);
+        ~Session();
         void latch();
         PreparedEngine prepared;
         es_controls requested{sizeof(es_controls), ES_ABI_V1, 0, 0, 0, 0, 0};
+        std::unique_ptr<DrivenShaft> drive;
         std::unique_ptr<PullEngine> pull;
     };
     es_telemetry snapshot(const Session &session) const;

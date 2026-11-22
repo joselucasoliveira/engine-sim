@@ -104,7 +104,7 @@ TEST_F(RuntimeApi, InvalidCreateAndUnsupportedCapabilitiesNeverReturnAHandle) {
     };
     config.flags=1;reject(ES_UNSUPPORTED);config.flags=0;
     config.output_hz=32000;reject(ES_UNSUPPORTED);config.output_hz=0;reject(ES_INVALID);config.output_hz=44100;
-    config.mode=ES_DRIVEN;reject(ES_UNSUPPORTED);config.mode=2;reject(ES_INVALID);config.mode=ES_FREE;
+    config.mode=ES_DRIVEN;config.starter_torque_nm=1;reject(ES_UNSUPPORTED);config.starter_torque_nm=0;config.mode=2;reject(ES_INVALID);config.mode=ES_FREE;
     config.simulation_hz=3999;reject(ES_INVALID);config.simulation_hz=96001;reject(ES_INVALID);config.simulation_hz=0;
     for(auto value:{-1.,10001.,std::numeric_limits<double>::infinity(),std::numeric_limits<double>::quiet_NaN()}) { config.starter_torque_nm=value;reject(ES_INVALID); }
     config.starter_torque_nm=0;config.size=8;reject(ES_CAPACITY);config.size=sizeof(config);config.abi=0;reject(ES_VERSION);
