@@ -49,6 +49,30 @@ def inside(prefix, fixture, work, variant, report):
     extension = '.exe' if platform.system()=='Windows' else ''
     for name in ('runtime-c-consumer','runtime-cxx-consumer'):
         command([binary/(name+extension),fixture/'main.mr',fixture/'library',fixture],work,report,env)
+    offline=list(prefix.rglob('engine-sim-render'+extension))
+    if offline:
+        companion=list(prefix.rglob('engine-sim-runtime-consumer'+extension))
+        assert len(companion)==1
+        command([companion[0],fixture/'main.mr',fixture/'library',fixture],work,report,env)
+        offline_build=work/'offline-build'
+        command([cmake,'-S',work/'offline-source','-B',offline_build,'-DCMAKE_BUILD_TYPE=Release',f'-DCMAKE_PREFIX_PATH={prefix}',
+                 '-DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF','-DCMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY=OFF'],work,report)
+        command([cmake,'--build',offline_build,'--config','Release','--parallel','2'],work,report)
+        reference_build=work/'reference-build'
+        command([cmake,'-S',work/'reference-source','-B',reference_build,'-DCMAKE_BUILD_TYPE=Release',f'-DCMAKE_PREFIX_PATH={prefix}',
+                 '-DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF','-DCMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY=OFF'],work,report)
+        command([cmake,'--build',reference_build,'--config','Release','--parallel','2'],work,report)
+        reference=reference_build/('Release' if platform.system()=='Windows' else '')/('runtime-direct-reference'+extension)
+        arguments=[sys.executable,'-B',work/'example_tests.py','--cli',offline[0],'--reference',reference,'--fixture',fixture,'--out',work/'offline-admission']
+        if variant=='shared':arguments+=['--ffi',location]
+        command(arguments,work,report,env)
+        standalone=offline_build/('Release' if platform.system()=='Windows' else '')/('engine-sim-render'+extension)
+        standalone_arguments=arguments.copy();standalone_arguments[standalone_arguments.index('--cli')+1]=standalone
+        standalone_arguments[standalone_arguments.index('--out')+1]=work/'standalone-admission'
+        command(standalone_arguments,work,report,env)
+        if variant=='shared':
+            command([sys.executable,'-B',work/'ffi_smoke.py','--library',location,'--entry',fixture/'main.mr',
+                     '--library-root',fixture/'library','--asset-root',fixture],work,report,env)
     if platform.system() == 'Linux':
         for name in ('runtime-c-consumer','runtime-cxx-consumer'):
             binary_path=binary/name
@@ -101,6 +125,15 @@ def main():
     moved=out/'SDK espaço Ω';shutil.move(str(prefix),str(moved))
     shutil.copytree(source/'examples/runtime/consumer',out/'consumer-source')
     shutil.copyfile(__file__,out/'installed_consumer.py')
+    extension='.exe' if platform.system()=='Windows' else ''
+    if list(moved.rglob('engine-sim-render'+extension)):
+        (out/'offline-source').mkdir()
+        for name in ('CMakeLists.txt','render.cpp'):
+            shutil.copyfile(source/'examples/runtime'/name,out/'offline-source'/name)
+        shutil.copytree(source/'examples/runtime/consumer',out/'offline-source/consumer')
+        shutil.copytree(source/'test/runtime/reference',out/'reference-source')
+        shutil.copyfile(source/'test/runtime/example_tests.py',out/'example_tests.py')
+        shutil.copyfile(source/'examples/runtime/ffi_smoke.py',out/'ffi_smoke.py')
     fixture=moved/'share/engine-sim-runtime/example'
     if args.fixture:
         fixture=out/'User fixture Ω';shutil.copytree(args.fixture.resolve(),fixture)

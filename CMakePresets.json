@@ -159,7 +159,8 @@
       "name": "runtime-test",
       "inherits": "runtime",
       "cacheVariables": {
-        "BUILD_TESTING": true
+        "BUILD_TESTING": true,
+        "ENGINE_SIM_BUILD_RUNTIME_EXAMPLES": true
       }
     },
     {
@@ -202,7 +203,8 @@
         "ENGINE_SIM_RUNTIME_SHARED": false,
         "BUILD_TESTING": false,
         "ENGINE_SIM_BUILD_HOST_TESTS": false,
-        "ENGINE_SIM_INSTALL_RUNTIME_EXAMPLE": false
+        "ENGINE_SIM_INSTALL_RUNTIME_EXAMPLE": false,
+        "ENGINE_SIM_BUILD_RUNTIME_EXAMPLES": false
       }
     },
     {
@@ -212,7 +214,8 @@
         "ENGINE_SIM_RUNTIME_SHARED": true,
         "BUILD_TESTING": false,
         "ENGINE_SIM_BUILD_HOST_TESTS": false,
-        "ENGINE_SIM_INSTALL_RUNTIME_EXAMPLE": false
+        "ENGINE_SIM_INSTALL_RUNTIME_EXAMPLE": false,
+        "ENGINE_SIM_BUILD_RUNTIME_EXAMPLES": false
       }
     }
   ],

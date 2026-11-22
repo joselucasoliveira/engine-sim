@@ -120,3 +120,20 @@ if (TARGET engine-sim-runtime)
         set_tests_properties(RuntimeSdk_${variant} PROPERTIES LABELS "r2-sdk" RUN_SERIAL TRUE TIMEOUT 600)
     endforeach ()
 endif ()
+
+if (TARGET engine-sim-runtime AND ENGINE_SIM_BUILD_RUNTIME_EXAMPLES)
+    add_executable(engine-sim-example-reference reference/direct.c)
+    target_link_libraries(engine-sim-example-reference PRIVATE EngineSim::Runtime)
+    set_target_properties(engine-sim-example-reference PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO LINKER_LANGUAGE CXX)
+    engine_sim_diagnose(engine-sim-example-reference TRUE)
+    add_test(NAME RuntimeExampleNative COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/example_tests.py"
+        --cli "$<TARGET_FILE:engine-sim-render>" --reference "$<TARGET_FILE:engine-sim-example-reference>"
+        --fixture "${PROJECT_SOURCE_DIR}/examples/runtime/fixture" --out "${CMAKE_CURRENT_BINARY_DIR}/example-admission")
+    set_tests_properties(RuntimeExampleNative PROPERTIES LABELS "r2-example" TIMEOUT 180)
+    foreach(variant IN ITEMS static shared)
+        add_test(NAME RuntimeExampleInstalled_${variant} COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/sdk_gate.py"
+            --source "${PROJECT_SOURCE_DIR}" --root "${ENGINE_SIM_PRESET_ROOT}"
+            --out "${CMAKE_CURRENT_BINARY_DIR}/example-installed" --variant "${variant}" --examples)
+        set_tests_properties(RuntimeExampleInstalled_${variant} PROPERTIES LABELS "r2-example" RUN_SERIAL TRUE TIMEOUT 600)
+    endforeach ()
+endif ()

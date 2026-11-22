@@ -7,6 +7,7 @@ p.add_argument('--source',type=Path,required=True)
 p.add_argument('--root',type=Path,required=True)
 p.add_argument('--out',type=Path,required=True)
 p.add_argument('--variant',choices=['static','shared'],required=True)
+p.add_argument('--examples',action='store_true')
 a=p.parse_args()
 a.out.mkdir(parents=True,exist_ok=True)
 run=Path(tempfile.mkdtemp(prefix=a.variant+'-',dir=a.out))
@@ -21,7 +22,7 @@ def execute(argv, expected_failure=False):
   print(r.stdout);raise SystemExit(r.returncode)
  return r.stdout
 name='runtime-'+a.variant
-execute(['cmake','--preset',name,'-DENGINE_SIM_INSTALL_RUNTIME_EXAMPLE=ON'])
+execute(['cmake','--preset',name,'-DENGINE_SIM_INSTALL_RUNTIME_EXAMPLE=ON']+(['-DENGINE_SIM_BUILD_RUNTIME_EXAMPLES=ON'] if a.examples else []))
 execute(['cmake','--build','--preset',name,'--config','Release','--parallel','2'])
 execute(['cmake','--install',a.root/name,'--config','Release','--prefix',run/'prefix','--component','RuntimeSDK'])
 execute([sys.executable,'-B',a.source/'test/runtime/installed_consumer.py','--prefix',run/'prefix','--variant',a.variant,'--out',run/'consumers'])
