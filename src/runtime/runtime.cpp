@@ -125,6 +125,14 @@ void Runtime::load(const es_script::PreparationContext &recipe) {
     m_session.swap(candidate);
     m_snapshot = initial;
 }
+void Runtime::reset() {
+    const auto &saved = m_session->prepared;
+    auto candidate = std::make_unique<Session>(prepareEngine(saved.recipe,
+        {m_config.simulation_hz, m_config.mode, m_config.starter_torque_nm, m_config.seed}, &saved.inputs));
+    const auto initial = snapshot(*candidate);
+    m_session.swap(candidate);
+    m_snapshot = initial;
+}
 void Runtime::setControls(const es_controls &controls) noexcept {
     m_session->requested = controls;
     m_snapshot.requested_load_nm = controls.load_nm;
@@ -158,7 +166,7 @@ void Runtime::unload() noexcept {
 
 extern "C" {
 uint32_t ES_CALL es_api_version(void) { return ES_ABI_V1; }
-uint32_t ES_CALL es_capabilities(void) { return ES_CAP_FREE | ES_CAP_44100; }
+uint32_t ES_CALL es_capabilities(void) { return ES_CAP_FREE | ES_CAP_44100 | ES_CAP_RESET | ES_CAP_PARALLEL_RENDER; }
 es_status ES_CALL es_config_init(uint32_t abi, uint32_t capacity, es_config *out, es_error *error) {
     return boundary(error, [&] {
         if (!out) return fail(error, ES_INVALID, "config: NULL destination");
@@ -217,7 +225,11 @@ es_status ES_CALL es_get_telemetry(const es_runtime *rt, es_telemetry *out, es_e
     });
 }
 es_status ES_CALL es_reset(es_runtime *rt, es_error *error) {
-    return boundary(error, [&] { return fail(error, rt ? ES_UNSUPPORTED : ES_INVALID, "reset: operation is unavailable"); });
+    return boundary(error, [&] {
+        if (!rt) return fail(error, ES_INVALID, "reset: handle is required");
+        if (rt->implementation.telemetry().state == ES_EMPTY) return fail(error, ES_STATE, "reset: prepared engine required");
+        rt->implementation.reset(); return ES_OK;
+    });
 }
 es_status ES_CALL es_unload(es_runtime *rt, es_error *error) {
     return boundary(error, [&] {

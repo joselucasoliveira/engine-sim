@@ -12,6 +12,7 @@ if (POLICY CMP0167)
     cmake_policy(SET CMP0167 OLD)
 endif ()
 find_package(Boost 1.78.0 EXACT REQUIRED COMPONENTS filesystem)
+include("${PROJECT_SOURCE_DIR}/cmake/DiagnosticBoost.cmake")
 
 if (NOT FLEX_INCLUDE_DIR)
     set(FLEX_INCLUDE_DIR "${piranha_original}/dependencies/libraries/flex/include")
@@ -71,4 +72,4 @@ target_include_directories(piranha
     PUBLIC "${CMAKE_CURRENT_BINARY_DIR}/vendor"
     PRIVATE "${piranha_source}/include" "${generated}" "${FLEX_INCLUDE_DIR}"
 )
-target_link_libraries(piranha PUBLIC Boost::filesystem)
+target_link_libraries(piranha PUBLIC ${engine_sim_boost_filesystem})

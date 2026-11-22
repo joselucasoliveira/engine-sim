@@ -12,6 +12,7 @@ class Runtime {
 public:
     explicit Runtime(es_config config) noexcept;
     void load(const es_script::PreparationContext &recipe);
+    void reset();
     void setControls(const es_controls &controls) noexcept;
     void render(float *output, std::uint32_t frames, std::uint32_t &written);
     void unload() noexcept;

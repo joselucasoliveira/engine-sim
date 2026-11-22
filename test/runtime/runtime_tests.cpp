@@ -97,7 +97,7 @@ TEST_F(RuntimeApi, ExtensiblePrefixesVersionsAndDefaultsKeepTailsUntouched) {
     EXPECT_EQ(es_get_telemetry(rt.get(),&out.value,&error),ES_CAPACITY);EXPECT_EQ(std::memcmp(&out,&before,sizeof(out)),0);
 }
 TEST_F(RuntimeApi, InvalidCreateAndUnsupportedCapabilitiesNeverReturnAHandle) {
-    EXPECT_EQ(es_capabilities(),ES_CAP_FREE|ES_CAP_44100);
+    EXPECT_EQ(es_capabilities() & (ES_CAP_FREE|ES_CAP_44100|ES_CAP_RESET),ES_CAP_FREE|ES_CAP_44100|ES_CAP_RESET);
     const auto reject=[&](es_status expected) {
         es_runtime sentinel(config);es_runtime *out=&sentinel;
         EXPECT_EQ(es_create(&config,&out,&error),expected)<<error.message;EXPECT_EQ(out,nullptr);EXPECT_NE(error.message[0],0);
@@ -115,7 +115,7 @@ TEST_F(RuntimeApi, StateAndSpanValidationNeverWritesPcmOrAdvances) {
     auto rt=create(false);std::uint32_t written=99;std::array<float,8> pcm;pcm.fill(42);
     EXPECT_EQ(es_render(rt.get(),0,nullptr,0,&written,&error),ES_STATE);EXPECT_EQ(written,0u);
     es_controls c{sizeof(c),ES_ABI_V1,0,0,0,0,0};EXPECT_EQ(es_set_controls(rt.get(),&c,&error),ES_STATE);
-    EXPECT_EQ(es_reset(rt.get(),&error),ES_UNSUPPORTED);
+    EXPECT_EQ(es_reset(rt.get(),&error),ES_STATE);
     ASSERT_EQ(es_load(rt.get(),(root/"main.mr").u8string().c_str(),(root/"library").u8string().c_str(),root.u8string().c_str(),&error),ES_OK);
     EXPECT_EQ(es_render(rt.get(),0,nullptr,0,&written,&error),ES_OK);EXPECT_EQ(telemetry(rt.get()).frames,0u);
     EXPECT_EQ(es_render(rt.get(),8,pcm.data(),7,&written,&error),ES_CAPACITY);EXPECT_EQ(written,0u);

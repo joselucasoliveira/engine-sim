@@ -1,8 +1,9 @@
 # Runtime C ABI version 1
 
-The preview [runtime header](../include/engine_sim/runtime.h) declares the
-version 1 contract for C11 and C++17 hosts. This checkout provides declaration
-and layout checks. The preview header has no install or link target.
+The [runtime header](../include/engine_sim/runtime.h) defines the version 1
+contract for C11 and C++17 hosts. The build provides the static
+`EngineSim::Runtime` target and declaration/layout checks. Installed SDK
+packaging is separate from this build target.
 
 ## Platform and compatibility
 
@@ -48,3 +49,19 @@ A caller may pass an optional 512-byte `es_error`, including before a handle
 exists. Each call that accepts an error record clears the message on success
 or writes a bounded, NUL-terminated UTF-8 diagnostic on failure. Retain a
 diagnostic by using different error storage for subsequent calls.
+
+## Reset and independent instance lifetimes
+
+The C interface in `engine_sim/runtime.h` uses library-owned opaque handles and caller-owned records, PCM and error storage. Query `es_capabilities()` for the features provided by a binary. A version number describes the ABI; it does not replace feature negotiation.
+
+Each successful load owns the resolved scripts and impulse-response bytes actually consumed during preparation. The three absolute UTF-8 path arguments are borrowed only for the call. The runtime retains its own recipe and input identities. Loading a replacement is transactional: a preparation failure preserves the active engine, time, pending controls and previous fault state.
+
+`es_reset` prepares a fresh candidate using the original configuration, seed and saved recipe. Each opened script and impulse response must resolve to the same canonical path and contain exactly the original bytes. Verification precedes parsing or decoding, and the complete input set must match before replacement. Missing, changed or unexpectedly resolved inputs return `ES_RESOURCE`, including changed malformed files. Restore the inputs to reset the existing definition, or call `es_load` explicitly to accept a new definition.
+
+A successful reset reproduces a fresh load on the same binary and floating-point environment: prepared phase, filters, random streams, zero counters and default controls. Reset discards the former timeline and returns a faulted engine to READY. An EMPTY handle has no recipe to reset and returns `ES_STATE`. Unload releases the prepared session and recipe without filesystem reads; repeated unload and destroying NULL are valid.
+
+Serialize every operation on one handle, including telemetry, reset and destruction. Transfer an instance between threads only at a synchronized quiescent boundary. When `ES_CAP_PARALLEL_RENDER` is present, distinct handles can render concurrently while other independent handles are prepared or destroyed. Parser preparation is serialized internally; rendering has no process-wide render lock. Never race calls on one handle or reuse a handle after destruction.
+
+Each call accepts optional independent `es_error` storage. Successful calls clear only the supplied error message. Other handles and calls using different storage do not modify it. A rendering fault publishes only completed frames and preserves the rest of the caller's PCM buffer. Telemetry retains the last completed-frame snapshot with FAULTED state until successful load/reset or unload.
+
+These are synchronous correctness and ownership guarantees. Rendering can allocate or lock internally and carries no audio-callback deadline guarantee. Deterministic equality requires the same binary, inputs, seed, control timeline and floating-point environment; it is not a cross-platform byte guarantee.

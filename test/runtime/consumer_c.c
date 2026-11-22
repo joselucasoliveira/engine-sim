@@ -14,7 +14,7 @@ int main(int argc,char **argv) {
     double energy=0,peak=0;
     unsigned nonzero=0;
     if(argc!=4) return 2;
-    if(es_api_version()!=ES_ABI_V1 || es_capabilities()!=(ES_CAP_FREE|ES_CAP_44100)) return 3;
+    if(es_api_version()!=ES_ABI_V1 || (es_capabilities()&(ES_CAP_FREE|ES_CAP_44100|ES_CAP_RESET|ES_CAP_PARALLEL_RENDER))!=(ES_CAP_FREE|ES_CAP_44100|ES_CAP_RESET|ES_CAP_PARALLEL_RENDER)) return 3;
     CHECK(es_config_init(ES_ABI_V1,sizeof(config),&config,&error));
     CHECK(es_create(&config,&runtime,&error));
     CHECK(es_load(runtime,argv[1],argv[2],argv[3],&error));

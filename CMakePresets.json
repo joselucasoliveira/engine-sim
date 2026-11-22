@@ -175,7 +175,8 @@
         "CMAKE_CXX_COMPILER": "clang++",
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
         "CMAKE_EXPORT_COMPILE_COMMANDS": true,
-        "ENGINE_SIM_SANITIZER": "address"
+        "ENGINE_SIM_SANITIZER": "address",
+        "CMAKE_C_COMPILER": "clang"
       }
     },
     {
@@ -407,6 +408,10 @@
       },
       "execution": {
         "noTestsAction": "error"
+      },
+      "environment": {
+        "ASAN_OPTIONS": "detect_leaks=1:halt_on_error=1",
+        "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1"
       }
     },
     {
@@ -418,6 +423,9 @@
       },
       "execution": {
         "noTestsAction": "error"
+      },
+      "environment": {
+        "TSAN_OPTIONS": "halt_on_error=1:exitcode=66"
       }
     }
   ]
