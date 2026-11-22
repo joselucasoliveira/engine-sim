@@ -25,7 +25,7 @@ namespace es_script {
         {
             Camshaft::Parameters parameters = m_parameters;
             parameters.crankshaft = crankshaft;
-            parameters.lobes = (int)m_lobes.size();
+            parameters.lobes = getLobeCount();
             parameters.lobeProfile = m_lobeProfile->generate(context);
             
             camshaft->initialize(parameters);
@@ -43,7 +43,7 @@ namespace es_script {
             requireModel(m_lobeProfile != nullptr, "Missing cam lobe profile");
             requireModel(m_parameters.baseRadius >= 0, "Negative cam base radius");
         }
-        int getLobeCount() const { return static_cast<int>(m_lobes.size()); }
+        int getLobeCount() const { return modelCount(m_lobes.size(), "cam lobe count"); }
 
     protected:
         virtual void registerInputs() {

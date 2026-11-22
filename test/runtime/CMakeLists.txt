@@ -26,3 +26,12 @@ endif ()
 add_test(NAME RuntimeCAbi COMMAND engine-sim-c-abi-check)
 add_test(NAME RuntimeCxxAbi COMMAND engine-sim-cxx-abi-check)
 set_tests_properties(RuntimeCAbi RuntimeCxxAbi PROPERTIES LABELS "r2-abi")
+
+add_executable(engine-sim-preparation-test preparation_tests.cpp)
+target_link_libraries(engine-sim-preparation-test PRIVATE engine-sim-script-interpreter gtest_main)
+engine_sim_diagnose(engine-sim-preparation-test TRUE)
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/preparation-working")
+gtest_discover_tests(engine-sim-preparation-test
+    WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/preparation-working"
+    DISCOVERY_TIMEOUT 30
+    PROPERTIES LABELS "r2-prepare" TIMEOUT 180 ENVIRONMENT "ENGINE_SIM_TEST_SOURCE=${PROJECT_SOURCE_DIR}")

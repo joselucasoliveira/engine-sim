@@ -20,6 +20,8 @@ public:
 
 // The synthesis input contract is mono signed PCM16 LE at 44100 Hz, without resampling.
 inline constexpr std::uintmax_t maxImpulseWaveBytes = 64 * 1024 * 1024;
+std::vector<std::int16_t> decodeImpulseWave(
+    const std::vector<unsigned char> &bytes, const std::filesystem::path &source);
 std::vector<std::int16_t> readImpulseWave(const std::filesystem::path &path);
 }
 #endif

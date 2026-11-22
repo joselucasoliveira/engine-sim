@@ -18,3 +18,10 @@ Ange Yaghi created the original Engine Simulator. This fork retains the original
 The runtime asset allowlist records the origin, hash, accompanying license and distribution status of each selected file. The installation includes notices for the material it uses. Optional video and Discord integrations are excluded from the default runtime installation.
 
 The standard impulse recordings retain their upstream provenance and original gains. Separate recording redistribution clearance has not been established. The redistribution installer enforces that gate; explicitly private staging retains the original bytes and marks the tree for local validation only.
+
+The runtime fixture under `examples/runtime/fixture` contains an original
+synthetic engine and an eight-sample generated impulse response under MIT.
+Its minimal script library copies the listed `es` sources with trailing
+whitespace removed.
+The original copyright notices and MIT license accompany that copy, with
+source paths and SHA-256 identities in `library/UPSTREAM.json`.

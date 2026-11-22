@@ -184,6 +184,7 @@ if (PIRANHA_ENABLED)
         scripting/src/compiler.cpp
         scripting/src/engine_context.cpp
         scripting/src/language_rules.cpp
+        scripting/src/prepared_engine.cpp
 
         # Include files
         scripting/include/actions.h

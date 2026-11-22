@@ -36,7 +36,7 @@ namespace es_script {
             }
             else {
                 Function *function = context->getEngine()->createResource<Function>();
-                function->initialize((int)m_samples.size(), m_filterRadius);
+                function->initialize(modelCount(m_samples.size(), "curve sample count"), m_filterRadius);
 
                 for (const Sample &sample : m_samples) {
                     function->addSample(sample.x, sample.y);

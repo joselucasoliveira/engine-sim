@@ -62,7 +62,7 @@ namespace es_script {
             EngineContext *context) const 
         {
             CylinderBank::Parameters params = m_parameters;
-            params.cylinderCount = static_cast<int>(m_cylinders.size());
+            params.cylinderCount = getCylinderCount();
             params.index = index;
             params.crankshaft = crankshaft;
 
@@ -139,7 +139,7 @@ namespace es_script {
         }
 
         int getCylinderCount() const {
-            return (int)m_cylinders.size();
+            return modelCount(m_cylinders.size(), "bank cylinder count");
         }
 
         void setCylinderHead(CylinderHeadNode *head) {

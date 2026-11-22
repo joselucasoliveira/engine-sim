@@ -51,11 +51,11 @@ namespace es_script {
             context.setEngine(engine);
 
             Engine::Parameters parameters = m_parameters;
-            parameters.crankshaftCount = (int)m_crankshafts.size();
-            parameters.cylinderBanks = (int)m_cylinderBanks.size();
+            parameters.crankshaftCount = modelCount(m_crankshafts.size(), "crankshaft count");
+            parameters.cylinderBanks = modelCount(m_cylinderBanks.size(), "cylinder bank count");
             parameters.cylinderCount = cylinderCount;
-            parameters.exhaustSystemCount = (int)exhaustSystems.size();
-            parameters.intakeCount = (int)intakes.size();
+            parameters.exhaustSystemCount = modelCount(exhaustSystems.size(), "exhaust count");
+            parameters.intakeCount = modelCount(intakes.size(), "intake count");
             parameters.throttle = m_throttle->generate();
             engine->initialize(parameters);
 
@@ -145,6 +145,9 @@ namespace es_script {
             requireModel(!m_crankshafts.empty() && !m_cylinderBanks.empty(), "Engine topology is empty");
             requirePositive(m_parameters.initialSimulationFrequency, "simulation frequency");
             requirePositive(m_parameters.redline, "engine redline");
+            requireNonnegative(m_parameters.starterTorque, "starter torque");
+            requireNonnegative(m_parameters.starterSpeed, "starter speed");
+            m_throttle->validate();
             m_ignitionModule->validate();
             m_fuel->validate();
             std::set<CrankshaftNode *> shafts;

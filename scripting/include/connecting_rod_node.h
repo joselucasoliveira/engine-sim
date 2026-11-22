@@ -43,7 +43,7 @@ namespace es_script {
             params.crankshaft = crankshaft;
             params.journal = rodJournal;
             params.piston = piston;
-            params.rodJournals = static_cast<int>(m_rodJournals.size());
+            params.rodJournals = modelCount(m_rodJournals.size(), "rod journal count");
             params.master = nullptr;
 
             connectingRod->initialize(params);

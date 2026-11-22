@@ -378,10 +378,15 @@ int Engine::getMaxDepth() const {
 }
 
 Simulator *Engine::createSimulator(Vehicle *vehicle, Transmission *transmission) {
+    return createSimulator(vehicle, transmission, 10000);
+}
+
+Simulator *Engine::createSimulator(Vehicle *vehicle, Transmission *transmission, int initialFrequency) {
     auto simulator = std::make_unique<PistonEngineSimulator>();
     Simulator::Parameters simulatorParams;
     simulatorParams.systemType = Simulator::SystemType::NsvOptimized;
     simulator->initialize(simulatorParams);
+    simulator->setSimulationFrequency(initialFrequency);
 
     simulator->loadSimulation(this, vehicle, transmission);
     simulator->setFluidSimulationSteps(8);

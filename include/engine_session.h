@@ -39,6 +39,11 @@ struct EngineDefinition {
     std::string sourcePath;
 };
 
+struct EngineSessionOptions {
+    int simulationFrequency = 0;
+    double starterTorque = 0;
+};
+
 class EngineSession {
 public:
     struct SimulatorRelease {
@@ -50,7 +55,8 @@ public:
 
     explicit EngineSession(EngineDefinition value) : definition(std::move(value)) {}
 
-    static std::unique_ptr<EngineSession> prepare(EngineDefinition definition, const ImpulseReader &reader) {
+    static std::unique_ptr<EngineSession> prepare(EngineDefinition definition, const ImpulseReader &reader,
+            EngineSessionOptions options = {}) {
         const auto path = definition.sourcePath;
         if (definition.engine == nullptr) throw EngineLoadError({"graph", path, "No engine was selected"});
         auto candidate = std::make_unique<EngineSession>(std::move(definition));
@@ -79,8 +85,15 @@ public:
                 throw EngineLoadError({"graph", path, "Engine topology is incomplete"});
             }
             engine->calculateDisplacement();
-            candidate->simulator.reset(engine->createSimulator(model.vehicle.get(), model.transmission.get()));
-            candidate->simulator->setSimulationFrequency(engine->getSimulationFrequency());
+            if (options.simulationFrequency == 0) {
+                candidate->simulator.reset(engine->createSimulator(model.vehicle.get(), model.transmission.get()));
+                candidate->simulator->setSimulationFrequency(engine->getSimulationFrequency());
+            }
+            else {
+                candidate->simulator.reset(engine->createSimulator(
+                    model.vehicle.get(), model.transmission.get(), options.simulationFrequency));
+            }
+            if (options.starterTorque > 0) candidate->simulator->m_starterMotor.m_maxTorque = options.starterTorque;
             auto &synth = candidate->simulator->synthesizer();
             auto audio = synth.getAudioParameters();
             audio.inputSampleNoise = static_cast<float>(engine->getInitialJitter());
@@ -97,6 +110,7 @@ public:
             return candidate;
         }
         catch (const EngineLoadError &) { throw; }
+        catch (const std::bad_alloc &) { throw; }
         catch (const std::exception &error) { throw EngineLoadError({"initialize", path, error.what()}); }
     }
 

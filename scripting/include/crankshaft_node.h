@@ -25,7 +25,7 @@ namespace es_script {
 
         void generate(Crankshaft *crankshaft, EngineContext *context) {
             Crankshaft::Parameters params = m_parameters;
-            params.rodJournals = (int)m_rodJournals.size();
+            params.rodJournals = modelCount(m_rodJournals.size(), "crankshaft journal count");
 
             crankshaft->initialize(params);
             for (int i = 0; i < params.rodJournals; ++i) {
@@ -43,6 +43,9 @@ namespace es_script {
         void validate() const override {
             requirePositive(m_parameters.momentOfInertia, "crankshaft inertia");
             requirePositive(m_parameters.mass + m_parameters.flywheelMass, "crankshaft total mass");
+            requireNonnegative(m_parameters.mass, "crankshaft mass");
+            requireNonnegative(m_parameters.flywheelMass, "flywheel mass");
+            requireNonnegative(m_parameters.frictionTorque, "crankshaft friction torque");
             requirePositive(m_parameters.crankThrow, "crank throw");
             for (auto *journal : m_rodJournals) requireModel(journal != nullptr, "Missing crank journal");
         }

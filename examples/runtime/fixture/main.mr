@@ -1,0 +1,70 @@
+// Original synthetic single-cylinder test engine, licensed under MIT.
+// Dimensions describe a numerical fixture. See LICENSE.
+import "runtime_fixture.mr"
+
+units u()
+constants c()
+engine motor(
+    name: "Runtime Single",
+    simulation_frequency: 10000,
+    starter_speed: 600 * u.rpm,
+    starter_torque: 40 * u.Nm,
+    redline: 6000 * u.rpm,
+    noise: 0.0, jitter: 0.0,
+    fuel: fuel(burning_efficiency_randomness: 0.0),
+    throttle_gamma: 1.0
+)
+crankshaft shaft(
+    throw: 0.040, mass: 4.0, flywheel_mass: 4.0,
+    moment_of_inertia: 0.12, friction_torque: 1.0,
+    tdc: 90 * u.deg
+)
+rod_journal journal(angle: 0.0)
+shaft.add_rod_journal(journal)
+
+function lift(20 * u.deg)
+lift.add_sample(-100 * u.deg, 0.0)
+    .add_sample(-60 * u.deg, 0.002)
+    .add_sample(0 * u.deg, 0.008)
+    .add_sample(60 * u.deg, 0.002)
+    .add_sample(100 * u.deg, 0.0)
+camshaft inlet_cam(lobe_profile: lift, base_radius: 0.012)
+camshaft outlet_cam(lobe_profile: lift, base_radius: 0.012)
+inlet_cam.add_lobe(470 * u.deg)
+outlet_cam.add_lobe(250 * u.deg)
+function port(0.002)
+port.add_sample(0.0, 0.0).add_sample(0.004, k_28inH2O(50.0)).add_sample(0.008, k_28inH2O(90.0))
+
+intake inlet(
+    plenum_volume: 0.001, plenum_cross_section_area: 0.001,
+    intake_flow_rate: k_carb(80.0), idle_flow_rate: 0.0,
+    idle_throttle_plate_position: 0.95
+)
+exhaust_system outlet(
+    length: 0.6,
+    collector_cross_section_area: 0.001,
+    outlet_flow_rate: k_carb(200.0), primary_flow_rate: k_carb(150.0),
+    primary_tube_length: 0.4, audio_volume: 1.0,
+    impulse_response: impulse_response(filename: "impulse.wav", volume: 0.01)
+)
+ignition_wire wire()
+cylinder_bank bank(bore: 0.080, deck_height: 0.220, angle: 0.0)
+bank.add_cylinder(
+    piston: piston(piston_parameters(mass: 0.4, compression_height: 0.030, blowby: 0.0)),
+    connecting_rod: connecting_rod(connecting_rod_parameters(mass: 0.3, length: 0.150, moment_of_inertia: 0.001)),
+    rod_journal: journal, intake: inlet, exhaust_system: outlet, ignition_wire: wire
+)
+bank.set_cylinder_head(cylinder_head(
+    intake_camshaft: inlet_cam, exhaust_camshaft: outlet_cam,
+    intake_port_flow: port, exhaust_port_flow: port,
+    chamber_volume: 0.000040,
+    intake_runner_volume: 0.00015, intake_runner_cross_section_area: 0.0008,
+    exhaust_runner_volume: 0.00015, exhaust_runner_cross_section_area: 0.0008
+))
+motor.add_crankshaft(shaft).add_cylinder_bank(bank)
+function timing(1000 * u.rpm)
+timing.add_sample(0.0, 15 * u.deg).add_sample(6000 * u.rpm, 20 * u.deg)
+ignition_module ignition(timing_curve: timing, rev_limit: 6000 * u.rpm)
+ignition.connect_wire(wire, 0.0)
+motor.add_ignition_module(ignition)
+set_engine(motor)

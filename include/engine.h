@@ -22,6 +22,9 @@
 class Simulator;
 class Vehicle;
 class Transmission;
+bool placeRod(const ConnectingRod &rod, const CylinderBank &bank, const Crankshaft &crankshaft,
+    double crankshaftAngle, double *x, double *y, double *theta, double *travel);
+
 class Engine : public Part {
     public:
         struct Parameters {
@@ -118,6 +121,7 @@ class Engine : public Part {
         double getInitialJitter() const { return m_initialJitter; }
 
         virtual Simulator *createSimulator(Vehicle *vehicle, Transmission *transmission);
+        Simulator *createSimulator(Vehicle *vehicle, Transmission *transmission, int initialFrequency);
 
     protected:
         std::vector<std::shared_ptr<void>> m_resources;

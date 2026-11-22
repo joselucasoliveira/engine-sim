@@ -16,6 +16,15 @@ std::vector<std::int16_t> readImpulseWave(const std::filesystem::path &path) {
     if (!stream.read(reinterpret_cast<char *>(bytes.data()), static_cast<std::streamsize>(bytes.size()))) {
         fail(WaveFailure::Io, "cannot read complete impulse file");
     }
+    return decodeImpulseWave(bytes, path);
+}
+
+std::vector<std::int16_t> decodeImpulseWave(
+        const std::vector<unsigned char> &bytes, const std::filesystem::path &path) {
+    const auto fail = [&](WaveFailure failure, const char *reason) { throw WaveError(failure, path, reason); };
+    if (bytes.size() < 12 || bytes.size() > maxImpulseWaveBytes) {
+        fail(WaveFailure::Size, "WAVE size must be between 12 bytes and 64 MiB");
+    }
     const auto tag = [&](std::size_t offset, std::string_view name) {
         return std::equal(name.begin(), name.end(), bytes.begin() + offset);
     };

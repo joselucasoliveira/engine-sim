@@ -33,6 +33,8 @@ namespace es_script {
             return static_cast<Throttle *>(throttle);
         }
 
+        void validate() const override { requirePositive(m_parameters.gamma, "throttle gamma"); }
+
     protected:
         virtual void registerInputs() override {
             addInput("gamma", &m_parameters.gamma);
@@ -53,6 +55,15 @@ namespace es_script {
             throttle->initialize(m_parameters);
 
             return static_cast<Throttle *>(throttle);
+        }
+
+        void validate() const override {
+            requirePositive(m_parameters.gamma, "governor gamma");
+            requireNonnegative(m_parameters.minSpeed, "governor minimum speed");
+            requireModel(m_parameters.maxSpeed >= m_parameters.minSpeed, "Governor speed range is reversed");
+            requireModel(m_parameters.maxVelocity >= m_parameters.minVelocity, "Governor velocity range is reversed");
+            requireNonnegative(m_parameters.k_s, "governor spring coefficient");
+            requireNonnegative(m_parameters.k_d, "governor damping coefficient");
         }
 
     protected:
