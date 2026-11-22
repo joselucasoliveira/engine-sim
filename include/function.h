@@ -5,7 +5,7 @@
 
 class Function {
     protected:
-        static GaussianFilter *DefaultGaussianFilter;
+        static const GaussianFilter &defaultGaussianFilter();
 
     public:
         Function();
@@ -43,7 +43,7 @@ class Function {
         int m_capacity;
         int m_size;
 
-        GaussianFilter *m_gaussianFilter;
+        const GaussianFilter *m_gaussianFilter;
 };
 
 #endif /* ATG_ENGINE_SIM_FUNCTION_H */

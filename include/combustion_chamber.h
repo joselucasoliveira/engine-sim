@@ -8,6 +8,7 @@
 #include "cylinder_head.h"
 #include "units.h"
 #include "fuel.h"
+#include "random_stream.h"
 
 class Engine;
 class CombustionChamber : public atg_scs::ForceGenerator {
@@ -50,6 +51,7 @@ class CombustionChamber : public atg_scs::ForceGenerator {
         void initialize(const Parameters &params);
         void destroy();
         void setEngine(Engine *engine) { m_engine = engine; }
+        void setRandomSeed(std::uint64_t seed, std::uint32_t cylinder) { m_random.reset(seed, 1, cylinder); }
         virtual void apply(atg_scs::SystemState *system);
 
         CylinderHead *getCylinderHead() const { return m_head; }
@@ -91,6 +93,7 @@ class CombustionChamber : public atg_scs::ForceGenerator {
         double m_nBurntFuel;
 
     protected:
+        engine_sim::RandomStream m_random;
         double calculateFrictionForce(double v) const;
         void updateCycleStates();
 

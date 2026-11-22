@@ -116,6 +116,8 @@ class Engine : public Part {
         Fuel *getFuel() { return &m_fuel; }
 
         double getSimulationFrequency() const { return m_initialSimulationFrequency; }
+        void setRandomSeed(std::uint64_t seed);
+        std::uint64_t getRandomSeed() const { return m_randomSeed; }
         double getInitialHighFrequencyGain() const { return m_initialHighFrequencyGain; }
         double getInitialNoise() const { return m_initialNoise; }
         double getInitialJitter() const { return m_initialJitter; }
@@ -124,6 +126,7 @@ class Engine : public Part {
         Simulator *createSimulator(Vehicle *vehicle, Transmission *transmission, int initialFrequency);
 
     protected:
+        std::uint64_t m_randomSeed = 1;
         std::vector<std::shared_ptr<void>> m_resources;
         std::string m_name;
 

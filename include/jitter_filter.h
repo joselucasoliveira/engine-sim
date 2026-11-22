@@ -6,7 +6,7 @@
 #include "butterworth_low_pass_filter.h"
 #include "utilities.h"
 
-#include <random>
+#include "random_stream.h"
 
 class JitterFilter : public Filter {
 public:
@@ -18,6 +18,7 @@ public:
         float noiseCutoffFrequency,
         float audioFrequency);
     virtual float f(float sample) override;
+    void setRandomSeed(std::uint64_t seed, std::uint32_t channel = 0) { m_random.reset(seed, 3, channel); }
 
     inline float fast_f(float sample, float jitterScale = 1.0f) {
         m_history[m_offset] = sample;
@@ -27,11 +28,8 @@ public:
             m_offset = 0;
         }
 
-        std::uniform_real_distribution<float> dist(
-            0.0f,
-            static_cast<float>(m_maxJitter - 1));
-        
-        const float s = m_noiseFilter.fast_f(dist(m_generator) * m_jitterScale * jitterScale);
+        const float position = static_cast<float>(m_random.uniform() * (m_maxJitter - 1));
+        const float s = m_noiseFilter.fast_f(position * m_jitterScale * jitterScale);
         const float s_i_0 = ::clamp(std::floor(s), 0.0f, static_cast<float>(m_maxJitter - 1));
         const float s_i_1 = ::clamp(std::ceil(s), 0.0f, static_cast<float>(m_maxJitter - 1));
 
@@ -57,7 +55,7 @@ protected:
     int m_offset;
     float *m_history;
 
-    std::default_random_engine m_generator;
+    engine_sim::RandomStream m_random{1, 3, 0};
 };
 
 #endif /* ATG_ENGINE_SIM_JITTER_FILTER_H */

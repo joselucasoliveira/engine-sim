@@ -59,8 +59,8 @@ def fresh_output(path, source, *protected):
 
 def parse_uint(value):
     parsed = int(value)
-    if not 0 <= parsed <= 2**32 - 1:
-        raise argparse.ArgumentTypeError("seed must be an unsigned 32-bit integer")
+    if not 0 <= parsed <= 2**64 - 1:
+        raise argparse.ArgumentTypeError("seed must be an unsigned 64-bit integer")
     return parsed
 
 

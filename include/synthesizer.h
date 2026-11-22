@@ -40,6 +40,7 @@ class Synthesizer {
             float inputSampleRate = 10000;
             float audioSampleRate = 44100;
             AudioParameters initialAudioParameters;
+            std::uint64_t seed = 1;
         };
 
         struct InputChannel {
@@ -49,6 +50,7 @@ class Synthesizer {
         };
 
         struct ProcessingFilters {
+            engine_sim::RandomStream airNoise{1, 2, 0};
             ConvolutionFilter convolution;
             DerivativeFilter derivative;
             JitterFilter jitterFilter;

@@ -10,6 +10,7 @@ struct PreparationConfig {
     std::uint32_t simulationHz = 0;
     std::uint32_t mode = ES_FREE;
     double starterTorqueNm = 0;
+    std::uint64_t seed = 1;
 };
 
 struct PreparedEngine {

@@ -93,6 +93,7 @@ PreparedEngine prepareEngine(const es_script::PreparationContext &recipe, Prepar
     };
     auto definition = es_script::Compiler::prepare(recipe, candidate.inputs, verify);
     auto &engine = *definition.engine;
+    engine.setRandomSeed(config.seed);
     const double frequency = config.simulationHz == 0 ? engine.getSimulationFrequency() : config.simulationHz;
     require(std::isfinite(frequency) && frequency >= 4000 && frequency <= 96000 &&
         std::floor(frequency) == frequency, "simulation frequency must be an integer in [4000,96000]", recipe.entry);

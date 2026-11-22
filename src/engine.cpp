@@ -382,6 +382,7 @@ Simulator *Engine::createSimulator(Vehicle *vehicle, Transmission *transmission)
 }
 
 Simulator *Engine::createSimulator(Vehicle *vehicle, Transmission *transmission, int initialFrequency) {
+    setRandomSeed(m_randomSeed);
     auto simulator = std::make_unique<PistonEngineSimulator>();
     Simulator::Parameters simulatorParams;
     simulatorParams.systemType = Simulator::SystemType::NsvOptimized;
@@ -392,6 +393,13 @@ Simulator *Engine::createSimulator(Vehicle *vehicle, Transmission *transmission,
     simulator->setFluidSimulationSteps(8);
 
     return simulator.release();
+}
+
+void Engine::setRandomSeed(std::uint64_t seed) {
+    m_randomSeed = seed;
+    for (int cylinder = 0; cylinder < m_cylinderCount; ++cylinder) {
+        m_combustionChambers[cylinder].setRandomSeed(seed, static_cast<std::uint32_t>(cylinder));
+    }
 }
 
 double Engine::getRpm() const {

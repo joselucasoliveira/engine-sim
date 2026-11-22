@@ -258,6 +258,7 @@ double Simulator::getAverageOutputSignal() const {
 
 void Simulator::initializeSynthesizer() {
     Synthesizer::Parameters synthParams;
+    synthParams.seed = m_engine->getRandomSeed();
     synthParams.audioBufferSize = 44100;
     synthParams.audioSampleRate = 44100;
     synthParams.inputBufferSize = 44100;

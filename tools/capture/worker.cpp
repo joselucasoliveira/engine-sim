@@ -145,10 +145,11 @@ int renderAndWrite(Synthesizer &synth, std::ostream &output, size_t &inputWindow
     return frames;
 }
 
-void runTone(const fs::path &out, bool quiet) {
+void runTone(const fs::path &out, bool quiet, std::uint64_t seed) {
     std::uint64_t nonFinite = 0;
     Synthesizer synth;
     Synthesizer::Parameters params;
+    params.seed = seed;
     params.audioBufferSize = sampleRate;
     params.inputBufferSize = sampleRate;
     if (quiet) {
@@ -276,7 +277,7 @@ struct MechanicsTrace {
 };
 
 void runEngine(const fs::path &resources, const fs::path &out, std::string_view name, const fs::path &entryOverride,
-               bool captureMechanics = false) {
+               bool captureMechanics, std::uint64_t seed) {
     auto scenario = selectEngine(name);
     if (captureMechanics) scenario.blocks = 400;
     fs::path entry = resources / "assets/main.mr";
@@ -320,6 +321,7 @@ void runEngine(const fs::path &resources, const fs::path &out, std::string_view 
         impulses.push_back({readImpulse(file), static_cast<float>(impulse->getVolume())});
     }
 
+    engine->setRandomSeed(seed);
     engine->calculateDisplacement();
     auto graph = openOutput(out / "graph.tsv");
     graph << engine->getName() << '\t' << engine->getCylinderCount() << '\t'
@@ -418,19 +420,19 @@ int captureWorker(int argc, char **argv) {
         const std::string_view name = argv[2];
         const fs::path resources = fs::u8path(argv[3]);
         const fs::path out = fs::u8path(argv[4]);
-        std::srand(static_cast<unsigned int>(std::stoul(argv[5])));
+        const auto seed = std::stoull(argv[5]);
         if (name == "FIR") runFir(out);
         else if (name == "GAS") runGas(out);
-        else if (name == "TONE" || name == "TONE-QUIET") runTone(out, name == "TONE-QUIET");
+        else if (name == "TONE" || name == "TONE-QUIET") runTone(out, name == "TONE-QUIET", seed);
         else if (name == "QUEUE") engine_sim_capture::stressQueue(out);
-        else if (name == "THREAD") engine_sim_capture::stressThread(out);
+        else if (name == "THREAD") engine_sim_capture::stressThread(out, seed);
         else if (name == "LIFECYCLE") engine_sim_capture::stressLifecycle(resources, out,
-            [](const ImpulseResponse &response) { return readImpulse(fs::u8path(response.getFilename())); });
+            [](const ImpulseResponse &response) { return readImpulse(fs::u8path(response.getFilename())); }, seed);
         else if (name == "KOHLER" || name == "LS" || name == "EJ25" || name == "LOAD") {
-            runEngine(resources, out, name, argc == 7 ? fs::u8path(argv[6]) : fs::path());
+            runEngine(resources, out, name, argc == 7 ? fs::u8path(argv[6]) : fs::path(), false, seed);
         }
         else if (name == "MECHANICS-KOHLER" || name == "MECHANICS-LS") {
-            runEngine(resources, out, name.substr(std::string_view("MECHANICS-").size()), {}, true);
+            runEngine(resources, out, name.substr(std::string_view("MECHANICS-").size()), {}, true, seed);
         }
         else throw std::runtime_error("unsupported capture workload " + std::string(name));
         recordProcessUsage(out);

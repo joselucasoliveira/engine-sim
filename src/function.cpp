@@ -5,7 +5,14 @@
 #include <assert.h>
 #include <cmath>
 
-GaussianFilter *Function::DefaultGaussianFilter = nullptr;
+const GaussianFilter &Function::defaultGaussianFilter() {
+    struct Table {
+        GaussianFilter filter;
+        Table() { filter.initialize(1.0, 3.0, 1024); }
+    };
+    static const Table table;
+    return table.filter;
+}
 
 Function::Function() {
     m_x = m_y = nullptr;
@@ -15,11 +22,6 @@ Function::Function() {
     m_yMin = m_yMax = 0;
     m_inputScale = 1.0;
     m_outputScale = 1.0;
-
-    if (DefaultGaussianFilter == nullptr) {
-        DefaultGaussianFilter = new GaussianFilter;
-        DefaultGaussianFilter->initialize(1.0, 3.0, 1024);
-    }
 
     m_gaussianFilter = nullptr;
 }
@@ -35,7 +37,7 @@ void Function::initialize(int size, double filterRadius, GaussianFilter *filter)
 
     m_gaussianFilter = (filter != nullptr)
         ? filter
-        : DefaultGaussianFilter;
+        : &defaultGaussianFilter();
 }
 
 void Function::resize(int newCapacity) {

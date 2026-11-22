@@ -35,9 +35,10 @@ inline void stressQueue(const std::filesystem::path &out) {
     std::ofstream(out / "stress.json") << "{\"case\":\"QUEUE\",\"operations\":4000,\"cycles\":1000,\"rejected\":1000,\"valid\":true}\n";
 }
 
-inline void stressThread(const std::filesystem::path &out) {
+inline void stressThread(const std::filesystem::path &out, std::uint64_t seed = 1) {
     Synthesizer synth;
     Synthesizer::Parameters p;
+    p.seed = seed;
     p.inputSampleRate = p.audioSampleRate = 44100;
     p.inputBufferSize = 512; p.audioBufferSize = 64;
     p.initialAudioParameters.inputSampleNoise = p.initialAudioParameters.airNoise = 0;
@@ -94,7 +95,7 @@ inline void stressThread(const std::filesystem::path &out) {
 }
 
 inline void stressLifecycle(const std::filesystem::path &resources, const std::filesystem::path &out,
-        const EngineSession::ImpulseReader &reader) {
+        const EngineSession::ImpulseReader &reader, std::uint64_t seed = 1) {
     es_script::Compiler compiler;
     compiler.initialize({(resources / "es").u8string(), (resources / "assets").u8string()});
     std::ofstream inputs(out / "inputs.txt");
@@ -116,7 +117,9 @@ inline void stressLifecycle(const std::filesystem::path &resources, const std::f
         std::ostringstream diagnostics;
         stressRequire(compiler.compile(entry.u8string(), diagnostics, &modules), "lifecycle compile failed");
         for (const auto &module : modules) inputs << module << '\n';
-        auto candidate = EngineSession::prepare(compiler.execute(), [&](const ImpulseResponse &response) {
+        auto definition = compiler.execute();
+        definition.engine->setRandomSeed(seed);
+        auto candidate = EngineSession::prepare(std::move(definition), [&](const ImpulseResponse &response) {
             inputs << response.getFilename() << '\n';
             return reader(response);
         });

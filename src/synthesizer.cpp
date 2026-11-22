@@ -5,7 +5,6 @@
 #include <algorithm>
 #include <cassert>
 #include <cmath>
-#include <cstdlib>
 #include <cstring>
 #include <limits>
 #include <stdexcept>
@@ -73,6 +72,8 @@ void Synthesizer::initialize(const Parameters &p) {
 
     m_filters = new ProcessingFilters[p.inputChannelCount];
     for (int i = 0; i < p.inputChannelCount; ++i) {
+        m_filters[i].airNoise.reset(p.seed, 2, static_cast<std::uint32_t>(i));
+        m_filters[i].jitterFilter.setRandomSeed(p.seed, static_cast<std::uint32_t>(i));
         m_filters[i].airNoiseLowPass.setCutoffFrequency(
             m_audioParameters.airNoiseFrequencyCutoff, m_audioSampleRate);
 
@@ -401,8 +402,6 @@ int16_t Synthesizer::renderAudio(int inputSample) {
 
     float signal = 0;
     for (int i = 0; i < m_inputChannelCount; ++i) {
-        const float r_0 = 2.0 * ((double)rand() / RAND_MAX) - 1.0;
-
         const float jitteredSample =
             m_filters[i].jitterFilter.fast_f(m_inputChannels[i].transferBuffer[inputSample]);
 
@@ -411,7 +410,7 @@ int16_t Synthesizer::renderAudio(int inputSample) {
         const float f = f_in - f_dc;
         const float f_p = m_filters[i].derivative.f(f_in);
 
-        const float noise = 2.0 * ((double)rand() / RAND_MAX) - 1.0;
+        const float noise = static_cast<float>(2.0 * m_filters[i].airNoise.uniform() - 1.0);
         const float r =
             m_filters->airNoiseLowPass.fast_f(noise);
         const float r_mixed =

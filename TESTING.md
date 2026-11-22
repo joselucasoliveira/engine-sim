@@ -85,6 +85,23 @@ Bootstrap/build `capture` and use its executable from `OUT/capture/bin`. `RESOUR
 
 Freeze reference bytes and policy before evaluating a change. Record source/build hashes, seed, scenario, inputs, sample format, block schedule and workload. Preserve startup, solver, synthesis, wall/CPU/RSS and queue metrics where observable. Calibration uses 20 runs and ten held-out runs. Do not widen a policy or turn an invalid parent's undefined output into a golden signal. Listening uses independently level-matched copies and remains separate from numerical integrity, device feeding and physical loopback evidence.
 
+Capture seeds accept the full unsigned 64-bit range. Each engine owns separate
+SplitMix64 streams for combustion in each cylinder, air noise in each exhaust
+channel and jitter in each channel. Their domain numbers are 1, 2 and 3,
+respectively, with zero-based topology indices. Loads initialize fresh stream
+states. The host's libc random sequence is independent of rendering.
+
+The engine streams replace the earlier libc and standard-library generator
+phases. Cross-generation comparisons retain the original reference policy,
+physical and timing invariants. A separate old-code acoustic profile samples
+initial jitter states across seeds and exhaust channels. Freeze its sampling
+choices and validate old-code holdouts before evaluating fresh candidate seeds;
+retain the outcomes under the original fixed-jitter profile as well. Preserve
+the executable, resources, calibration and holdout identities for each profile.
+Within one executable and floating-point environment,
+identical resources, seeds and controls must reproduce PCM and mechanical
+traces across interleaving and parallel execution of independent engines.
+
 The mechanics suite records the governed Kohler and direct-linkage LS from
 prepared rest through starter release, fixed demand and ignition-off coastdown.
 Its versioned files record crank speed (positive counterclockwise) and wrapped
