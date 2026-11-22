@@ -19,9 +19,10 @@ QUICK = ("FIR", "GAS", "TONE")
 REFERENCE = QUICK + ("KOHLER", "LS", "EJ25", "LOAD")
 MECHANICS = ("MECHANICS-KOHLER", "MECHANICS-LS")
 SUITES = {"quick": QUICK, "reference": REFERENCE, "mechanics": MECHANICS,
+          "holdout": ("HONDA",),
           "stress": ("QUEUE", "LIFECYCLE", "THREAD")}
-TRACE_COUNTS = {"GAS": 101, "TONE": 100, "TONE-QUIET": 100, "KOHLER": 1000, "LS": 1200, "EJ25": 1600}
-PCM_CASES = {"TONE", "TONE-QUIET", "KOHLER", "LS", "EJ25", *MECHANICS}
+TRACE_COUNTS = {"GAS": 101, "TONE": 100, "TONE-QUIET": 100, "KOHLER": 1000, "LS": 1200, "EJ25": 1600, "HONDA": 1600}
+PCM_CASES = {"TONE", "TONE-QUIET", "KOHLER", "LS", "EJ25", "HONDA", *MECHANICS}
 NUM_CALIBRATION = 20
 NUM_HOLDOUT = 10
 
@@ -137,22 +138,43 @@ def source_metadata(binary, metadata):
     }
 
 
+def input_key(path, output, root, explicit_entry):
+    if path.is_relative_to(output):
+        return "fixture/" + path.relative_to(output).as_posix()
+    if path.is_relative_to(root):
+        return "resources/" + path.relative_to(root).as_posix()
+    if explicit_entry is not None:
+        return "external/" + path.as_posix()
+    raise ValueError(f"resolved input is outside the explicit resources or fixture root: {path}")
+
+
 def input_hashes(output, root, expected_failure, explicit_entry=None):
     record = output / "inputs.txt"
-    if not record.exists():
+    snapshots = output / "prepared-inputs-v2.tsv"
+    if not record.exists() and not snapshots.exists():
         return {}
+    sources = []
+    if snapshots.exists():
+        for index, row in enumerate(snapshots.read_text(encoding="utf-8").splitlines()):
+            fields = row.split("\t")
+            if len(fields) != 2 or fields[0] != str(index):
+                raise ValueError("invalid prepared input index")
+            prefix = output / f"prepared-input-{index}"
+            blob = prefix.with_suffix(".bin")
+            path = Path(prefix.with_suffix(".path").read_text(encoding="utf-8"))
+            if not path.is_absolute() or int(fields[1]) != blob.stat().st_size:
+                raise ValueError("incomplete prepared input byte evidence")
+            sources.append((path, blob))
+        if not sources:
+            raise ValueError("empty prepared input evidence")
+    else:
+        sources = [(Path(line).resolve(), None) for line in record.read_text(encoding="utf-8").splitlines()]
     inputs = {}
-    for line in record.read_text(encoding="utf-8").splitlines():
-        path = Path(line).resolve()
-        if path.is_relative_to(output):
-            key = "fixture/" + path.relative_to(output).as_posix()
-        elif path.is_relative_to(root):
-            key = "resources/" + path.relative_to(root).as_posix()
-        elif explicit_entry is not None:
-            key = "external/" + path.as_posix()
-        else:
-            raise ValueError(f"resolved input is outside the explicit resources or fixture root: {path}")
-        if expected_failure and not path.is_file():
+    for path, snapshot in sources:
+        key = input_key(path, output, root, explicit_entry)
+        if snapshot is not None:
+            inputs[key] = digest(snapshot)
+        elif expected_failure and not path.is_file():
             inputs[key] = None
         else:
             inputs[key] = digest(path)
@@ -191,8 +213,12 @@ def execute_worker(binary, request, directory, seed, spectra):
         else:
             validate_artifacts(directory, request.name, spectra, event)
         event["fixtures"] = input_hashes(directory, request.resources, request.diagnostic is not None, request.entry)
-        if request.entry is not None and request.entry.is_file():
-            event["fixtures"]["fixture/input.mr"] = digest(request.entry)
+        if request.entry is not None:
+            checksum = event["fixtures"].get(input_key(request.entry, directory, request.resources, request.entry))
+            if checksum is None and not (directory / "prepared-inputs-v2.tsv").exists() and request.entry.is_file():
+                checksum = digest(request.entry)
+            if checksum is not None:
+                event["fixtures"]["fixture/input.mr"] = checksum
         event["status"] = "pass"
     except (ValueError, OSError) as failure:
         event.update(status="fail", reason=str(failure))
@@ -201,12 +227,22 @@ def execute_worker(binary, request, directory, seed, spectra):
 
 
 def validate_artifacts(directory, name, spectra, event):
+    schema_path = directory / "capture-v2.json"
+    if schema_path.exists():
+        schema = read_json(schema_path)
+        if schema.get("version") != 2 or schema.get("scope") != "shared-runtime-engine" or (
+                schema.get("clock") != "half-open-44100" or schema.get("block_frames") != 441):
+            raise ValueError("unsupported engine capture schema")
+        event["capture"] = schema
     if name in SUITES["stress"]:
         report = read_json(directory / "stress.json")
         expected = {"QUEUE": (4000, 1000), "LIFECYCLE": (10, 10), "THREAD": (1000, 50)}[name]
         if (report.get("case") != name or report.get("valid") is not True
                 or (report.get("operations"), report.get("cycles")) != expected):
             raise ValueError("incomplete stress workload or invariant report")
+        scopes = {"QUEUE": "primitive-ring", "THREAD": "legacy-synth-worker", "LIFECYCLE": "shared-runtime-lifecycle"}
+        if report.get("version") != 2 or report.get("scope") != scopes[name]:
+            raise ValueError("stress workload lacks a versioned computation scope")
         if name == "THREAD" and (report.get("frames") != 31001 or report.get("control_updates", 0) <= 0):
             raise ValueError("threaded stress did not exercise controls or conserve frames")
         if name == "LIFECYCLE" and (report.get("rejected") != 10 or report.get("frames", 0) <= 0):
@@ -239,14 +275,21 @@ def validate_artifacts(directory, name, spectra, event):
         parse_us, init_us = (float(value) for value in startup.read_text().split())
         if not all(math.isfinite(value) and value >= 0 for value in (parse_us, init_us)):
             raise ValueError("invalid startup duration")
-        event["startup"] = {"parse_us": parse_us, "initialize_us": init_us}
+        event["startup"] = ({"prepare_us": parse_us} if schema_path.exists()
+                            else {"parse_us": parse_us, "initialize_us": init_us})
     if name in TRACE_COUNTS:
         event["trace"] = summarize_trace(directory / "trace.csv")
         if event["trace"]["rows"] != TRACE_COUNTS[name]:
             raise ValueError("incomplete trace capture")
+        if name in {"KOHLER", "LS", "EJ25", "HONDA"}:
+            if not schema_path.exists() or event["signal"]["frames"] != 441 * TRACE_COUNTS[name]:
+                raise ValueError("engine capture does not conserve exact requested frames")
+            bounds = event["trace"]["bounds"]
+            if bounds["pcm_frames"] != [441, 441] or bounds["input_queue_frames"] != [0, 0]:
+                raise ValueError("runtime engine capture retained a legacy audio queue")
     if name in MECHANICS:
         event["mechanics"] = validate_mechanics(directory, name, event["signal"]["frames"])
-    if name in {"KOHLER", "LS", "EJ25", "LOAD", *MECHANICS}:
+    if name in {"KOHLER", "LS", "EJ25", "HONDA", "LOAD", *MECHANICS}:
         graph = directory / "graph.tsv"
         if not graph.read_text().strip():
             raise ValueError("missing engine graph")
@@ -268,7 +311,8 @@ def run_cases(options, binary, metadata, source):
     if fixtures is not None and options.script is not None:
         fixtures["valid"].entry = options.script
     run = {
-        "version": 1, "selection": list(cases), "suite": options.suite, "mode": options.mode,
+        "version": 2, "selection": list(cases), "suite": options.suite, "mode": options.mode,
+        "computation": "shared-runtime-engine; independent primitive kernels and legacy worker stress",
         "resources": str(resources), "seed": options.seed, "repetitions": options.repetitions,
         "build": source_metadata(binary, metadata), "cases": {},
         "time_class": "diagnostic on shared hardware",
@@ -311,7 +355,7 @@ def run_cases(options, binary, metadata, source):
 def load_run(root):
     run = read_json(root / "run.json")
     selection = run.get("selection")
-    if run.get("version") != 1 or run.get("status") != "pass":
+    if run.get("version") not in (1, 2) or run.get("status") != "pass":
         raise ValueError("run failed or was incomplete")
     if not selection or set(selection) != run["cases"].keys() or len(set(selection)) != len(selection):
         raise ValueError("case selection is empty or differs from the recorded trials")
@@ -347,6 +391,7 @@ def observation(trial):
             "diagnostic": event.get("expected_diagnostic"),
             "exit": event["exit"],
             "graph": event.get("graph"),
+            **({"capture": event["capture"]} if "capture" in event else {}),
             "signal": None if "signal" not in event else {
                 name: event["signal"][name] for name in ("frames", "sample_rate", "sha256")
             },
@@ -479,6 +524,60 @@ def self_test():
             pass
         else:
             raise AssertionError("nonfinite signal was accepted")
+        # Admit an actual small artifact set, then prove that source corruption,
+        # a missing artifact and malformed selection cannot become calibration.
+        artifact = root / "main"
+        artifact.mkdir()
+        (artifact / "audio.s16le").write_bytes(pcm.read_bytes())
+        valid_event = {**event, "status": "pass", "directory": "main",
+                       "artifacts": artifact_hashes(artifact)}
+        valid_run = {**reference, "version": 2, "status": "pass", "selection": ["FIR"],
+                     "cases": {"FIR": [{"main": valid_event} for _ in range(30)]}}
+        save_json(root / "run.json", valid_run)
+        assert load_run(root) == read_json(root / "run.json")
+        for malformed in ({**valid_run, "selection": []}, {**valid_run, "selection": ["FIR", "FIR"]},
+                          {**valid_run, "repetitions": 31}, {**valid_run, "status": "fail"}):
+            save_json(root / "run.json", malformed)
+            try:
+                load_run(root)
+            except ValueError:
+                pass
+            else:
+                raise AssertionError("malformed source admitted")
+        save_json(root / "run.json", valid_run)
+        for blob in (candidate_path.read_bytes(), b""):
+            (artifact / "audio.s16le").write_bytes(blob)
+            try:
+                load_run(root)
+            except ValueError:
+                pass
+            else:
+                raise AssertionError("modified or empty source admitted")
+        (artifact / "audio.s16le").unlink()
+        try:
+            load_run(root)
+        except (ValueError, OSError):
+            pass
+        else:
+            raise AssertionError("missing source admitted")
+        source = root / "external.mr"
+        source.write_bytes(b"prepared bytes")
+        snapshot_root = root / "input-proof"
+        snapshot_root.mkdir()
+        (snapshot_root / "prepared-input-0.path").write_text(str(source), encoding="utf-8")
+        (snapshot_root / "prepared-input-0.bin").write_bytes(source.read_bytes())
+        (snapshot_root / "prepared-inputs-v2.tsv").write_text("0\t14\n", encoding="utf-8")
+        before = input_hashes(snapshot_root, root, False)
+        source.write_bytes(b"changed after preparation")
+        assert input_hashes(snapshot_root, root, False) == before
+        assert before["resources/external.mr"] == digest(snapshot_root / "prepared-input-0.bin")
+        (snapshot_root / "prepared-input-0.bin").write_bytes(b"truncated")
+        try:
+            input_hashes(snapshot_root, root, False)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("incomplete prepared input evidence admitted")
 
 
 def main():

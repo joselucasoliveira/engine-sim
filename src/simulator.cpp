@@ -136,13 +136,6 @@ void Simulator::startFrame(double dt) {
     resetFrameFlows();
 }
 
-void Simulator::beginExactFrame(int ticks) {
-    assert(ticks > 0);
-    if (!beginFrame()) return;
-    m_steps = ticks;
-    resetFrameFlows();
-}
-
 bool Simulator::simulateStep() {
     if (getCurrentIteration() >= simulationSteps()) {
         auto s1 = std::chrono::steady_clock::now();

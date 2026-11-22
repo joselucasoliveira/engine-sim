@@ -10,11 +10,7 @@
 #include <iostream>
 #include <limits>
 
-namespace engine_sim_capture {
-struct FrameAccess {
-    static void begin(Simulator &simulator, int ticks) { simulator.beginExactFrame(ticks); }
-};
-}
+#include "legacy_access.h"
 
 namespace {
 namespace fs = std::filesystem;
@@ -57,7 +53,7 @@ protected:
     }
     int step(PreparedEngine &prepared, int ticks, std::vector<std::int16_t> *capture = nullptr) {
         auto &sim = *prepared.session->simulator;
-        engine_sim_capture::FrameAccess::begin(sim, ticks);
+        engine_sim_test::LegacyAccess::begin(sim, ticks);
         int completed = 0;
         while (sim.simulateStep()) ++completed;
         EXPECT_EQ(completed, ticks);

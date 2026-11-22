@@ -7,6 +7,7 @@
 #include <memory>
 
 namespace desktop { class RuntimeHost; }
+namespace engine_sim_capture { class RuntimeHost; }
 
 namespace engine_sim {
 struct RuntimeTestAccess;
@@ -23,6 +24,7 @@ public:
 private:
     friend struct RuntimeTestAccess;
     friend class desktop::RuntimeHost;
+    friend class engine_sim_capture::RuntimeHost;
     void adoptPrepared(PreparedEngine prepared, PullEngine::ControlLatch controls = {});
     struct Session {
         Session(PreparedEngine value, std::uint32_t outputHz, SampleClock::Profile profile,

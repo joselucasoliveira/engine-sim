@@ -26,7 +26,7 @@ SDL = {"DesktopInput": 8, "DesktopRender": 5, "DesktopAudio": 9}
 FOUNDATION = {"RuntimeParserPreparation": 1, "Preparation": 6, "Seed": 1,
               "SeedEngines": 2, "Clock": 8, "RuntimeCAbi": 1, "RuntimeCxxAbi": 1,
               "DesktopPacing": 8, "ViewsApplication": 4, "RuntimeDesktop": 5}
-CAPTURE = {"CaptureMechanics": 1, "CaptureQuick": 1, "CaptureComparator": 1, "CaptureStress": 1, "StagedResources": 1}
+CAPTURE = {"CaptureRuntime": 3, "CaptureMechanics": 1, "CaptureQuick": 1, "CaptureComparator": 1, "CaptureStress": 1, "StagedResources": 1}
 PRESETS = ("core", "capture", "desktop", "desktop-windows", "asan", "tsan", "desktop-asan", "desktop-tsan", "win-asan")
 
 

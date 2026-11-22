@@ -15,7 +15,7 @@
 #include <chrono>
 #include <vector>
 
-namespace engine_sim_capture { struct FrameAccess; }
+namespace engine_sim_test { struct LegacyAccess; }
 namespace engine_sim { class PullEngine; }
 
 class Simulator {
@@ -97,13 +97,12 @@ protected:
     atg_scs::RigidBodySystem *m_system;
 
 private:
-    friend struct engine_sim_capture::FrameAccess;
+    friend struct engine_sim_test::LegacyAccess;
     friend class engine_sim::PullEngine;
     void advanceTick(bool legacyFrame);
     void validateBodies() const;
     bool beginFrame();
     void resetFrameFlows();
-    void beginExactFrame(int ticks);
     void updateFilteredEngineSpeed(double dt);
 
 private:

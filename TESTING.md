@@ -124,3 +124,44 @@ Desktop source ownership is exercised with `ctest --preset desktop -L '^r2-deskt
 The desktop's `RT/dT` gauge measures time spent rendering source PCM, divided by completed physics ticks in that presentation interval. It includes solver, native DSP and runtime observation bookkeeping. A frame that produces no source does not invent a timing sample or advance the model. Queue occupancy, source faults, discarded frames and device starvation remain transport diagnostics; UI frame rate determines presentation only. This is a cost diagnostic, not an audio-callback deadline guarantee.
 
 Desktop script rates retain their legacy conversion to an effective integer rate before checking the private 400..400000 Hz profile. Public runtime script rates remain integral in 4000..96000 Hz. Live desktop tuning finishes the old numerical tick before applying the new rate, retaining source and transport phase.
+
+Engine characterization uses the same prepared session and synchronous runtime
+renderer as the SDK and desktop. `ctest --preset capture -L '^r2-capture$'
+--no-tests=error --output-on-failure` exercises this path. Each engine block
+requests exactly 441 frames at 44100 Hz. Completed-tick diagnostics retain the
+signed shaft velocity, cycle phase, successful lights and cylinder gas ranges;
+output serialization runs after rendering. The capture owner bounds each block
+to 10 ms, 961 tick observations and 64 cylinders. These diagnostic limits do not
+change the public runtime profile.
+
+Run metadata is version 2. Engine `capture-v2.json` identifies the half-open
+clock and column meanings. `startup.tsv` records combined preparation time and
+a reserved zero; `simulation_us` records combined runtime render time and
+`synthesis_us` is reserved zero. The original columns remain readable, but do
+not interpret these combined costs as separately profiled solver/DSP timings.
+The mechanics queue trace reports actual runtime/native frames, zero legacy
+input/output queues, and zero drops or source padding. Primitive FIR/GAS/TONE
+kernels and QUEUE/THREAD stress retain their own implementation and endpoint
+semantics. Stress reports name their scope: primitive ring, legacy synth worker
+or shared runtime lifecycle. The `holdout` suite selects the Honda VTEC engine,
+separate from the seven historical reference cases.
+
+The causal engine clock changes endpoint interpolation and removes the final
+inclusive engine sample: Kohler has 441000 frames, LS 529200 and EJ25 705600.
+The independent legacy recordings retain their original extra sample. Preserve
+original exact comparison failures and use the separately frozen physical and
+acoustic migration policies for their applicable descriptors; a second wrapper
+around the candidate cannot establish historical equivalence. Current-binary
+calibration still requires 20 repeatable trials and ten holdouts, and rejects
+missing, changed or malformed source artifacts. Such repeatability is separate
+from an independent historical compatibility assessment.
+
+Successful engine and lifecycle captures retain the exact prepared script/IR
+bytes in `prepared-input-*.bin`, their canonical UTF-8 identities in the paired
+`.path` files, and a versioned index. Fixture hashes use these owned bytes;
+editing an original resource during rendering cannot relabel an earlier load.
+Keep captures containing private scripts or uncleared IRs private. The legacy
+`inputs.txt` remains a human-readable path list. Engine trace `input_phase` is a
+reserved zero on the native half-open grid; queue fields are checked against
+the synthesizer's actual counters and must show no pending audio, drops or
+padding on successful captures.

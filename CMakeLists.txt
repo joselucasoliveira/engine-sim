@@ -267,7 +267,7 @@ if (DISCORD_ENABLED)
     set_property(TARGET discord PROPERTY FOLDER "discord")
 endif ()
 
-if (PIRANHA_ENABLED AND (ENGINE_SIM_BUILD_RUNTIME OR ENGINE_SIM_BUILD_DESKTOP OR (BUILD_TESTING AND ENGINE_SIM_BUILD_HOST_TESTS)))
+if (PIRANHA_ENABLED AND (ENGINE_SIM_BUILD_RUNTIME OR ENGINE_SIM_BUILD_DESKTOP OR ENGINE_SIM_BUILD_CAPTURE OR (BUILD_TESTING AND ENGINE_SIM_BUILD_HOST_TESTS)))
     add_library(engine-sim-runtime-backend STATIC src/runtime/runtime.cpp)
     target_link_libraries(engine-sim-runtime-backend PRIVATE engine-sim-script-interpreter)
     target_compile_features(engine-sim-runtime-backend PRIVATE cxx_std_17)

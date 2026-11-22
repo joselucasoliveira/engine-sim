@@ -1,7 +1,8 @@
 #ifndef ENGINE_SIM_CAPTURE_STRESS_H
 #define ENGINE_SIM_CAPTURE_STRESS_H
 
-#include "compiler.h"
+#include "../../src/runtime/capture_runtime.hpp"
+#include "input_evidence.h"
 #include "ring_buffer.h"
 #include <array>
 #include <atomic>
@@ -32,7 +33,7 @@ inline void stressQueue(const std::filesystem::path &out) {
             && values == std::array<int, 4>{-1, base + 2, base + 3, -1} && ring.size() == 0,
             "wrapped queue lost sample order");
     }
-    std::ofstream(out / "stress.json") << "{\"case\":\"QUEUE\",\"operations\":4000,\"cycles\":1000,\"rejected\":1000,\"valid\":true}\n";
+    std::ofstream(out / "stress.json") << "{\"version\":2,\"scope\":\"primitive-ring\",\"case\":\"QUEUE\",\"operations\":4000,\"cycles\":1000,\"rejected\":1000,\"valid\":true}\n";
 }
 
 inline void stressThread(const std::filesystem::path &out, std::uint64_t seed = 1) {
@@ -90,20 +91,16 @@ inline void stressThread(const std::filesystem::path &out, std::uint64_t seed = 
         && stats.droppedInput == 0 && stats.droppedOutput == 0 && stats.zeroFilledOutput == 0,
         "threaded stress lost publication, samples or destination guards");
     for (int cycle = 0; cycle < 50; ++cycle) { synth.startAudioRenderingThread(); synth.endAudioRenderingThread(); }
-    std::ofstream(out / "stress.json") << "{\"case\":\"THREAD\",\"operations\":1000,\"cycles\":50,\"frames\":"
+    std::ofstream(out / "stress.json") << "{\"version\":2,\"scope\":\"legacy-synth-worker\",\"case\":\"THREAD\",\"operations\":1000,\"cycles\":50,\"frames\":"
         << delivered << ",\"control_updates\":" << updates << ",\"valid\":true}\n";
 }
 
 inline void stressLifecycle(const std::filesystem::path &resources, const std::filesystem::path &out,
-        const EngineSession::ImpulseReader &reader, std::uint64_t seed = 1) {
-    es_script::Compiler compiler;
-    compiler.initialize({(resources / "es").u8string(), (resources / "assets").u8string()});
-    std::ofstream inputs(out / "inputs.txt");
-    inputs.exceptions(std::ios::badbit | std::ios::failbit);
+        std::uint64_t seed = 1) {
+    InputEvidence inputs(out);
     const auto invalidEntry = out / "stress-invalid.mr";
     { std::ofstream file(invalidEntry); file << "import \"engine_sim.mr\"\nset_engine(engine())\n"; }
-    inputs << invalidEntry.u8string() << '\n';
-    std::unique_ptr<EngineSession> active;
+    std::unique_ptr<RuntimeHost> active;
     int frames = 0;
     for (int cycle = 0; cycle < 10; ++cycle) {
         const auto entry = out / ("stress-entry-" + std::to_string(cycle) + ".mr");
@@ -113,41 +110,33 @@ inline void stressLifecycle(const std::filesystem::path &resources, const std::f
                 << (cycle % 2 ? "atg-video-2/09_radial_9.mr" : "atg-video-1/02_kohler_ch750.mr") << "\"\nmain()\n";
             stressRequire(static_cast<bool>(file), "cannot write lifecycle fixture");
         }
-        std::vector<std::string> modules;
-        std::ostringstream diagnostics;
-        stressRequire(compiler.compile(entry.u8string(), diagnostics, &modules), "lifecycle compile failed");
-        for (const auto &module : modules) inputs << module << '\n';
-        auto definition = compiler.execute();
-        definition.engine->setRandomSeed(seed);
-        auto candidate = EngineSession::prepare(std::move(definition), [&](const ImpulseResponse &response) {
-            inputs << response.getFilename() << '\n';
-            return reader(response);
-        });
-        candidate->simulator->startAudioRenderingThread();
-        if (active) active->simulator->endAudioRenderingThread();
+        auto candidate = RuntimeHost::prepare({entry, resources / "es", resources / "assets"}, seed);
+        inputs.append(candidate->inputs());
         active.swap(candidate);
-        stressRequire(active->definition.engine->getCylinderCount() == (cycle % 2 ? 9 : 2), "lifecycle topology mismatch");
-        auto &simulator = *active->simulator;
-        simulator.m_starterMotor.m_enabled = true;
-        active->definition.engine->getIgnitionModule()->m_enabled = true;
-        simulator.startFrame(0.01);
-        while (simulator.simulateStep()) {}
-        simulator.endFrame();
-        simulator.synthesizer().waitProcessed();
-        std::array<int16_t, 1024> pcm{};
-        const auto count = simulator.readAudioOutput(pcm.size(), pcm.data());
-        stressRequire(count > 0, "lifecycle produced no PCM");
+        stressRequire(active->engine().getCylinderCount() == (cycle % 2 ? 9 : 2), "lifecycle topology mismatch");
+        active->setControls({0, 0, true, true, false});
+        active->beginBlock();
+        std::array<float, 441> pcm{};
+        std::uint32_t count = 0;
+        active->render(pcm.data(), pcm.size(), count);
+        active->endBlock();
+        stressRequire(count == pcm.size(), "lifecycle produced incomplete PCM");
         frames += count;
         auto *original = active.get();
-        stressRequire(compiler.compile(invalidEntry.u8string(), diagnostics), "negative lifecycle fixture failed to compile");
+        const auto before = active->telemetry();
         bool rejected = false;
-        try { auto invalid = EngineSession::prepare(compiler.execute(), reader); active.swap(invalid); }
+        try { auto invalid = RuntimeHost::prepare({invalidEntry, resources / "es", resources / "assets"}, seed); active.swap(invalid); }
         catch (const EngineLoadError &) { rejected = true; }
-        stressRequire(rejected && active.get() == original, "failed reload replaced the running session");
+        stressRequire(rejected && active.get() == original && active->telemetry().frames == before.frames
+            && active->telemetry().ticks == before.ticks, "failed reload replaced or advanced the running session");
+        active->beginBlock(); count = 0;
+        active->render(pcm.data(), pcm.size(), count); active->endBlock();
+        stressRequire(count == pcm.size() && active->telemetry().frames == 882, "failed reload damaged continuation");
+        frames += count;
         std::cout << "completed lifecycle replacement " << cycle + 1 << " of 10\n" << std::flush;
     }
     active.reset();
-    std::ofstream(out / "stress.json") << "{\"case\":\"LIFECYCLE\",\"operations\":10,\"cycles\":10,\"rejected\":10,\"frames\":"
+    std::ofstream(out / "stress.json") << "{\"version\":2,\"scope\":\"shared-runtime-lifecycle\",\"case\":\"LIFECYCLE\",\"operations\":10,\"cycles\":10,\"rejected\":10,\"frames\":"
         << frames << ",\"valid\":true}\n";
 }
 }

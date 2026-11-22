@@ -1,7 +1,8 @@
-#include "compiler.h"
+#include "../../src/runtime/capture_runtime.hpp"
 #include "simulator.h"
 #include "synthesizer.h"
 #include "stress.h"
+#include "input_evidence.h"
 #include "wave_reader.h"
 
 #include <algorithm>
@@ -25,8 +26,7 @@
 #endif
 
 namespace engine_sim_capture {
-struct FrameAccess {
-    static void begin(Simulator &simulator, int ticks) { simulator.beginExactFrame(ticks); }
+struct PrimitiveAccess {
     static void observe(Synthesizer &synth, std::uint64_t &counter) {
         synth.m_nonFiniteCaptureCount = &counter;
     }
@@ -72,10 +72,6 @@ void recordProcessUsage(const fs::path &directory) {
 #else
     (void)directory;
 #endif
-}
-
-std::vector<std::int16_t> readImpulse(const fs::path &path) {
-    return engine_sim::readImpulseWave(path);
 }
 
 void runFir(const fs::path &out) {
@@ -157,7 +153,7 @@ void runTone(const fs::path &out, bool quiet, std::uint64_t seed) {
         params.initialAudioParameters.airNoise = 0.0f;
     }
     synth.initialize(params);
-    engine_sim_capture::FrameAccess::observe(synth, nonFinite);
+    engine_sim_capture::PrimitiveAccess::observe(synth, nonFinite);
     constexpr std::int16_t taps[]{32767, -8192, 2048};
     synth.initializeImpulseResponse(taps, 3, 1.0f, 0);
     auto pcm = openOutput(out / "audio.s16le");
@@ -182,11 +178,6 @@ void runTone(const fs::path &out, bool quiet, std::uint64_t seed) {
     if (nonFinite != 0 || total <= 0) throw std::runtime_error("tone contains nonfinite data or no frames");
 }
 
-void freeEngine(Engine *engine) {
-    engine->destroy();
-    delete engine;
-}
-
 struct EngineScenario {
     const char *module;
     int cylinders;
@@ -200,42 +191,29 @@ struct EngineScenario {
 EngineScenario selectEngine(std::string_view name) {
     if (name == "KOHLER") return {"engines/atg-video-1/02_kohler_ch750.mr", 2, 1, 30000, 1000, false, false};
     if (name == "LS") return {"engines/atg-video-2/07_gm_ls.mr", 8, 2, 10000, 1200, true, false};
+    if (name == "HONDA") return {"engines/atg-video-1/05_honda_vtec.mr", 4, 2, 20000, 1600, false, true};
     return {nullptr, 4, 1, 20000, 1600, false, true};
 }
 
-double applySchedule(Engine &engine, Simulator &simulator, const EngineScenario &scenario, int block) {
-    const int ignitionOff = scenario.dyno ? 1000 : scenario.steady ? 1400 : 800;
-    engine.getIgnitionModule()->m_enabled = block >= 25 && block < ignitionOff;
-    simulator.m_starterMotor.m_enabled = block >= 25 && block < 125;
-    simulator.m_dyno.m_enabled = simulator.m_dyno.m_hold = scenario.dyno && block >= 500 && block < 800;
-    if (simulator.m_dyno.m_hold) {
-        const double low = engine.getDynoMinSpeed();
-        const double high = engine.getDynoMaxSpeed();
-        simulator.m_dyno.m_rotationSpeed = low + (high - low) * (block - 500) / 300.0;
+engine_sim_capture::Controls schedule(const Engine &engine, const EngineScenario &scenario, int block, bool mechanics) {
+    engine_sim_capture::Controls controls;
+    controls.starter = block >= 25 && block < 125;
+    if (mechanics) {
+        controls.ignition = block >= 25 && block < 300;
+        controls.demand = block < 150 ? 0.10 : block < 300 ? 0.35 : 0.0;
+        return controls;
     }
+    const int ignitionOff = scenario.dyno ? 1000 : scenario.steady ? 1400 : 800;
+    controls.ignition = block >= 25 && block < ignitionOff;
+    controls.dyno = scenario.dyno && block >= 500 && block < 800;
+    controls.dynoSpeed = engine.getDynoMinSpeed() + (engine.getDynoMaxSpeed() - engine.getDynoMinSpeed()) * (block - 500) / 300.0;
+    if (!controls.dyno) controls.dynoSpeed = 0;
     const double peak = scenario.dyno ? 0.7 : 0.6;
     const int holdEnd = scenario.dyno ? 900 : 700;
-    const double control = block < 300 ? 0.1 : block < 500 ? 0.1 + (peak - 0.1) * (block - 300) / 200.0
+    controls.demand = block < 300 ? 0.1 : block < 500 ? 0.1 + (peak - 0.1) * (block - 300) / 200.0
         : block < holdEnd ? peak : scenario.steady && block < 1300 ? 0.2 : 0.0;
-    engine.setSpeedControl(control);
-    return control;
+    return controls;
 }
-
-struct Range {
-    double min = std::numeric_limits<double>::infinity();
-    double max = -std::numeric_limits<double>::infinity();
-    bool valid = true;
-
-    void add(double value) {
-        valid = valid && std::isfinite(value);
-        min = std::min(min, value);
-        max = std::max(max, value);
-    }
-};
-
-struct CylinderRanges {
-    Range pressure, moles, volume, manifold;
-};
 
 struct MechanicsTrace {
     explicit MechanicsTrace(const fs::path &out)
@@ -248,28 +226,17 @@ struct MechanicsTrace {
                   "dropped_input,dropped_output,zero_filled\n";
     }
 
-    double controls(Engine &engine, Simulator &simulator, int block) const {
-        const double demand = block < 150 ? 0.10 : block < 300 ? 0.35 : 0.0;
-        simulator.m_starterMotor.m_enabled = block >= 25 && block < 125;
-        engine.getIgnitionModule()->m_enabled = block >= 25 && block < 300;
-        engine.setSpeedControl(demand);
-        return demand;
-    }
-
-    void tick(Engine &engine, const Simulator &simulator, int index, double demand) {
-        auto &crank = *engine.getOutputCrankshaft();
-        shaft << index << ',' << crank.getCycleAngle() << ',' << crank.m_body.v_theta
-              << ',' << demand << ',' << engine.getThrottlePlateAngle() << ','
-              << simulator.m_starterMotor.m_enabled << ',' << engine.getIgnitionModule()->m_enabled << '\n';
-        for (int cylinder = 0; cylinder < engine.getCylinderCount(); ++cylinder) {
-            if (engine.getChamber(cylinder)->popLitLastFrame()) combustion << index << ',' << cylinder << '\n';
+    void tick(const engine_sim_capture::TickSample &sample, int cylinders) {
+        shaft << sample.tick << ',' << sample.cycle << ',' << sample.speed << ',' << sample.demand << ',' << sample.plate
+              << ',' << sample.starter << ',' << sample.ignition << '\n';
+        for (int cylinder = 0; cylinder < cylinders; ++cylinder) {
+            if (sample.lit & (std::uint64_t{1} << cylinder)) combustion << sample.tick << ',' << cylinder << '\n';
         }
     }
 
-    void output(const Synthesizer &synth, int tick, int frames, std::size_t pending) {
-        const auto stats = synth.getBufferStatistics();
-        queues << tick << ',' << frames << ',' << stats.rendered << ',' << stats.delivered
-               << ',' << pending << ',' << stats.queuedOutput << ',' << stats.droppedInput
+    void output(const es_telemetry &counts, int frames, const Synthesizer::BufferStatistics &stats) {
+        queues << counts.ticks << ',' << frames << ',' << counts.native_frames << ',' << counts.frames
+               << ',' << stats.pendingInput << ',' << stats.queuedOutput << ',' << stats.droppedInput
                << ',' << stats.droppedOutput << ',' << stats.zeroFilledOutput << '\n';
     }
 
@@ -288,67 +255,26 @@ void runEngine(const fs::path &resources, const fs::path &out, std::string_view 
     }
 
     const auto parseStart = Clock::now();
-    es_script::Compiler compiler;
-    compiler.initialize({(resources / "es").u8string(), (resources / "assets").u8string()});
-    std::vector<std::string> scriptPaths;
-    const bool compiled = compiler.compile(entry.u8string(), std::cerr, &scriptPaths);
-    auto parsed = compiled ? compiler.execute() : es_script::Compiler::Output{};
-    compiler.destroy();
-    const auto parseTime = microsecondsSince(parseStart);
-    if (!compiled) throw std::runtime_error("script compile failed: " + entry.u8string());
-
-    std::unique_ptr<Engine, decltype(&freeEngine)> engine(parsed.engine.release(), freeEngine);
-    std::unique_ptr<Vehicle> vehicle(std::move(parsed.vehicle));
-    std::unique_ptr<Transmission> transmission(std::move(parsed.transmission));
-    if (!engine || !vehicle || !transmission || engine->getCylinderCount() != scenario.cylinders
-        || engine->getExhaustSystemCount() != scenario.exhausts
-        || engine->getSimulationFrequency() != scenario.frequency) {
+    auto runtime = engine_sim_capture::RuntimeHost::prepare(
+        {entry, resources / "es", resources / "assets"}, seed, captureMechanics);
+    const auto prepareTime = microsecondsSince(parseStart);
+    const auto &engine = runtime->engine();
+    const auto &simulator = runtime->simulator();
+    if (engine.getCylinderCount() != scenario.cylinders || engine.getExhaustSystemCount() != scenario.exhausts
+        || simulator.getSimulationFrequency() != scenario.frequency)
         throw std::runtime_error("unexpected or unsupported engine graph: " + entry.u8string());
-    }
-
-    auto inputs = openOutput(out / "inputs.txt");
-    for (const auto &script : scriptPaths) inputs << script << '\n';
-    struct Impulse {
-        std::vector<std::int16_t> samples;
-        float volume;
-    };
-    std::vector<Impulse> impulses;
-    for (int i = 0; i < scenario.exhausts; ++i) {
-        auto *impulse = engine->getExhaustSystem(i)->getImpulseResponse();
-        if (impulse == nullptr) throw std::runtime_error("missing impulse response on exhaust " + std::to_string(i));
-        const fs::path file = fs::u8path(impulse->getFilename());
-        inputs << file.u8string() << '\n';
-        impulses.push_back({readImpulse(file), static_cast<float>(impulse->getVolume())});
-    }
-
-    engine->setRandomSeed(seed);
-    engine->calculateDisplacement();
+    engine_sim_capture::InputEvidence inputs(out);
+    inputs.append(runtime->inputs());
     auto graph = openOutput(out / "graph.tsv");
-    graph << engine->getName() << '\t' << engine->getCylinderCount() << '\t'
-          << engine->getExhaustSystemCount() << '\t' << engine->getSimulationFrequency() << '\t'
-          << engine->getDisplacement() << '\n';
+    graph << engine.getName() << '\t' << engine.getCylinderCount() << '\t'
+          << engine.getExhaustSystemCount() << '\t' << engine.getSimulationFrequency() << '\t'
+          << engine.getDisplacement() << '\n';
+    openOutput(out / "capture-v2.json") << "{\"version\":2,\"scope\":\"shared-runtime-engine\","
+        "\"clock\":\"half-open-44100\",\"block_frames\":441,\"legacy_endpoint_frames\":1,"
+        "\"startup_columns\":[\"prepare_us\",\"reserved_zero\"],"
+        "\"timing_columns\":[\"combined_runtime_render_us\",\"reserved_zero\"]}\n";
     if (name == "LOAD") return;
-    const auto initStart = Clock::now();
-    const auto release = [](Simulator *pointer) { pointer->releaseSimulation(); delete pointer; };
-    std::unique_ptr<Simulator, decltype(release)> simulator(engine->createSimulator(vehicle.get(), transmission.get()), release);
-    simulator->setSimulationFrequency(scenario.frequency);
-    auto &synth = simulator->synthesizer();
-    auto audio = synth.getAudioParameters();
-    audio.inputSampleNoise = engine->getInitialJitter();
-    audio.airNoise = engine->getInitialNoise();
-    audio.dF_F_mix = engine->getInitialHighFrequencyGain();
-    synth.setAudioParameters(audio);
-    for (int i = 0; i < scenario.exhausts; ++i) {
-        synth.initializeImpulseResponse(impulses[i].samples.data(),
-            static_cast<unsigned int>(impulses[i].samples.size()), impulses[i].volume, i);
-    }
-
-    std::uint64_t nonFinite = 0;
-    engine_sim_capture::FrameAccess::observe(synth, nonFinite);
-    synth.setInputSampleRate(scenario.frequency);
-    synth.endInputBlock();
-    auto clocks = openOutput(out / "startup.tsv");
-    clocks << parseTime << '\t' << microsecondsSince(initStart) << '\n';
+    openOutput(out / "startup.tsv") << prepareTime << "\t0\n";
     auto pcm = openOutput(out / "audio.s16le");
     auto trace = openOutput(out / "trace.csv");
     trace << "block,ticks,sum_ticks,sim_s,input_control,starter,ignition,rpm,rad_s,dyno_nm,manifold_pa,chamber0_pa,chamber0_mol,chamber0_m3,pcm_frames,"
@@ -357,60 +283,56 @@ void runEngine(const fs::path &resources, const fs::path &out, std::string_view 
     std::optional<MechanicsTrace> mechanics;
     if (captureMechanics) {
         mechanics.emplace(out);
-        mechanics->tick(*engine, *simulator, 0, 0.0);
+        mechanics->tick(runtime->current(), scenario.cylinders);
     }
-    int totalTicks = 0;
-    int totalFrames = 0;
     const int ticksPerBlock = scenario.frequency / 100;
     for (int block = 0; block < scenario.blocks; ++block) {
-        const double control = mechanics ? mechanics->controls(*engine, *simulator, block)
-                                         : applySchedule(*engine, *simulator, scenario, block);
-        const auto simulationStart = Clock::now();
-        engine_sim_capture::FrameAccess::begin(*simulator, ticksPerBlock);
-        CylinderRanges ranges;
-        int ticks = 0;
-        while (simulator->simulateStep()) {
-            ++ticks;
-            if (mechanics) mechanics->tick(*engine, *simulator, totalTicks + ticks, control);
-            ranges.manifold.add(engine->getManifoldPressure());
-            for (int cylinder = 0; cylinder < scenario.cylinders; ++cylinder) {
-                const auto &gas = engine->getChamber(cylinder)->m_system;
-                ranges.pressure.add(gas.pressure());
-                ranges.moles.add(gas.n());
-                ranges.volume.add(gas.volume());
-            }
+        const auto controls = schedule(engine, scenario, block, captureMechanics);
+        runtime->setControls(controls);
+        runtime->beginBlock();
+        std::array<float, 441> buffer{};
+        std::uint32_t written = 0;
+        const auto renderStart = Clock::now();
+        runtime->render(buffer.data(), buffer.size(), written);
+        const double renderTime = microsecondsSince(renderStart);
+        runtime->endBlock();
+        const auto &counts = runtime->telemetry();
+        const auto &ranges = runtime->diagnostics();
+        const auto stats = simulator.synthesizer().getBufferStatistics();
+        if (stats.stagedInput || stats.pendingInput || stats.activeInput || stats.queuedOutput
+            || stats.droppedInput || stats.droppedOutput || stats.zeroFilledOutput)
+            throw std::runtime_error("runtime capture unexpectedly used or lost legacy queued audio");
+        if (written != buffer.size() || ranges.ticks != static_cast<std::size_t>(ticksPerBlock)
+            || counts.frames != std::uint64_t(block + 1) * 441 || counts.native_frames != counts.frames
+            || counts.ticks != std::uint64_t(block + 1) * ticksPerBlock)
+            throw std::runtime_error("runtime counts differ from the half-open schedule");
+        for (float value : buffer) {
+            if (!std::isfinite(value) || value < -1 || value > 32767.0f / 32768)
+                throw std::runtime_error("nonfinite or unnormalized runtime sample");
+            writeLittleEndian(pcm, static_cast<std::uint16_t>(static_cast<std::int16_t>(std::lround(value * 32768))), 2);
         }
-        if (ticks != ticksPerBlock) throw std::runtime_error("mechanical tick count differs from schedule");
-        simulator->endFrame();
-        const double simulationTime = microsecondsSince(simulationStart);
-        const auto synthesisStart = Clock::now();
-        size_t inputWindow = 0;
-        const int frames = renderAndWrite(synth, pcm, inputWindow);
-        const double synthesisTime = microsecondsSince(synthesisStart);
-        totalTicks += ticks;
-        totalFrames += frames;
-        if (mechanics) mechanics->output(synth, totalTicks, frames, inputWindow);
-
-        const auto &gas = engine->getChamber(0)->m_system;
-        const double rpm = engine->getRpm();
-        const double signedSpeed = engine->getCrankshaft(0)->m_body.v_theta;
-        const double torque = simulator->getFilteredDynoTorque();
+        if (mechanics) {
+            for (std::size_t i = 0; i < ranges.ticks; ++i) mechanics->tick(ranges.samples[i], scenario.cylinders);
+            mechanics->output(counts, written, stats);
+        }
+        const auto &gas = engine.getChamber(0)->m_system;
+        const double rpm = engine.getRpm(), signedSpeed = engine.getCrankshaft(0)->m_body.v_theta;
+        const double torque = simulator.getFilteredDynoTorque();
         const bool valid = std::isfinite(rpm) && std::isfinite(signedSpeed) && std::isfinite(torque)
             && ranges.pressure.valid && ranges.moles.valid && ranges.volume.valid && ranges.manifold.valid
             && ranges.pressure.min > 0 && ranges.moles.min >= 0 && ranges.volume.min > 0 && ranges.manifold.min > 0;
-        trace << block << ',' << ticks << ',' << totalTicks << ',' << double(totalTicks) / scenario.frequency
-              << ',' << control << ',' << simulator->m_starterMotor.m_enabled << ',' << engine->getIgnitionModule()->m_enabled
-              << ',' << rpm << ',' << signedSpeed << ',' << torque << ',' << engine->getManifoldPressure()
-              << ',' << gas.pressure() << ',' << gas.n() << ',' << gas.volume() << ',' << frames
-              << ',' << simulationTime << ',' << synthesisTime << ',' << engine->getThrottle()
-              << ',' << simulator->m_dyno.m_enabled << ',' << simulator->m_dyno.m_rotationSpeed << ',' << synth.m_inputWriteOffset
-              << ',' << ranges.pressure.min << ',' << ranges.pressure.max << ',' << ranges.moles.min << ',' << ranges.moles.max
+        trace << block << ',' << ranges.ticks << ',' << counts.ticks << ',' << double(counts.frames) / sampleRate
+              << ',' << controls.demand << ',' << simulator.m_starterMotor.m_enabled << ',' << engine.getIgnitionModule()->m_enabled
+              << ',' << rpm << ',' << signedSpeed << ',' << torque << ',' << engine.getManifoldPressure()
+              << ',' << gas.pressure() << ',' << gas.n() << ',' << gas.volume() << ',' << written
+              << ',' << renderTime << ",0," << engine.getThrottle()
+              << ',' << simulator.m_dyno.m_enabled << ',' << simulator.m_dyno.m_rotationSpeed << ",0,"
+              << ranges.pressure.min << ',' << ranges.pressure.max << ',' << ranges.moles.min << ',' << ranges.moles.max
               << ',' << ranges.volume.min << ',' << ranges.volume.max << ',' << ranges.manifold.min << ',' << ranges.manifold.max
-              << ',' << valid << ',' << inputWindow << '\n';
+              << ',' << valid << ',' << stats.pendingInput << '\n';
         if (!valid) throw std::runtime_error("nonfinite or nonphysical state in block " + std::to_string(block));
     }
-    openOutput(out / "quantizer.txt") << nonFinite << '\n';
-    if (nonFinite != 0 || totalFrames <= 0) throw std::runtime_error("prequantizer was nonfinite or PCM was empty");
+    openOutput(out / "quantizer.txt") << "0\n";
 }
 }
 
@@ -426,9 +348,8 @@ int captureWorker(int argc, char **argv) {
         else if (name == "TONE" || name == "TONE-QUIET") runTone(out, name == "TONE-QUIET", seed);
         else if (name == "QUEUE") engine_sim_capture::stressQueue(out);
         else if (name == "THREAD") engine_sim_capture::stressThread(out, seed);
-        else if (name == "LIFECYCLE") engine_sim_capture::stressLifecycle(resources, out,
-            [](const ImpulseResponse &response) { return readImpulse(fs::u8path(response.getFilename())); }, seed);
-        else if (name == "KOHLER" || name == "LS" || name == "EJ25" || name == "LOAD") {
+        else if (name == "LIFECYCLE") engine_sim_capture::stressLifecycle(resources, out, seed);
+        else if (name == "KOHLER" || name == "LS" || name == "EJ25" || name == "HONDA" || name == "LOAD") {
             runEngine(resources, out, name, argc == 7 ? fs::u8path(argv[6]) : fs::path(), false, seed);
         }
         else if (name == "MECHANICS-KOHLER" || name == "MECHANICS-LS") {

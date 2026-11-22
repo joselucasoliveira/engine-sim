@@ -14,12 +14,15 @@ file(CONFIGURE OUTPUT build.txt CONTENT
     "${source_identity}${patch_hash}\n${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}\n${CMAKE_SYSTEM_NAME} ${CMAKE_SYSTEM_PROCESSOR}\n${CMAKE_BUILD_TYPE}\n"
     @ONLY)
 
+add_library(engine-sim-capture-runtime STATIC "${PROJECT_SOURCE_DIR}/src/runtime/capture_runtime.cpp")
+target_link_libraries(engine-sim-capture-runtime PRIVATE engine-sim-runtime-backend engine-sim-script-interpreter)
+engine_sim_diagnose(engine-sim-capture-runtime TRUE)
 add_executable(engine-sim-capture launcher.cpp worker.cpp)
 if (WIN32)
     target_sources(engine-sim-capture PRIVATE "${PROJECT_SOURCE_DIR}/src/app.manifest")
 endif ()
 target_include_directories(engine-sim-capture PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
-target_link_libraries(engine-sim-capture PRIVATE engine-sim-script-interpreter)
+target_link_libraries(engine-sim-capture PRIVATE engine-sim-capture-runtime engine-sim-script-interpreter)
 if (TARGET engine-sim-host-resources)
     target_link_libraries(engine-sim-capture PRIVATE engine-sim-host-resources)
 endif ()
@@ -30,6 +33,11 @@ foreach(configuration IN ITEMS Debug Release RelWithDebInfo MinSizeRel)
 endforeach ()
 
 if (BUILD_TESTING)
+    add_executable(engine-sim-capture-test "${PROJECT_SOURCE_DIR}/test/capture_runtime_tests.cpp")
+    target_link_libraries(engine-sim-capture-test PRIVATE engine-sim-capture-runtime engine-sim-script-interpreter gtest_main)
+    engine_sim_diagnose(engine-sim-capture-test TRUE)
+    gtest_discover_tests(engine-sim-capture-test DISCOVERY_TIMEOUT 30
+        PROPERTIES LABELS "r2-capture" TIMEOUT 180 ENVIRONMENT "ENGINE_SIM_TEST_SOURCE=${PROJECT_SOURCE_DIR}")
     add_test(NAME CaptureComparator
         COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_BINARY_DIR}/capture_cli.py"
         "$<TARGET_FILE:engine-sim-capture>" "${CMAKE_CURRENT_BINARY_DIR}/build.txt"
@@ -38,17 +46,17 @@ if (BUILD_TESTING)
         COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_BINARY_DIR}/capture_cli.py"
         "$<TARGET_FILE:engine-sim-capture>" "${CMAKE_CURRENT_BINARY_DIR}/build.txt"
         "${PROJECT_SOURCE_DIR}" "${PROJECT_SOURCE_DIR}" --quick-test)
-    set_tests_properties(CaptureComparator CaptureQuick PROPERTIES LABELS "characterization;r2-oracle" TIMEOUT 90)
+    set_tests_properties(CaptureComparator CaptureQuick PROPERTIES LABELS "characterization;r2-oracle;r2-capture" TIMEOUT 90)
     add_test(NAME CaptureMechanics
         COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_BINARY_DIR}/capture_cli.py"
         "$<TARGET_FILE:engine-sim-capture>" "${CMAKE_CURRENT_BINARY_DIR}/build.txt"
         "${PROJECT_SOURCE_DIR}" "${PROJECT_SOURCE_DIR}" --mechanics-test)
-    set_tests_properties(CaptureMechanics PROPERTIES LABELS "characterization;r2-oracle" TIMEOUT 90)
+    set_tests_properties(CaptureMechanics PROPERTIES LABELS "characterization;r2-oracle;r2-capture" TIMEOUT 90)
     add_test(NAME CaptureStress
         COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_BINARY_DIR}/capture_cli.py"
         "$<TARGET_FILE:engine-sim-capture>" "${CMAKE_CURRENT_BINARY_DIR}/build.txt"
         "${PROJECT_SOURCE_DIR}" "${PROJECT_SOURCE_DIR}" --stress-test)
-    set_tests_properties(CaptureStress PROPERTIES LABELS "stress" TIMEOUT 240)
+    set_tests_properties(CaptureStress PROPERTIES LABELS "stress;r2-capture" TIMEOUT 240)
     add_test(NAME StagedResources
         COMMAND "${Python3_EXECUTABLE}" -B "${PROJECT_SOURCE_DIR}/test/staged_resources.py"
         --cmake "${CMAKE_COMMAND}" --build "${PROJECT_BINARY_DIR}"

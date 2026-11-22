@@ -13,13 +13,8 @@
 #include <numeric>
 #include <vector>
 
-namespace engine_sim_capture {
-struct FrameAccess {
-    static void begin(Simulator &simulator, int ticks) { simulator.beginExactFrame(ticks); }
-    static void direct(Synthesizer &synth) { synth.beginSynchronous(); }
-    static std::int16_t sample(Synthesizer &synth, const double *data) { return synth.renderNativeFrame(data); }
-};
-}
+#include "legacy_access.h"
+
 namespace engine_sim {
 struct ClockTestAccess {
     static void preload(SampleClock &clock, ClockCounts counts, std::uint32_t phase) {
@@ -267,14 +262,14 @@ TEST(Clock, NativeDspMatchesLegacyKernelAndRejectsNonfiniteInput) {
         legacy.initializeImpulseResponse(impulse, 3, channel == 0 ? 1.0f : .75f, channel);
         direct.initializeImpulseResponse(impulse, 3, channel == 0 ? 1.0f : .75f, channel);
     }
-    engine_sim_capture::FrameAccess::direct(direct);
+    engine_sim_test::LegacyAccess::direct(direct);
     std::array<double, 2> input{0, 0};
     std::vector<std::int16_t> expected;
-    expected.push_back(engine_sim_capture::FrameAccess::sample(direct, input.data()));
+    expected.push_back(engine_sim_test::LegacyAccess::sample(direct, input.data()));
     for (int i = 0; i < 4096; ++i) {
         input = {1000 * std::sin(i * .03125), 500 * std::cos(i * .125)};
         legacy.writeInput(input.data());
-        expected.push_back(engine_sim_capture::FrameAccess::sample(direct, input.data()));
+        expected.push_back(engine_sim_test::LegacyAccess::sample(direct, input.data()));
     }
     legacy.endInputBlock();
     legacy.renderAudio();
@@ -286,14 +281,14 @@ TEST(Clock, NativeDspMatchesLegacyKernelAndRejectsNonfiniteInput) {
     std::sort(distinct.begin(), distinct.end());
     EXPECT_GT(std::distance(distinct.begin(), std::unique(distinct.begin(), distinct.end())), 128);
     input[0] = std::numeric_limits<double>::infinity();
-    EXPECT_THROW(engine_sim_capture::FrameAccess::sample(direct, input.data()), SimulationFault);
+    EXPECT_THROW(engine_sim_test::LegacyAccess::sample(direct, input.data()), SimulationFault);
     EXPECT_THROW(direct.writeInput(input.data()), std::logic_error);
     EXPECT_THROW(direct.startAudioRenderingThread(), std::logic_error);
     auto parameters = direct.getAudioParameters();
     parameters.volume = std::numeric_limits<float>::infinity();
     direct.setAudioParameters(parameters);
     input[0] = 0;
-    EXPECT_THROW(engine_sim_capture::FrameAccess::sample(direct, input.data()), SimulationFault);
+    EXPECT_THROW(engine_sim_test::LegacyAccess::sample(direct, input.data()), SimulationFault);
 }
 
 PreparedEngine fixture() {
@@ -322,7 +317,7 @@ TEST(Clock, RealMechanicsMatchLegacyTicksAndPartitionedPulls) {
     };
     control(a);
     std::vector<std::array<double, 5>> expected, actual;
-    engine_sim_capture::FrameAccess::begin(a, a.getSimulationFrequency());
+    engine_sim_test::LegacyAccess::begin(a, a.getSimulationFrequency());
     while (a.simulateStep()) expected.push_back(physical(a));
     a.endFrame();
     PullEngine pull(b, [&] { control(b); });

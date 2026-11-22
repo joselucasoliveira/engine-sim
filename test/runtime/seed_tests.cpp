@@ -12,11 +12,8 @@
 
 #include "random_vectors.h"
 
-namespace engine_sim_capture {
-struct FrameAccess {
-    static void begin(Simulator &simulator, int ticks) { simulator.beginExactFrame(ticks); }
-};
-}
+#include "legacy_access.h"
+
 namespace {
 namespace fs = std::filesystem;
 using engine_sim::PreparedEngine;
@@ -77,7 +74,7 @@ protected:
         engine.getIgnitionModule()->m_enabled = true;
         sim.m_starterMotor.m_enabled = index < 100;
         const int ticks = sim.getSimulationFrequency() / 100;
-        engine_sim_capture::FrameAccess::begin(sim, ticks);
+        engine_sim_test::LegacyAccess::begin(sim, ticks);
         while (sim.simulateStep()) {}
         sim.endFrame();
         auto &synth = sim.synthesizer();

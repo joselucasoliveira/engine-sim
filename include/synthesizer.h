@@ -16,7 +16,8 @@
 #include <condition_variable>
 #include <vector>
 
-namespace engine_sim_capture { struct FrameAccess; }
+namespace engine_sim_capture { struct PrimitiveAccess; }
+namespace engine_sim_test { struct LegacyAccess; }
 namespace engine_sim { class PullEngine; }
 
 class Synthesizer {
@@ -134,7 +135,8 @@ class Synthesizer {
         ProcessingFilters *m_filters;
 
     private:
-        friend struct engine_sim_capture::FrameAccess;
+        friend struct engine_sim_capture::PrimitiveAccess;
+        friend struct engine_sim_test::LegacyAccess;
         friend class engine_sim::PullEngine;
         void beginSynchronous();
         int16_t renderNativeFrame(const double *data);

@@ -231,6 +231,7 @@ def require_mechanics(condition, message):
 
 
 def validate_mechanics(directory, name, frames):
+    runtime = (directory / "capture-v2.json").exists()
     frequency, cylinders = (30000, 2) if name == "MECHANICS-KOHLER" else (10000, 8)
     ticks_per_block = frequency // 100
     ticks = 4 * frequency
@@ -298,11 +299,12 @@ def validate_mechanics(directory, name, frames):
     block = 0
     for block, row in enumerate(mechanical_rows(directory / "queues-v1.csv"), 1):
         total = int(row["delivered"])
-        require_mechanics(int(row["tick"]) == block * ticks_per_block and abs(total - block * 441) <= 1,
-                "legacy 10 ms grid and delivered sample count disagree")
+        require_mechanics(int(row["tick"]) == block * ticks_per_block and (
+                total == block * 441 if runtime else abs(total - block * 441) <= 1),
+                "10 ms grid and delivered sample count disagree")
         require_mechanics(total - previous_frames == int(row["block_frames"])
                 and total == int(row["rendered"]), "rendered and delivered frame counts disagree")
-        require_mechanics(int(row["pending_input"]) == int(row["block_frames"])
+        require_mechanics(int(row["pending_input"]) == (0 if runtime else int(row["block_frames"]))
                 and all(int(row[key]) == 0 for key in
                         ("queued_output", "dropped_input", "dropped_output", "zero_filled")),
                 "capture lost, padded or retained frames")

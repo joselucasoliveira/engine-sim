@@ -52,6 +52,7 @@ class Admission(unittest.TestCase):
         self.assertEqual(expected["RuntimeDesktop"], 5)
         self.assertEqual(expected["DesktopPacing"], 8)
         self.assertEqual(expected["CaptureMechanics"], 1)
+        self.assertEqual(expected["CaptureRuntime"], 3)
         self.assertEqual(expected["DesktopAudio"], 9)
         cases = ''.join(f'<testcase name="{suite}.case{i}"/>'
                         for suite, count in expected.items() for i in range(count))
