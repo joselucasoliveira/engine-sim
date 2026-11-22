@@ -55,6 +55,15 @@ gtest_discover_tests(engine-sim-clock-test
     ENVIRONMENT "ENGINE_SIM_TEST_SOURCE=${PROJECT_SOURCE_DIR}")
 
 if (TARGET engine-sim-runtime)
+    add_executable(engine-sim-diagnostics-test diagnostics_tests.cpp)
+    target_link_libraries(engine-sim-diagnostics-test PRIVATE EngineSim::Runtime engine-sim-script-interpreter gtest_main)
+    target_include_directories(engine-sim-diagnostics-test PRIVATE "${PROJECT_SOURCE_DIR}/src/runtime")
+    engine_sim_diagnose(engine-sim-diagnostics-test TRUE)
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/diagnostics-working")
+    gtest_discover_tests(engine-sim-diagnostics-test WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/diagnostics-working"
+        DISCOVERY_TIMEOUT 30 PROPERTIES LABELS "r2-diagnostics" TIMEOUT 300
+        ENVIRONMENT "ENGINE_SIM_TEST_SOURCE=${PROJECT_SOURCE_DIR}")
+
     add_executable(engine-sim-runtime-c-test consumer_c.c)
     target_link_libraries(engine-sim-runtime-c-test PRIVATE EngineSim::Runtime)
     set_target_properties(engine-sim-runtime-c-test PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO LINKER_LANGUAGE CXX)
@@ -113,6 +122,29 @@ endif ()
 
 if (TARGET engine-sim-runtime)
     find_package(Python3 3.9 COMPONENTS Interpreter REQUIRED)
+    # Timings require an optimized, unsanitized static implementation. The probe
+    # is a different executable so allocation and stage clocks cannot affect it.
+    if (NOT ENGINE_SIM_RUNTIME_SHARED AND ENGINE_SIM_SANITIZER STREQUAL "none")
+        foreach(variant IN ITEMS bench probe)
+            add_executable(engine-sim-runtime-${variant} benchmark.cpp)
+            target_link_libraries(engine-sim-runtime-${variant} PRIVATE EngineSim::Runtime engine-sim-script-interpreter)
+            target_include_directories(engine-sim-runtime-${variant} PRIVATE "${PROJECT_SOURCE_DIR}/src/runtime")
+            engine_sim_diagnose(engine-sim-runtime-${variant} TRUE)
+            if (WIN32)
+                target_link_libraries(engine-sim-runtime-${variant} PRIVATE psapi)
+            endif ()
+        endforeach ()
+        target_compile_definitions(engine-sim-runtime-probe PRIVATE ES_BENCH_PROBE=1)
+        if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+            target_compile_definitions(engine-sim-runtime-probe PRIVATE ES_BENCH_MUTEX_WRAP=1)
+            target_link_options(engine-sim-runtime-probe PRIVATE "LINKER:--wrap=pthread_mutex_lock")
+        endif ()
+        add_test(NAME RuntimeBenchmark COMMAND "${Python3_EXECUTABLE}" -B "${PROJECT_SOURCE_DIR}/tools/runtime_bench.py"
+            --benchmark "$<TARGET_FILE:engine-sim-runtime-bench>" --probe "$<TARGET_FILE:engine-sim-runtime-probe>"
+            --fixture "${PROJECT_SOURCE_DIR}/examples/runtime/fixture" --out "${CMAKE_CURRENT_BINARY_DIR}/benchmark-smoke" --smoke
+            --compile-database "${CMAKE_BINARY_DIR}/compile_commands.json")
+        set_tests_properties(RuntimeBenchmark PROPERTIES LABELS "runtime-bench" TIMEOUT 300)
+    endif ()
     foreach(variant IN ITEMS static shared)
         add_test(NAME RuntimeSdk_${variant} COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/sdk_gate.py"
             --source "${PROJECT_SOURCE_DIR}" --root "${ENGINE_SIM_PRESET_ROOT}"

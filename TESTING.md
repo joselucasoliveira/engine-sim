@@ -165,3 +165,104 @@ Keep captures containing private scripts or uncleared IRs private. The legacy
 reserved zero on the native half-open grid; queue fields are checked against
 the synthesizer's actual counters and must show no pending audio, drops or
 padding on successful captures.
+
+## Runtime fault and cost diagnostics
+
+Build `runtime-test` for the device-free runtime checks. Run memory and thread
+checks in separate builds; no audio device or drawable backend is needed:
+
+```sh
+export ES_OUT=/absolute/external/runtime-checks
+python3 -B tools/bootstrap.py --profile runtime --tests --out "$ES_OUT"
+cmake --preset runtime-test
+cmake --build --preset runtime-test --config Release --parallel 2
+ctest --test-dir "$ES_OUT/runtime-test" -C Release -L '^r2-diagnostics$' --no-tests=error --output-on-failure
+cmake --preset runtime-asan
+cmake --build --preset runtime-asan --config RelWithDebInfo --parallel 2
+ctest --preset runtime-asan --no-tests=error --output-on-failure
+cmake --preset runtime-tsan
+cmake --build --preset runtime-tsan --config RelWithDebInfo --parallel 2
+ctest --preset runtime-tsan --no-tests=error --output-on-failure
+```
+
+The fault tests exercise 100 retirement/replacement cycles, allocation failures
+inside preparation, a coherent completed PCM prefix on a tick failure at both
+output rates, and two concurrent render owners while a third owner prepares and
+retires engines from separate input roots. Calls to one handle remain serialized.
+The sanitizer builds instrument the loader, facade, clock, solver, parser,
+generated parser and rebuilt Boost libraries. Leak checks stay active during
+actual ASan tests. A successful local Linux run does not qualify MSVC or macOS.
+`runtime-win-asan` selects the same runtime cases with native VS 2022 x64 ASan
+in RelWithDebInfo; its native execution remains pending. It does not provide
+UBSan or LeakSanitizer, and is separate from the desktop `win-asan` selection.
+
+The optimized static build also provides `engine-sim-runtime-bench` and a
+separate `engine-sim-runtime-probe`. Sanitized builds deliberately have no timing
+benchmark. The CTest `runtime-bench` label runs a short lawful-fixture check of
+counters, public/private PCM equality, isolated conversion and retained-memory
+observation. A full study uses a privately supplied resource tree:
+
+```sh
+python3 -B tools/runtime_bench.py \
+  --benchmark "$ES_OUT/runtime-test/bin/engine-sim-runtime-bench" \
+  --probe "$ES_OUT/runtime-test/bin/engine-sim-runtime-probe" \
+  --resources /absolute/private/resource-tree \
+  --compile-database "$ES_OUT/runtime-test/compile_commands.json" \
+  --out /absolute/external/runtime-costs --repetitions 10
+```
+
+The driver requires fresh external output. It records input and executable
+hashes, compilation commands, CPU identity/frequency/governor, affinity and raw
+per-process CSV/PCM. Kohler and LS use demand 0.1, ignition/starter on at 0.25 s,
+starter off at 1.25 s, warmup to 2 s, and measurement of [2, 2.25) s. It compares
+blocks of 1, 256 and 1024 at 44100/48000 Hz with one/two independent owners,
+alternates ordering, and reports quartiles, range, standard deviation and paired
+ratios. All owners rendezvous before measurement. CPU time is counted once per
+process; wall time per owner and process are distinct. Cold preparation means
+first preparation in a new process, with filesystem cache state uncontrolled.
+Reset and explicit unload/load are measured separately. No machine-wide CPU
+settings are changed. The first two permitted CPUs are used when affinity is
+available.
+
+An optional independently compiled historical adapter can be supplied with
+`--reference` and `--reference-provenance`. The latter is JSON containing the
+adapter's `reference_executable_sha256` and an affirmative `self_check_passed`,
+plus its source/archive identities and independent PCM replay proof. This is
+user-supplied provenance, not an authenticity certificate. The adapter accepts
+the same positional fields as the developer executable (entry, library, assets,
+output CSV, output rate, block, instances, pipeline, warm blocks, measured
+blocks, seed, schedule), waits for `GO` after printing `READY`, and writes the
+version-1 CSV and numbered F32 files. The driver rejects mismatched workload
+counts, silent or incomplete output. Without a reference it explicitly reports
+that historical comparison did not run. A legacy global RNG requires one process
+per old engine; the new runtime uses independent handles in one process. An old
+48 kHz adapter must identify its added consumer conversion. These scheduling,
+RNG, solver and cold-preparation differences prevent interpreting the whole
+old/new ratio as an isolated clock or RNG cost.
+
+Only the probe adds per-tick clocks and replacement ordinary C++ allocation
+counters. Linux static pthread lock calls are counted with linker wrapping;
+dynamic-library/internal allocator locks, aligned allocation and direct C
+allocation are outside that counter. Reports identify this coverage. Compare
+probe timing with optimized measurements and retain its timestamp-pair overhead;
+do not subtract it from tiny stages. Inclusive physics contains solver, fluid,
+combustion and exhaust work; native DSP is separately timed. Existing solver
+stage timers expose rolling 600-step averages with integer microsecond resolution,
+not whole-interval totals. Isolated 147/160 conversion arithmetic is checked
+against real PCM but is not the production pipeline's complete conversion cost.
+The public/private comparison uses the same production clock/model/DSP, controls
+and seed and requires bit-identical output. Their timing ratio includes normal
+facade work and measurement variance.
+
+Current costly sites are script compilation and exact-input identity checking
+in preparation/reset, solver matrix/constraint work in each physics tick,
+chamber/fluid loops, native synthesis with per-channel convolution, and per-host
+frame telemetry validation/copy. Preparation serializes parser access and may
+allocate or access files; perform it off the render owner. Rendering is bounded
+by requested frames, simulation frequency, channel topology and impulse lengths,
+but it is synchronous CPU work without a deadline guarantee or automatic
+load shedding. The 100-cycle RSS series describes allocator retention; peak RSS
+is a process high-water value and does not establish a leak. Separate leak and
+thread sanitizers establish their narrower checks. Keep raw failures and native
+platform limitations with each run rather than replacing them with a universal
+performance pass mark.

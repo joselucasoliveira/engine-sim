@@ -351,7 +351,6 @@ void PistonEngineSimulator::endFrame() {
     }
 
     const double frameTimestep = simulationSteps() * getTimestep();
-    const int cylinderCount = m_engine->getCylinderCount();
     for (int i = 0; i < m_engine->getIntakeCount(); ++i) {
         auto &flow = m_engine->getIntake(i)->m_flowRate;
         flow = frameTimestep > 0 ? flow / frameTimestep : 0;
@@ -398,7 +397,6 @@ void PistonEngineSimulator::produceExhaustEndpoint() {
     const double attenuation = std::min(std::abs(filteredEngineSpeed()), 40.0) / 40.0;
     const double attenuation_3 = attenuation * attenuation * attenuation;
 
-    const double timestep = getTimestep();
     const int cylinderCount = m_engine->getCylinderCount();
     for (int i = 0; i < cylinderCount; ++i) {
         Piston *piston = m_engine->getPiston(i);

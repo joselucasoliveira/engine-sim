@@ -160,7 +160,8 @@
       "inherits": "runtime",
       "cacheVariables": {
         "BUILD_TESTING": true,
-        "ENGINE_SIM_BUILD_RUNTIME_EXAMPLES": true
+        "ENGINE_SIM_BUILD_RUNTIME_EXAMPLES": true,
+        "CMAKE_EXPORT_COMPILE_COMMANDS": true
       }
     },
     {
@@ -194,6 +195,21 @@
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
         "CMAKE_EXPORT_COMPILE_COMMANDS": true,
         "ENGINE_SIM_SANITIZER": "thread"
+      }
+    },
+    {
+      "name": "runtime-win-asan",
+      "inherits": "runtime-test",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      },
+      "cacheVariables": {
+        "CMAKE_CONFIGURATION_TYPES": "RelWithDebInfo",
+        "ENGINE_SIM_SANITIZER": "address"
       }
     },
     {
@@ -299,6 +315,11 @@
       "name": "runtime-shared",
       "configurePreset": "runtime-shared",
       "configuration": "Release"
+    },
+    {
+      "name": "runtime-win-asan",
+      "configurePreset": "runtime-win-asan",
+      "configuration": "RelWithDebInfo"
     }
   ],
   "testPresets": [
@@ -459,6 +480,17 @@
       },
       "environment": {
         "TSAN_OPTIONS": "halt_on_error=1:exitcode=66"
+      }
+    },
+    {
+      "name": "runtime-win-asan",
+      "configurePreset": "runtime-win-asan",
+      "configuration": "RelWithDebInfo",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error"
       }
     }
   ]
