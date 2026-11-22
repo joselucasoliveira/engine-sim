@@ -76,9 +76,27 @@ Bootstrap/build `capture` and use its executable from `OUT/capture/bin`. `RESOUR
   --out "$ES_OUT/quick" --seed 1 --repetitions 1 --mode sync
 "$ES_OUT/capture/bin/engine-sim-capture" run --suite reference --resources "$RESOURCES" \
   --out "$ES_OUT/reference" --seed 1 --repetitions 30 --mode sync
+"$ES_OUT/capture/bin/engine-sim-capture" run --suite mechanics --resources "$RESOURCES" \
+  --out "$ES_OUT/mechanics" --seed 1 --repetitions 1 --mode sync
 "$ES_OUT/capture/bin/engine-sim-capture" calibrate --baseline "$ES_OUT/reference" --out "$ES_OUT/policy"
 "$ES_OUT/capture/bin/engine-sim-capture" compare --reference "$REFERENCE" \
   --candidate "$CANDIDATE" --policy "$POLICY" --out "$ES_OUT/comparison"
 ```
 
 Freeze reference bytes and policy before evaluating a change. Record source/build hashes, seed, scenario, inputs, sample format, block schedule and workload. Preserve startup, solver, synthesis, wall/CPU/RSS and queue metrics where observable. Calibration uses 20 runs and ten held-out runs. Do not widen a policy or turn an invalid parent's undefined output into a golden signal. Listening uses independently level-matched copies and remains separate from numerical integrity, device feeding and physical loopback evidence.
+
+The mechanics suite records the governed Kohler and direct-linkage LS from
+prepared rest through starter release, fixed demand and ignition-off coastdown.
+Its versioned files record crank speed (positive counterclockwise) and wrapped
+four-stroke cycle angle (increasing clockwise) at each completed tick, the order
+of cylinders that actually light, and queue counters after each 10 ms drain.
+Combustion events correspond to successful lights. A spark that fails to light
+the charge produces no event in this trace.
+
+Legacy trace block `b` ends at `(b + 1)/100` seconds. Tick `k` ends at `k/F`
+seconds for the script's simulation frequency `F`. Sample index `n` lies at
+`n/44100` seconds. Compare at matching rational times rather than aligning by
+per-block frame counts. A duration of `B/100` seconds has `441 * B` samples on
+the half-open grid. The legacy synthesizer may also emit the endpoint sample,
+which is retained in the raw reference. The seven reference cases and their
+original trace columns remain available through `--suite reference`.

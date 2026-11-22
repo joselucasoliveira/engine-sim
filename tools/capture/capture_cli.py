@@ -13,13 +13,15 @@ import sys
 import tempfile
 import time
 
-from capture_metrics import digest, phase_lag, summarize_signal, summarize_trace, write_wave
+from capture_metrics import digest, phase_lag, summarize_signal, summarize_trace, validate_mechanics, write_wave
 
 QUICK = ("FIR", "GAS", "TONE")
 REFERENCE = QUICK + ("KOHLER", "LS", "EJ25", "LOAD")
-SUITES = {"quick": QUICK, "reference": REFERENCE, "stress": ("QUEUE", "LIFECYCLE", "THREAD")}
+MECHANICS = ("MECHANICS-KOHLER", "MECHANICS-LS")
+SUITES = {"quick": QUICK, "reference": REFERENCE, "mechanics": MECHANICS,
+          "stress": ("QUEUE", "LIFECYCLE", "THREAD")}
 TRACE_COUNTS = {"GAS": 101, "TONE": 100, "TONE-QUIET": 100, "KOHLER": 1000, "LS": 1200, "EJ25": 1600}
-PCM_CASES = {"TONE", "TONE-QUIET", "KOHLER", "LS", "EJ25"}
+PCM_CASES = {"TONE", "TONE-QUIET", "KOHLER", "LS", "EJ25", *MECHANICS}
 NUM_CALIBRATION = 20
 NUM_HOLDOUT = 10
 
@@ -242,7 +244,9 @@ def validate_artifacts(directory, name, spectra, event):
         event["trace"] = summarize_trace(directory / "trace.csv")
         if event["trace"]["rows"] != TRACE_COUNTS[name]:
             raise ValueError("incomplete trace capture")
-    if name in {"KOHLER", "LS", "EJ25", "LOAD"}:
+    if name in MECHANICS:
+        event["mechanics"] = validate_mechanics(directory, name, event["signal"]["frames"])
+    if name in {"KOHLER", "LS", "EJ25", "LOAD", *MECHANICS}:
         graph = directory / "graph.tsv"
         if not graph.read_text().strip():
             raise ValueError("missing engine graph")
@@ -491,6 +495,12 @@ def main():
         scratch = tempfile.mkdtemp(prefix="engine-capture-stress-", dir=metadata.parent)
         print(f"stress artifacts: {scratch}", flush=True)
         options = arguments(["run", "--suite", "stress", "--resources", str(default_resources),
+                             "--out", scratch, "--seed", "1", "--repetitions", "1", "--mode", "sync"])
+        run_cases(options, binary, metadata, source)
+    elif argv == ["--mechanics-test"]:
+        scratch = tempfile.mkdtemp(prefix="engine-capture-mechanics-", dir=metadata.parent)
+        print(f"mechanics artifacts: {scratch}", flush=True)
+        options = arguments(["run", "--suite", "mechanics", "--resources", str(default_resources),
                              "--out", scratch, "--seed", "1", "--repetitions", "1", "--mode", "sync"])
         run_cases(options, binary, metadata, source)
     else:

@@ -218,3 +218,97 @@ def phase_lag(reference, candidate):
 
     best = max(offsets, key=lambda offset: (score(offset), -abs(offset)))
     return best
+
+
+def mechanical_rows(path):
+    with path.open(newline="", encoding="utf-8") as stream:
+        yield from csv.DictReader(stream)
+
+
+def require_mechanics(condition, message):
+    if not condition:
+        raise ValueError(message)
+
+
+def validate_mechanics(directory, name, frames):
+    frequency, cylinders = (30000, 2) if name == "MECHANICS-KOHLER" else (10000, 8)
+    ticks_per_block = frequency // 100
+    ticks = 4 * frequency
+    period = 4 * math.pi
+    previous_phase = travel = max_step_error = 0.0
+    powered_peak = coast_speed = final_speed = 0.0
+    fixed_plate_min = math.inf
+    fixed_plate_max = -math.inf
+    tick = -1
+    for tick, row in enumerate(mechanical_rows(directory / "mechanics-v1.csv")):
+        require_mechanics(int(row["tick"]) == tick, "missing or duplicate mechanical tick")
+        phase, speed, demand, plate = (float(row[key]) for key in
+                                      ("cycle_rad", "crank_rad_s", "demand", "plate_rad"))
+        require_mechanics(all(math.isfinite(value) for value in (phase, speed, demand, plate)),
+                f"nonfinite mechanics at tick {tick}")
+        block = (tick - 1) // ticks_per_block
+        starter = 25 <= block < 125
+        ignition = 25 <= block < 300
+        expected_demand = 0.0 if tick == 0 or block >= 300 else 0.10 if block < 150 else 0.35
+        require_mechanics(demand == expected_demand and int(row["starter"]) == starter
+                and int(row["ignition"]) == ignition, f"control schedule differs at tick {tick}")
+        require_mechanics(0 <= phase < period and 0 <= plate <= math.pi / 2, "angle outside its physical range")
+        if tick == 0:
+            require_mechanics(speed == 0.0, "prepared crank must be at rest")
+        else:
+            # Positive mechanical velocity is counterclockwise. Positive cycle
+            # phase runs clockwise. Compare across wraps at the native tick.
+            increment = math.remainder(phase - previous_phase, period)
+            error = abs(increment + speed / frequency)
+            require_mechanics(error <= 1e-10, f"phase and solved speed disagree at tick {tick}")
+            max_step_error = max(max_step_error, error)
+            travel += increment
+        previous_phase = phase
+        if 150 <= block < 300:
+            powered_peak = max(powered_peak, -speed)
+            fixed_plate_min = min(fixed_plate_min, plate)
+            fixed_plate_max = max(fixed_plate_max, plate)
+            if name == "MECHANICS-LS":
+                expected_plate = (1 - 0.996 * (1 - demand**2)) * math.pi / 2
+                require_mechanics(abs(plate - expected_plate) < 1e-12, "direct linkage disagrees with preset")
+        if tick == 3 * frequency:
+            coast_speed = -speed
+        final_speed = -speed
+    require_mechanics(tick == ticks and travel > period and powered_peak > 50,
+            "trace lacks sustained forward motion after starter release")
+    require_mechanics(coast_speed > 0 and final_speed < coast_speed, "ignition-off phase lacks coastdown")
+    if name == "MECHANICS-KOHLER":
+        require_mechanics(fixed_plate_max - fixed_plate_min > 1e-4,
+                "governed plate failed to move under constant demand")
+
+    previous_event = (-1, -1)
+    lit = set()
+    powered_count = 0
+    for row in mechanical_rows(directory / "combustion-v1.csv"):
+        event = tick_id, cylinder = int(row["tick"]), int(row["cylinder"])
+        require_mechanics(event > previous_event and 25 * ticks_per_block < tick_id <= 3 * frequency
+                and 0 <= cylinder < cylinders, "combustion event ordering or range differs")
+        previous_event = event
+        if tick_id > 125 * ticks_per_block:
+            lit.add(cylinder)
+            powered_count += 1
+    require_mechanics(len(lit) == cylinders, "all cylinders must actually light after starter release")
+
+    previous_frames = 0
+    block = 0
+    for block, row in enumerate(mechanical_rows(directory / "queues-v1.csv"), 1):
+        total = int(row["delivered"])
+        require_mechanics(int(row["tick"]) == block * ticks_per_block and abs(total - block * 441) <= 1,
+                "legacy 10 ms grid and delivered sample count disagree")
+        require_mechanics(total - previous_frames == int(row["block_frames"])
+                and total == int(row["rendered"]), "rendered and delivered frame counts disagree")
+        require_mechanics(int(row["pending_input"]) == int(row["block_frames"])
+                and all(int(row[key]) == 0 for key in
+                        ("queued_output", "dropped_input", "dropped_output", "zero_filled")),
+                "capture lost, padded or retained frames")
+        previous_frames = total
+    require_mechanics(block == 400 and previous_frames == frames, "incomplete mechanical capture")
+    return {"ticks": ticks, "frames": frames, "clockwise_travel_rad": travel,
+            "max_tick_phase_error_rad": max_step_error, "powered_peak_rad_s": powered_peak,
+            "post_starter_combustions": powered_count, "coast_start_rad_s": coast_speed,
+            "coast_end_rad_s": final_speed, "plate_range_rad": [fixed_plate_min, fixed_plate_max]}

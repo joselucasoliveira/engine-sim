@@ -16,6 +16,7 @@
 #include <iostream>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string_view>
 
@@ -235,8 +236,49 @@ struct CylinderRanges {
     Range pressure, moles, volume, manifold;
 };
 
-void runEngine(const fs::path &resources, const fs::path &out, std::string_view name, const fs::path &entryOverride) {
-    const auto scenario = selectEngine(name);
+struct MechanicsTrace {
+    explicit MechanicsTrace(const fs::path &out)
+        : shaft(openOutput(out / "mechanics-v1.csv")),
+          combustion(openOutput(out / "combustion-v1.csv")),
+          queues(openOutput(out / "queues-v1.csv")) {
+        shaft << "tick,cycle_rad,crank_rad_s,demand,plate_rad,starter,ignition\n";
+        combustion << "tick,cylinder\n";
+        queues << "tick,block_frames,rendered,delivered,pending_input,queued_output,"
+                  "dropped_input,dropped_output,zero_filled\n";
+    }
+
+    double controls(Engine &engine, Simulator &simulator, int block) const {
+        const double demand = block < 150 ? 0.10 : block < 300 ? 0.35 : 0.0;
+        simulator.m_starterMotor.m_enabled = block >= 25 && block < 125;
+        engine.getIgnitionModule()->m_enabled = block >= 25 && block < 300;
+        engine.setSpeedControl(demand);
+        return demand;
+    }
+
+    void tick(Engine &engine, const Simulator &simulator, int index, double demand) {
+        auto &crank = *engine.getOutputCrankshaft();
+        shaft << index << ',' << crank.getCycleAngle() << ',' << crank.m_body.v_theta
+              << ',' << demand << ',' << engine.getThrottlePlateAngle() << ','
+              << simulator.m_starterMotor.m_enabled << ',' << engine.getIgnitionModule()->m_enabled << '\n';
+        for (int cylinder = 0; cylinder < engine.getCylinderCount(); ++cylinder) {
+            if (engine.getChamber(cylinder)->popLitLastFrame()) combustion << index << ',' << cylinder << '\n';
+        }
+    }
+
+    void output(const Synthesizer &synth, int tick, int frames, std::size_t pending) {
+        const auto stats = synth.getBufferStatistics();
+        queues << tick << ',' << frames << ',' << stats.rendered << ',' << stats.delivered
+               << ',' << pending << ',' << stats.queuedOutput << ',' << stats.droppedInput
+               << ',' << stats.droppedOutput << ',' << stats.zeroFilledOutput << '\n';
+    }
+
+    std::ofstream shaft, combustion, queues;
+};
+
+void runEngine(const fs::path &resources, const fs::path &out, std::string_view name, const fs::path &entryOverride,
+               bool captureMechanics = false) {
+    auto scenario = selectEngine(name);
+    if (captureMechanics) scenario.blocks = 400;
     fs::path entry = resources / "assets/main.mr";
     if (!entryOverride.empty()) entry = entryOverride;
     else if (scenario.module != nullptr) {
@@ -310,17 +352,24 @@ void runEngine(const fs::path &resources, const fs::path &out, std::string_view 
     trace << "block,ticks,sum_ticks,sim_s,input_control,starter,ignition,rpm,rad_s,dyno_nm,manifold_pa,chamber0_pa,chamber0_mol,chamber0_m3,pcm_frames,"
           << "simulation_us,synthesis_us,throttle,dyno_enabled,dyno_target_rad_s,input_phase,pressure_min,pressure_max,"
           << "moles_min,moles_max,volume_min,volume_max,manifold_min,manifold_max,finite,input_queue_frames\n";
+    std::optional<MechanicsTrace> mechanics;
+    if (captureMechanics) {
+        mechanics.emplace(out);
+        mechanics->tick(*engine, *simulator, 0, 0.0);
+    }
     int totalTicks = 0;
     int totalFrames = 0;
     const int ticksPerBlock = scenario.frequency / 100;
     for (int block = 0; block < scenario.blocks; ++block) {
-        const double control = applySchedule(*engine, *simulator, scenario, block);
+        const double control = mechanics ? mechanics->controls(*engine, *simulator, block)
+                                         : applySchedule(*engine, *simulator, scenario, block);
         const auto simulationStart = Clock::now();
         engine_sim_capture::FrameAccess::begin(*simulator, ticksPerBlock);
         CylinderRanges ranges;
         int ticks = 0;
         while (simulator->simulateStep()) {
             ++ticks;
+            if (mechanics) mechanics->tick(*engine, *simulator, totalTicks + ticks, control);
             ranges.manifold.add(engine->getManifoldPressure());
             for (int cylinder = 0; cylinder < scenario.cylinders; ++cylinder) {
                 const auto &gas = engine->getChamber(cylinder)->m_system;
@@ -338,6 +387,7 @@ void runEngine(const fs::path &resources, const fs::path &out, std::string_view 
         const double synthesisTime = microsecondsSince(synthesisStart);
         totalTicks += ticks;
         totalFrames += frames;
+        if (mechanics) mechanics->output(synth, totalTicks, frames, inputWindow);
 
         const auto &gas = engine->getChamber(0)->m_system;
         const double rpm = engine->getRpm();
@@ -378,6 +428,9 @@ int captureWorker(int argc, char **argv) {
             [](const ImpulseResponse &response) { return readImpulse(fs::u8path(response.getFilename())); });
         else if (name == "KOHLER" || name == "LS" || name == "EJ25" || name == "LOAD") {
             runEngine(resources, out, name, argc == 7 ? fs::u8path(argv[6]) : fs::path());
+        }
+        else if (name == "MECHANICS-KOHLER" || name == "MECHANICS-LS") {
+            runEngine(resources, out, name.substr(std::string_view("MECHANICS-").size()), {}, true);
         }
         else throw std::runtime_error("unsupported capture workload " + std::string(name));
         recordProcessUsage(out);

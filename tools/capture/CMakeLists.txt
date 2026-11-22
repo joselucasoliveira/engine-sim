@@ -35,7 +35,12 @@ if (BUILD_TESTING)
         COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_BINARY_DIR}/capture_cli.py"
         "$<TARGET_FILE:engine-sim-capture>" "${CMAKE_CURRENT_BINARY_DIR}/build.txt"
         "${PROJECT_SOURCE_DIR}" "${PROJECT_SOURCE_DIR}" --quick-test)
-    set_tests_properties(CaptureComparator CaptureQuick PROPERTIES LABELS characterization TIMEOUT 90)
+    set_tests_properties(CaptureComparator CaptureQuick PROPERTIES LABELS "characterization;r2-oracle" TIMEOUT 90)
+    add_test(NAME CaptureMechanics
+        COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_BINARY_DIR}/capture_cli.py"
+        "$<TARGET_FILE:engine-sim-capture>" "${CMAKE_CURRENT_BINARY_DIR}/build.txt"
+        "${PROJECT_SOURCE_DIR}" "${PROJECT_SOURCE_DIR}" --mechanics-test)
+    set_tests_properties(CaptureMechanics PROPERTIES LABELS "characterization;r2-oracle" TIMEOUT 90)
     add_test(NAME CaptureStress
         COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_BINARY_DIR}/capture_cli.py"
         "$<TARGET_FILE:engine-sim-capture>" "${CMAKE_CURRENT_BINARY_DIR}/build.txt"
