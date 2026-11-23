@@ -17,6 +17,10 @@
 #include <condition_variable>
 #include <vector>
 
+namespace engine_sim {
+enum class ProcessingStatus : std::uint8_t;
+struct RuntimeTestAccess;
+}
 namespace engine_sim_capture { struct PrimitiveAccess; }
 namespace engine_sim::assembly { struct CapacityInspection; }
 
@@ -77,6 +81,8 @@ class Synthesizer {
         // the duration of the call and returns the native signed PCM sample.
         void beginSynchronous();
         int16_t renderNativeFrame(engine_sim::AcousticExcitation input);
+        engine_sim::ProcessingStatus renderNativeFrameChecked(engine_sim::AcousticExcitation input,
+                                                               std::int16_t &sample);
 
         // Queued synthesis is retained for the independent legacy adapter.
         void startAudioRenderingThread();
@@ -145,8 +151,10 @@ class Synthesizer {
     private:
         friend struct engine_sim_capture::PrimitiveAccess;
         friend struct engine_sim::assembly::CapacityInspection;
+        friend struct engine_sim::RuntimeTestAccess;
         float renderChannel(int channel, float input);
         int16_t finishSample(float signal, bool rejectNonfinite);
+        engine_sim::ProcessingStatus finishSampleChecked(float signal, bool rejectNonfinite, std::int16_t &sample);
         void applyAudioParameters();
         bool processBlock(bool waitForWork);
         std::vector<std::vector<float>> m_pendingInput;

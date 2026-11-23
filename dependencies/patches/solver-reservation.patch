@@ -1,32 +1,13 @@
---- a/src/matrix.cpp
-+++ b/src/matrix.cpp
-@@ -4,0 +5 @@
-+#include <memory>
-@@ -43,0 +45,3 @@
-+        std::unique_ptr<double[]> data(new double[(size_t)width * height]);
-+        std::unique_ptr<double *[]> matrix(new double *[height]);
+--- a/include/optimized_nsv_rigid_body_system.h
++++ b/include/optimized_nsv_rigid_body_system.h
+@@ -17,0 +18,4 @@
++            enum class ProcessResult { Ok, Force, Solver };
++            using ForceCheck = bool (*)(void *) noexcept;
++            ProcessResult processChecked(double dt, int steps, ForceCheck checkForces, void *context);
 +
-@@ -45,11 +49,4 @@
--
--        m_capacityWidth = (width > m_capacityWidth)
--            ? width
--            : m_capacityWidth;
--
--        m_capacityHeight = (height > m_capacityHeight)
--            ? height
--            : m_capacityHeight;
--
--        m_data = new double[(size_t)m_capacityWidth * m_capacityHeight];
--        m_matrix = new double *[m_capacityHeight];
-+        m_data = data.release();
-+        m_matrix = matrix.release();
-+        m_capacityWidth = width;
-+        m_capacityHeight = height;
-@@ -67,4 +63,0 @@
--    if (m_matrix == nullptr) {
--        return;
--    }
--
+@@ -22 +26 @@
+-            void processConstraints(
++            bool processConstraints(
 --- a/include/sparse_matrix.h
 +++ b/include/sparse_matrix.h
 @@ -6,0 +7 @@
@@ -56,3 +37,59 @@
 -
 @@ -68,0 +66 @@
 +                m_capacityHeight = 0;
+--- a/src/matrix.cpp
++++ b/src/matrix.cpp
+@@ -4,0 +5 @@
++#include <memory>
+@@ -43,0 +45,3 @@
++        std::unique_ptr<double[]> data(new double[(size_t)width * height]);
++        std::unique_ptr<double *[]> matrix(new double *[height]);
++
+@@ -45,11 +49,4 @@
+-
+-        m_capacityWidth = (width > m_capacityWidth)
+-            ? width
+-            : m_capacityWidth;
+-
+-        m_capacityHeight = (height > m_capacityHeight)
+-            ? height
+-            : m_capacityHeight;
+-
+-        m_data = new double[(size_t)m_capacityWidth * m_capacityHeight];
+-        m_matrix = new double *[m_capacityHeight];
++        m_data = data.release();
++        m_matrix = matrix.release();
++        m_capacityWidth = width;
++        m_capacityHeight = height;
+@@ -67,4 +63,0 @@
+-    if (m_matrix == nullptr) {
+-        return;
+-    }
+-
+--- a/src/optimized_nsv_rigid_body_system.cpp
++++ b/src/optimized_nsv_rigid_body_system.cpp
+@@ -36,0 +37,7 @@
++    const auto result = processChecked(dt, steps, nullptr, nullptr);
++    assert(result == ProcessResult::Ok);
++    (void)result;
++}
++
++atg_scs::OptimizedNsvRigidBodySystem::ProcessResult
++atg_scs::OptimizedNsvRigidBodySystem::processChecked(double dt, int steps, ForceCheck checkForces, void *context) {
+@@ -55,0 +63 @@
++            if (checkForces && !checkForces(context)) return ProcessResult::Force;
+@@ -58 +66 @@
+-            processConstraints(dt / steps, &evalTime, &solveTime);
++            if (!processConstraints(dt / steps, &evalTime, &solveTime)) return ProcessResult::Solver;
+@@ -83,0 +92 @@
++    return ProcessResult::Ok;
+@@ -113 +122 @@
+-void atg_scs::OptimizedNsvRigidBodySystem::processConstraints(
++bool atg_scs::OptimizedNsvRigidBodySystem::processConstraints(
+@@ -216 +225 @@
+-    assert(solvable);
++    if (!solvable) return false;
+@@ -272 +281,2 @@
+-}
++    return true;
++}

@@ -17,6 +17,12 @@ function(r3_probe_wrap target)
     endforeach()
 endfunction()
 
+if (TARGET engine-sim-fleet-fault-test)
+    r3_probe_wrap(engine-sim-fleet-fault-test)
+    target_include_directories(engine-sim-fleet-fault-test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+    target_compile_definitions(engine-sim-fleet-fault-test PRIVATE ES_R3_FAULT_OBSERVER)
+endif ()
+
 add_library(engine-sim-r3-probe-kernel-static STATIC kernel.cpp nested.cpp)
 add_library(engine-sim-r3-probe-nested SHARED nested.cpp)
 add_library(engine-sim-r3-probe-kernel-shared SHARED kernel.cpp)

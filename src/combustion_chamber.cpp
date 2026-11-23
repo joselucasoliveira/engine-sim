@@ -413,9 +413,8 @@ void CombustionChamber::apply(atg_scs::SystemState *system) {
     const double pressureDifferential = m_system.pressure() - m_crankcasePressure;
     const double force = -area * pressureDifferential;
 
-    if (std::isnan(force) || std::isinf(force)) {
-        assert(false);
-    }
+    m_forceFailed = !std::isfinite(force) || !std::isfinite(v_s);
+    if (m_forceFailed) return;
 
     constexpr double limit = 1E-3;
     const double abs_v_s = std::fmin(std::abs(v_s), limit);
@@ -425,12 +424,15 @@ void CombustionChamber::apply(atg_scs::SystemState *system) {
     const double F_fric = (v_s > 0)
         ? -F
         : F;
+    const double applied = force + F_fric;
+    m_forceFailed = !std::isfinite(applied);
+    if (m_forceFailed) return;
 
     system->applyForce(
         0.0,
         0.0,
-        (force + F_fric) * bank->getDx(),
-        (force + F_fric) * bank->getDy(),
+        applied * bank->getDx(),
+        applied * bank->getDy(),
         m_piston->m_body.index);
 }
 

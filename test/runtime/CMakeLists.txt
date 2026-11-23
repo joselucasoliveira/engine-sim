@@ -374,6 +374,16 @@ if (TARGET engine-sim-runtime AND TARGET engine-sim-runtime-json-private)
     add_test(NAME R3WorkspaceRollback COMMAND engine-sim-fleet-workspace-test rollback "${fleet_fixture}")
     set_tests_properties(R3WorkspaceCold R3WorkspaceRollback PROPERTIES LABELS r3-workspace TIMEOUT 120)
 
+    add_executable(engine-sim-fleet-fault-test fleet-fault/main.cpp)
+    target_link_libraries(engine-sim-fleet-fault-test PRIVATE
+        EngineSim::Runtime engine-sim-runtime-json-private engine-sim-runtime-backend)
+    target_compile_features(engine-sim-fleet-fault-test PRIVATE cxx_std_17)
+    engine_sim_diagnose(engine-sim-fleet-fault-test TRUE)
+    add_test(NAME R3FaultPrefixes COMMAND engine-sim-fleet-fault-test prefixes "${fleet_fixture}")
+    add_test(NAME R3FaultNoUnwind COMMAND engine-sim-fleet-fault-test no-unwind
+        "${fleet_fixture}" "${PROJECT_SOURCE_DIR}")
+    set_tests_properties(R3FaultPrefixes R3FaultNoUnwind PROPERTIES LABELS r3-fault TIMEOUT 120)
+
 endif ()
 
 if (TARGET engine-sim-runtime AND TARGET engine-sim-config-roundtrip AND ENGINE_SIM_BUILD_RUNTIME_EXAMPLES)

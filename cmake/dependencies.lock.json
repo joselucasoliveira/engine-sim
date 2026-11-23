@@ -21,15 +21,23 @@
   },
   "solver_overlay": {
     "revision": "e009f4ff1c9c4c5874e865e893cdb62e208fb2b3",
-    "patch_sha256": "6e4c78272fdc0fdc8c90eaf8cf80a52e510a4871e65c8d43e4cb23995bf2f2ac",
+    "patch_sha256": "369dffc917e8edc853292d4a73d24fdde0e45515035960f329ec75b0bfc2f262",
     "files": {
-      "src/matrix.cpp": {
-        "input_sha256": "fd29898be0e9c5e637c55400794dc30e650d39f5ca4f3e3c17df2f4e87ac8b90",
-        "output_sha256": "9f752aa86de20e36f3c97e1948c52e3fc9baf251e47bf3e77be3cbde1bdb00c1"
+      "include/optimized_nsv_rigid_body_system.h": {
+        "input_sha256": "f0856512a627a4e8edd395aa72550575098b04f14eecef6e46a9970120d0b8f3",
+        "output_sha256": "33817aa37e9e417111826a89f52b27c89202faddd3c51782c95a5407fff5e703"
       },
       "include/sparse_matrix.h": {
         "input_sha256": "46035ee30fd4593fc3724983dde9be6278ac34099420ab4f9b9ecff36eac57ad",
         "output_sha256": "0bd5b578da353ebf23b90029c7e6c63a4c7550d9d05c49ada4c367c2c2acfbfc"
+      },
+      "src/matrix.cpp": {
+        "input_sha256": "fd29898be0e9c5e637c55400794dc30e650d39f5ca4f3e3c17df2f4e87ac8b90",
+        "output_sha256": "9f752aa86de20e36f3c97e1948c52e3fc9baf251e47bf3e77be3cbde1bdb00c1"
+      },
+      "src/optimized_nsv_rigid_body_system.cpp": {
+        "input_sha256": "472b34a811edf6ee1041749b03e8cc308faa0d648374b0c3220da472df1d7bca",
+        "output_sha256": "b60642abb95d14c88e5efc268d7f10d22c6defa11e7e7b10166fe0dc0cb3090b"
       }
     }
   },

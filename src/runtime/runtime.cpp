@@ -38,7 +38,7 @@ Runtime::Session::Session(std::unique_ptr<EngineSession> value, Recipe source, s
     }
     if (!controls) controls = [this] { latch(); };
     pull = std::make_unique<PullEngine>(sim, prepared.session->synthesis, std::move(controls), profile, outputHz);
-    if (drive) pull->setTickCommands([this] { drive->beginTick(); }, [this] { drive->finishTick(); });
+    if (drive) pull->setCheckedTickCommands([this] { drive->beginTick(); }, [this] { return drive->finishTick(); });
 }
 Runtime::Session::~Session() = default;
 void Runtime::Session::latch() {
@@ -49,12 +49,12 @@ void Runtime::Session::latch() {
     if (drive) drive->latch(requested.driven_rpm, requested.load_nm);
     else static_cast<PistonEngineSimulator &>(sim).setExternalLoadNm(requested.load_nm);
 }
-es_telemetry Runtime::snapshot(const Session &session) const {
+ProcessingStatus Runtime::snapshot(const Session &session, es_telemetry &value) const noexcept {
     const auto &sim = *session.prepared.session->simulator;
     auto *engine = sim.getEngine();
     auto *crank = engine->getCrankshaft(0);
     const auto &counts = session.pull->counts();
-    es_telemetry value{};
+    value = {};
     value.size = sizeof(value); value.abi = ES_ABI_V2; value.state = ES_READY; value.mode = m_config.mode;
     value.output_hz = m_config.output_hz; value.simulation_hz = sim.getSimulationFrequency();
     value.cylinders = static_cast<std::uint32_t>(engine->getCylinderCount());
@@ -65,29 +65,41 @@ es_telemetry Runtime::snapshot(const Session &session) const {
     value.displacement_m3 = engine->getDisplacement();
     value.requested_load_nm = session.requested.load_nm;
     value.load_reaction_nm = static_cast<const PistonEngineSimulator &>(sim).getExternalLoadReactionNm();
-    if (!std::isfinite(value.load_reaction_nm)) throw SimulationFault("nonfinite external load reaction");
+    if (!std::isfinite(value.load_reaction_nm)) return ProcessingStatus::load_reaction;
     if (session.drive) {
         value.driven_limit_rpm = std::min(12000., units::toRpm(engine->getRedline()));
         value.load_reaction_nm = session.drive->loadReactionNm();
         value.drive_reaction_nm = session.drive->reactionNm();
         value.applied_driven_rpm = session.drive->appliedRpm();
     }
-    return value;
+    for (double field : {value.crank_rad_s, value.measured_rpm, value.cycle_rad, value.plate_angle_rad,
+            value.displacement_m3, value.load_reaction_nm, value.drive_reaction_nm, value.applied_driven_rpm}) {
+        if (!std::isfinite(field)) return ProcessingStatus::telemetry_nonfinite;
+    }
+    return ProcessingStatus::ok;
 }
 void Runtime::adoptSession(std::unique_ptr<EngineSession> engine, Recipe recipe, std::uint32_t mode, bool desktop,
         PullEngine::ControlLatch controls, const std::function<void()> &beforeCommit) {
     auto candidate = std::make_unique<Session>(std::move(engine), std::move(recipe), mode, desktop,
                                                m_config.output_hz, m_profile, std::move(controls));
-    const auto initial = snapshot(*candidate);
+    es_telemetry initial{};
+    requireProcessing(snapshot(*candidate, initial));
     if (beforeCommit) beforeCommit();
     m_session.swap(candidate);
     m_snapshot = initial;
+    m_processingFailure = ProcessingStatus::ok;
 }
 void Runtime::setControls(const es_controls &controls) noexcept {
     m_session->requested = controls;
     m_snapshot.requested_load_nm = controls.load_nm;
 }
 void Runtime::render(float *output, std::uint32_t frames, std::uint32_t &written) {
+    requireProcessing(renderChecked(output, frames, written));
+}
+
+ProcessingStatus Runtime::renderChecked(float *output, std::uint32_t frames, std::uint32_t &written) {
+    if (!m_session || m_snapshot.state != ES_READY) return ProcessingStatus::clock_faulted;
+    if (frames != 0 && !output) return ProcessingStatus::clock_span;
     if (m_profile == SampleClock::Profile::Public) {
         const auto &counts = m_session->pull->counts();
         const auto rate = m_config.output_hz;
@@ -98,24 +110,32 @@ void Runtime::render(float *output, std::uint32_t frames, std::uint32_t &written
         const auto extraNative = (std::uint64_t{frames} * SampleClock::NativeRate + nativePhase + rate - 1) / rate - (nativePhase != 0);
         const auto maximum = std::numeric_limits<std::uint64_t>::max();
         if (frames > maximum - counts.frames || extraNative > maximum - counts.nativeFrames || extraTicks > maximum - counts.ticks)
-            throw std::overflow_error("render: counter capacity exceeded");
+            return ProcessingStatus::render_capacity;
     }
     // The desktop's live numerical-rate profile is checked by SampleClock using
     // its retained physical phase; a lifetime N*currentF formula would be wrong.
     try {
         while (written < frames) {
             float sample;
-            m_session->pull->render(&sample, 1);
-            const auto next = snapshot(*m_session);
+            es_telemetry next{};
+            auto status = m_session->pull->renderChecked(&sample, 1);
+            if (status == ProcessingStatus::ok) status = snapshot(*m_session, next);
+            if (status != ProcessingStatus::ok) {
+                m_snapshot.state = ES_FAULTED;
+                m_processingFailure = status;
+                return status;
+            }
             output[written++] = sample;
             m_snapshot = next;
         }
     }
     catch (...) { m_snapshot.state = ES_FAULTED; throw; }
+    return ProcessingStatus::ok;
 }
 void Runtime::unload() noexcept {
     m_session.reset(); m_snapshot = {};
     m_snapshot.size = sizeof(m_snapshot); m_snapshot.abi = ES_ABI_V2;
     m_snapshot.state = ES_EMPTY; m_snapshot.mode = m_config.mode; m_snapshot.output_hz = m_config.output_hz;
+    m_processingFailure = ProcessingStatus::ok;
 }
 }

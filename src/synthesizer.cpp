@@ -426,7 +426,14 @@ float Synthesizer::renderChannel(int i, float input) {
 }
 
 int16_t Synthesizer::finishSample(float signal, bool rejectNonfinite) {
-    if (rejectNonfinite && !std::isfinite(signal)) throw engine_sim::SimulationFault("nonfinite mixed synthesis signal");
+    std::int16_t sample;
+    engine_sim::requireProcessing(finishSampleChecked(signal, rejectNonfinite, sample));
+    return sample;
+}
+
+engine_sim::ProcessingStatus Synthesizer::finishSampleChecked(float signal, bool rejectNonfinite, std::int16_t &sample) {
+    using Status = engine_sim::ProcessingStatus;
+    if (rejectNonfinite && !std::isfinite(signal)) return Status::native_mix;
     signal = m_antialiasing.fast_f(signal);
 
     m_levelingFilter.p_target = m_renderParameters.levelerTarget;
@@ -435,12 +442,13 @@ int16_t Synthesizer::finishSample(float signal, bool rejectNonfinite) {
         ++*m_nonFiniteCaptureCount;
     }
     if (!std::isfinite(v_leveled)) {
-        if (rejectNonfinite) throw engine_sim::SimulationFault("nonfinite signal before quantization");
-        return 0;
+        if (rejectNonfinite) return Status::quantization;
+        sample = 0;
     }
-    if (v_leveled >= INT16_MAX) return INT16_MAX;
-    if (v_leveled <= INT16_MIN) return INT16_MIN;
-    return static_cast<int16_t>(std::lround(v_leveled));
+    else if (v_leveled >= INT16_MAX) sample = INT16_MAX;
+    else if (v_leveled <= INT16_MIN) sample = INT16_MIN;
+    else sample = static_cast<int16_t>(std::lround(v_leveled));
+    return Status::ok;
 }
 
 void Synthesizer::applyAudioParameters() {
@@ -462,23 +470,33 @@ void Synthesizer::beginSynchronous() {
 }
 
 int16_t Synthesizer::renderNativeFrame(engine_sim::AcousticExcitation input) {
-    if (!m_direct) throw std::logic_error("Synchronous synthesis is not prepared");
+    std::int16_t sample;
+    engine_sim::requireProcessing(renderNativeFrameChecked(input, sample));
+    return sample;
+}
+
+engine_sim::ProcessingStatus Synthesizer::renderNativeFrameChecked(engine_sim::AcousticExcitation input,
+                                                                   std::int16_t &sample) {
+    using Status = engine_sim::ProcessingStatus;
+    if (!m_direct) return Status::native_unprepared;
     if (input.data == nullptr || input.count != static_cast<std::size_t>(m_inputChannelCount)) {
-        throw std::invalid_argument("Native synthesis requires one input per prepared channel");
+        return Status::native_span;
     }
     float signal = 0;
     for (int i = 0; i < m_inputChannelCount; ++i) {
-        const float value = static_cast<float>(input.data[i]);
-        if (!std::isfinite(value)) throw engine_sim::SimulationFault("nonfinite native synthesis input");
+        const double source = input.data[i];
+        if (!std::isfinite(source) || std::abs(source) > std::numeric_limits<float>::max()) return Status::native_input;
+        const float value = static_cast<float>(source);
         const float filtered = m_filters[i].antialiasing.fast_f(value);
-        if (!std::isfinite(filtered)) throw engine_sim::SimulationFault("nonfinite interpolated synthesis input");
+        if (!std::isfinite(filtered)) return Status::native_filter;
         const float channel = renderChannel(i, filtered);
-        if (!std::isfinite(channel)) throw engine_sim::SimulationFault("nonfinite synthesis channel");
+        if (!std::isfinite(channel)) return Status::native_channel;
         signal += channel;
     }
-    const auto sample = finishSample(signal, true);
+    const auto status = finishSampleChecked(signal, true, sample);
+    if (status != Status::ok) return status;
     ++m_renderedSamples;
-    return sample;
+    return Status::ok;
 }
 
 double Synthesizer::getLevelerGain() const {

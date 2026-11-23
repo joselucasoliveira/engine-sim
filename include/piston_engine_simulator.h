@@ -47,6 +47,7 @@ class PistonEngineSimulator : public Simulator {
         
     protected:
         engine_sim::AcousticExcitation produceExhaustEndpoint() override;
+        engine_sim::ProcessingStatus produceExhaustEndpointChecked(engine_sim::AcousticExcitation &excitation) override;
 
     protected:
         friend struct engine_sim::assembly::CapacityInspection;

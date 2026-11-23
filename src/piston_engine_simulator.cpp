@@ -371,6 +371,13 @@ void PistonEngineSimulator::destroy() {
 }
 
 engine_sim::AcousticExcitation PistonEngineSimulator::produceExhaustEndpoint() {
+    engine_sim::AcousticExcitation excitation;
+    engine_sim::requireProcessing(produceExhaustEndpointChecked(excitation));
+    return excitation;
+}
+
+engine_sim::ProcessingStatus PistonEngineSimulator::produceExhaustEndpointChecked(engine_sim::AcousticExcitation &excitation) {
+    using Status = engine_sim::ProcessingStatus;
     const int exhaustSystemCount = m_engine->getExhaustSystemCount();
     for (int i = 0; i < exhaustSystemCount; ++i) {
         m_exhaustFlowStagingBuffer[i] = 0;
@@ -396,15 +403,21 @@ engine_sim::AcousticExcitation PistonEngineSimulator::produceExhaustEndpoint() {
                 1.0 * (chamber->m_exhaustRunnerAndPrimary.pressure() - units::pressure(1.0, units::atm))
                 + 0.1 * chamber->m_exhaustRunnerAndPrimary.dynamicPressure(1.0, 0.0)
                 + 0.1 * chamber->m_exhaustRunnerAndPrimary.dynamicPressure(-1.0, 0.0));
+        if (!std::isfinite(exhaustFlow)) return Status::exhaust_endpoint;
 
         const double delayedExhaustPulse =
             m_delayFilters[i].fast_f(exhaustFlow);
 
         ExhaustSystem *exhaustSystem = head->getExhaustSystem(piston->getCylinderIndex());
-        m_exhaustFlowStagingBuffer[exhaustSystem->getIndex()] +=
+        const auto channel = exhaustSystem->getIndex();
+        if (channel < 0 || channel >= exhaustSystemCount) return Status::physics_no_progress;
+        auto &endpoint = m_exhaustFlowStagingBuffer[channel];
+        endpoint +=
             head->getSoundAttenuation(piston->getCylinderIndex())
             * (exhaustSystem->getAudioVolume() * delayedExhaustPulse / cylinderCount)
             * (1 / (exhaustLength * exhaustLength));
+        if (!std::isfinite(endpoint)) return Status::exhaust_endpoint;
     }
-    return {m_exhaustFlowStagingBuffer, static_cast<std::size_t>(exhaustSystemCount)};
+    excitation = {m_exhaustFlowStagingBuffer, static_cast<std::size_t>(exhaustSystemCount)};
+    return Status::ok;
 }

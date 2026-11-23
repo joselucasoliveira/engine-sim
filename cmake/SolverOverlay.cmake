@@ -23,7 +23,12 @@ function(engine_sim_project_solver output original)
 
     set(projected "${CMAKE_CURRENT_BINARY_DIR}/solver-overlay/engine_sim_solver")
     set(scratch "${CMAKE_CURRENT_BINARY_DIR}/solver-overlay-input")
-    set(patched src/matrix.cpp include/sparse_matrix.h)
+    string(JSON patch_count LENGTH "${engine_sim_dependency_lock}" solver_overlay files)
+    math(EXPR patch_last "${patch_count} - 1")
+    foreach (index RANGE 0 "${patch_last}")
+        string(JSON path MEMBER "${engine_sim_dependency_lock}" solver_overlay files "${index}")
+        list(APPEND patched "${path}")
+    endforeach ()
     file(GLOB_RECURSE sources LIST_DIRECTORIES FALSE RELATIVE "${original}"
         "${original}/include/*" "${original}/src/*")
     foreach (path IN LISTS sources)

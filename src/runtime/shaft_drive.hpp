@@ -47,25 +47,26 @@ public:
     DrivenShaft &operator=(const DrivenShaft &) = delete;
     void latch(double rpm, double load) noexcept { m_row.rpm = rpm; m_load.nm = rpm > 0 ? load : 0; }
     void beginTick() noexcept { m_beforeAngle = m_crank.m_body.theta; }
-    void finishTick() {
+    ProcessingStatus finishTick() noexcept {
         const double reaction = m_row.F_t[0][0] / units::Nm;
         if (!std::isfinite(reaction) || std::abs(reaction) >= TorqueLimit * (1 - 1e-12))
-            throw SimulationFault("driven shaft torque authority saturated");
+            return ProcessingStatus::drive_saturation;
         const double residual = units::toRpm(m_crank.m_body.v_theta) + m_row.rpm;
         if (!std::isfinite(residual) || std::abs(residual) > SpeedToleranceRpm)
-            throw SimulationFault("driven shaft signed speed residual exceeds 0.1 RPM");
+            return ProcessingStatus::drive_speed;
         const double dt = m_sim.getTimestep();
         const double phase = std::remainder(m_crank.m_body.theta - m_beforeAngle + units::rpm(m_row.rpm) * dt, 4 * constants::pi);
         if (!std::isfinite(phase) || std::abs(phase) > units::rpm(SpeedToleranceRpm) * dt + 1e-10)
-            throw SimulationFault("driven shaft integrated phase is inconsistent");
-        checkJoints();
+            return ProcessingStatus::drive_phase;
+        if (const auto status = checkJoints(); status != ProcessingStatus::ok) return status;
         m_reaction = reaction; m_appliedRpm = m_row.rpm; m_loadReaction = m_load.nm;
+        return ProcessingStatus::ok;
     }
     double reactionNm() const noexcept { return m_reaction; }
     double loadReactionNm() const noexcept { return m_loadReaction; }
     double appliedRpm() const noexcept { return m_appliedRpm; }
 private:
-    void checkJoints() const {
+    ProcessingStatus checkJoints() const noexcept {
         auto &engine = *m_sim.getEngine();
         double shortest = engine.getConnectingRod(0)->getLength();
         for (int i = 0; i < engine.getCylinderCount(); ++i) {
@@ -83,7 +84,7 @@ private:
             const double wall = std::abs((wx - bank.getX()) * std::sin(angle) - (wy - bank.getY()) * std::cos(angle));
             for (double error : {std::hypot(bx - jx, by - jy), std::hypot(sx - wx, sy - wy), wall}) {
                 if (!std::isfinite(error) || error > std::max(1e-9, JointFraction * rod.getLength()))
-                    throw SimulationFault("driven mechanism joint residual exceeds geometry budget");
+                    return ProcessingStatus::drive_joint;
             }
             shortest = std::min(shortest, rod.getLength());
         }
@@ -91,17 +92,18 @@ private:
             auto &crank = *engine.getCrankshaft(i);
             const double error = std::hypot(crank.m_body.p_x - crank.getPosX(), crank.m_body.p_y - crank.getPosY());
             if (!std::isfinite(error) || error > std::max(1e-9, JointFraction * shortest))
-                throw SimulationFault("driven crank center exceeds geometry budget");
+                return ProcessingStatus::drive_crank;
         }
         for (int i = 0; i < engine.getCylinderBankCount(); ++i) {
             auto &head = *engine.getHead(i);
             for (auto *cam : {head.getIntakeCamshaft(), head.getExhaustCamshaft()}) {
-                if (!cam) throw SimulationFault("driven cam is missing");
+                if (!cam) return ProcessingStatus::drive_cam_missing;
                 const double angle = cam->getAngle();
                 if (!std::isfinite(angle) || angle < 0 || angle >= 2 * constants::pi)
-                    throw SimulationFault("driven cam phase is invalid");
+                    return ProcessingStatus::drive_cam_phase;
             }
         }
+        return ProcessingStatus::ok;
     }
     Simulator &m_sim;
     Crankshaft &m_crank;

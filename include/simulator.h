@@ -2,6 +2,7 @@
 #define ATG_ENGINE_SIM_SIMULATOR_H
 
 #include "acoustic_excitation.h"
+#include "simulation_fault.h"
 #include "engine.h"
 #include "transmission.h"
 #include "vehicle.h"
@@ -41,6 +42,8 @@ public:
     // channel count returns an empty view without advancing any state.
     // The view remains valid until the next tick or teardown.
     engine_sim::AcousticExcitation advanceTick(std::size_t channelCapacity);
+    engine_sim::ProcessingStatus advanceTickChecked(std::size_t channelCapacity,
+                                                     engine_sim::AcousticExcitation &excitation);
     std::size_t acousticChannelCount() const;
     virtual double getTotalExhaustFlow() const;
     virtual void destroy();
@@ -76,13 +79,17 @@ public:
 protected:
     virtual void simulateStep_();
     virtual engine_sim::AcousticExcitation produceExhaustEndpoint() = 0;
+    virtual engine_sim::ProcessingStatus produceExhaustEndpointChecked(engine_sim::AcousticExcitation &excitation) {
+        excitation = produceExhaustEndpoint();
+        return engine_sim::ProcessingStatus::ok;
+    }
 
     atg_scs::RigidBodySystem *m_system;
 
 private:
     friend class engine_sim_test::LegacyFrame;
     friend class engine_sim::PullEngine;
-    void validateBodies() const;
+    bool bodiesAreFinite() const noexcept;
     void updateFilteredEngineSpeed(double dt);
 
 private:

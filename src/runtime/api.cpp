@@ -186,7 +186,17 @@ es_status ES_CALL es_render(es_runtime *rt, uint32_t frames, float *mono, uint32
         if (frames > ES_MAX_FRAMES || frames > capacity || capacity > std::numeric_limits<std::size_t>::max() / sizeof(float))
             return fail(error, ES_CAPACITY, "render: output capacity exceeded");
         if (rt->implementation.telemetry().state != ES_READY) return fail(error, ES_STATE, "render: ready engine required");
-        rt->implementation.render(mono, frames, *written); return ES_OK;
+        const auto status = rt->implementation.renderChecked(mono, frames, *written);
+        using ProcessingStatus = engine_sim::ProcessingStatus;
+        switch (status) {
+        case ProcessingStatus::ok: return ES_OK;
+        case ProcessingStatus::render_capacity:
+        case ProcessingStatus::clock_capacity: return fail(error, ES_CAPACITY, engine_sim::processingMessage(status));
+        case ProcessingStatus::clock_span:
+        case ProcessingStatus::native_span:
+        case ProcessingStatus::native_unprepared: return fail(error, ES_INTERNAL, engine_sim::processingMessage(status));
+        default: return fail(error, ES_RENDER_FAULT, engine_sim::processingMessage(status));
+        }
     });
 }
 es_status ES_CALL es_get_telemetry(const es_runtime *rt, es_telemetry *out, es_error *error) {

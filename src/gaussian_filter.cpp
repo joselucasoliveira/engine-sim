@@ -1,4 +1,5 @@
 #include "../include/gaussian_filter.h"
+#include <limits>
 
 #include <cmath>
 
@@ -34,6 +35,8 @@ double GaussianFilter::evaluate(double s) const {
     const double s_sample = actualSteps * std::abs(s) * m_inv_r;
     const double s0 = std::floor(s_sample);
     const double s1 = std::ceil(s_sample);
+    if (!std::isfinite(s_sample) || s0 < 0 || s1 >= m_cacheSteps)
+        return std::numeric_limits<double>::quiet_NaN();
     const double d = s_sample - s0;
 
     return

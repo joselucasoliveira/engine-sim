@@ -70,9 +70,25 @@ public:
     }
 
     void process(double dt, int steps) override {
+        engine_sim::requireProcessing(processSelected(dt, steps, nullptr));
+    }
+
+    engine_sim::ProcessingStatus processSelected(double dt, int steps, Engine *engine) {
+        using Status = engine_sim::ProcessingStatus;
         assert(!m_prepared || (getRigidBodyCount() == m_bodies && getConstraintCount() == m_objects &&
             getFullConstraintCount() == m_rows && getForceGeneratorCount() == m_generators && steps == 1));
-        OptimizedNsvRigidBodySystem::process(dt, steps);
+        const auto checkForces = [](void *context) noexcept {
+            const auto &source = *static_cast<const Engine *>(context);
+            for (int cylinder = 0; cylinder < source.getCylinderCount(); ++cylinder)
+                if (source.getChamber(cylinder)->forceFailed()) return false;
+            return true;
+        };
+        switch (processChecked(dt, steps, engine ? +checkForces : nullptr, engine)) {
+        case ProcessResult::Ok: return Status::ok;
+        case ProcessResult::Force: return Status::chamber_force;
+        case ProcessResult::Solver: return Status::solver_convergence;
+        }
+        return Status::solver_convergence;
     }
 
     bool fixedWorkspaceStartsClear() {
@@ -185,25 +201,41 @@ std::size_t Simulator::acousticChannelCount() const {
     return m_engine == nullptr ? 0 : static_cast<std::size_t>(m_engine->getExhaustSystemCount());
 }
 
-void Simulator::validateBodies() const {
+bool Simulator::bodiesAreFinite() const noexcept {
     for (int i = 0; i < m_system->getRigidBodyCount(); ++i) {
         const auto &body = *m_system->getRigidBody(i);
         if (!std::isfinite(body.theta) || !std::isfinite(body.v_theta)
             || !std::isfinite(body.p_x) || !std::isfinite(body.p_y)
             || !std::isfinite(body.v_x) || !std::isfinite(body.v_y)) {
-            throw engine_sim::SimulationFault("nonfinite mechanical state");
+            return false;
         }
     }
+    return true;
 }
 
 engine_sim::AcousticExcitation Simulator::advanceTick(std::size_t channelCapacity) {
+    engine_sim::AcousticExcitation excitation;
+    const auto status = advanceTickChecked(channelCapacity, excitation);
+    if (status != engine_sim::ProcessingStatus::physics_no_progress) engine_sim::requireProcessing(status);
+    return excitation;
+}
+
+engine_sim::ProcessingStatus Simulator::advanceTickChecked(std::size_t channelCapacity,
+                                                            engine_sim::AcousticExcitation &excitation) {
+    using Status = engine_sim::ProcessingStatus;
+    excitation = {};
     const auto channels = acousticChannelCount();
-    if (channels == 0 || channelCapacity < channels) return {};
+    if (channels == 0 || channelCapacity < channels || !m_system) return Status::physics_no_progress;
 
     const double timestep = getTimestep();
-    validateBodies();
-    m_system->process(timestep, 1);
-    validateBodies();
+    if (!bodiesAreFinite()) return Status::mechanical_state;
+    if (auto *selected = dynamic_cast<OwnedOptimizedSystem *>(m_system)) {
+        const auto status = selected->processSelected(timestep, 1, m_engine);
+        if (status != Status::ok) return status;
+    } else {
+        m_system->process(timestep, 1);
+    }
+    if (!bodiesAreFinite()) return Status::mechanical_state;
 
     m_engine->update(timestep);
     m_vehicle->update(timestep);
@@ -223,11 +255,11 @@ engine_sim::AcousticExcitation Simulator::advanceTick(std::size_t channelCapacit
 
     const double cycle = outputShaft->getCycleAngle();
     if (!std::isfinite(cycle) || cycle < 0 || cycle >= 4 * constants::pi) {
-        throw engine_sim::SimulationFault("invalid crank cycle angle");
+        return Status::crank_cycle;
     }
     const int index = static_cast<int>(std::floor(DynoTorqueSamples * cycle / (4 * constants::pi)));
     if (index < 0 || index >= DynoTorqueSamples) {
-        throw engine_sim::SimulationFault("crank cycle index outside torque history");
+        return Status::torque_history;
     }
     const int step = m_engine->isSpinningCw() ? 1 : -1;
     m_dynoTorqueSamples[index] = m_dyno.getTorque();
@@ -250,7 +282,7 @@ engine_sim::AcousticExcitation Simulator::advanceTick(std::size_t channelCapacit
     }
 
     simulateStep_();
-    return produceExhaustEndpoint();
+    return produceExhaustEndpointChecked(excitation);
 }
 
 double Simulator::getTotalExhaustFlow() const {

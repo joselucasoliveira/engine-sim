@@ -2,6 +2,7 @@
 #define ENGINE_SIM_SAMPLE_CLOCK_H
 
 #include "acoustic_excitation.h"
+#include "simulation_fault.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -24,6 +25,12 @@ public:
     // storage beyond the configured channel count is left untouched.
     virtual bool tick(double *endpoint, std::size_t capacity) = 0;
     virtual bool native(AcousticExcitation input, std::int16_t &sample) = 0;
+    virtual ProcessingStatus tickChecked(double *endpoint, std::size_t capacity) {
+        return tick(endpoint, capacity) ? ProcessingStatus::ok : ProcessingStatus::physics_no_progress;
+    }
+    virtual ProcessingStatus nativeChecked(AcousticExcitation input, std::int16_t &sample) {
+        return native(input, sample) ? ProcessingStatus::ok : ProcessingStatus::native_no_progress;
+    }
 };
 
 // Private C++ backend. A source tick and a native sample each run exactly once.
@@ -37,6 +44,7 @@ public:
     SampleClock(const SampleClock &) = delete;
     SampleClock &operator=(const SampleClock &) = delete;
     void render(float *output, std::size_t count);
+    ProcessingStatus renderChecked(float *output, std::size_t count);
     const ClockCounts &counts() const { return m_counts; }
     std::size_t lastWritten() const { return m_written; }
     bool faulted() const { return m_faulted; }
@@ -45,18 +53,18 @@ public:
 
 private:
     friend struct ClockTestAccess;
-    void validateSpan(float *output, std::size_t count) const;
-    void interval(float *output);
-    void convertedInterval(float *output);
-    std::int16_t nativeFrame(double fraction);
-    void convertedNative();
-    void finishTick();
+    ProcessingStatus validateSpan(float *output, std::size_t count) const noexcept;
+    ProcessingStatus interval(float *output);
+    ProcessingStatus convertedInterval(float *output);
+    ProcessingStatus nativeFrame(double fraction, std::int16_t &sample);
+    ProcessingStatus convertedNative();
+    ProcessingStatus finishTick();
     void startTick();
     double position() const;
     long double precisePosition() const;
-    std::uint32_t advanceFixed();
-    std::uint32_t advanceVariable();
-    std::uint32_t changeFrequencyWithinInterval(long double remaining);
+    ProcessingStatus advanceFixed(std::uint32_t &ticks);
+    ProcessingStatus advanceVariable(std::uint32_t &ticks);
+    ProcessingStatus changeFrequencyWithinInterval(long double remaining, std::uint32_t &ticks);
     std::uint32_t m_frequency;
     std::uint32_t m_outputRate;
     std::uint32_t m_phase = 0;

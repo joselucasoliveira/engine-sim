@@ -20,6 +20,8 @@ public:
     explicit Runtime(es_config config, SampleClock::Profile profile = SampleClock::Profile::Public) noexcept;
     void setControls(const es_controls &controls) noexcept;
     void render(float *output, std::uint32_t frames, std::uint32_t &written);
+    ProcessingStatus renderChecked(float *output, std::uint32_t frames, std::uint32_t &written);
+    ProcessingStatus processingFailure() const noexcept { return m_processingFailure; }
     void unload() noexcept;
     const es_telemetry &telemetry() const noexcept { return m_snapshot; }
 private:
@@ -45,10 +47,11 @@ private:
         std::unique_ptr<DrivenShaft> drive;
         std::unique_ptr<PullEngine> pull;
     };
-    es_telemetry snapshot(const Session &session) const;
+    ProcessingStatus snapshot(const Session &session, es_telemetry &value) const noexcept;
     es_config m_config;
     SampleClock::Profile m_profile;
     es_telemetry m_snapshot{};
+    ProcessingStatus m_processingFailure = ProcessingStatus::ok;
     std::unique_ptr<Session> m_session;
 };
 }

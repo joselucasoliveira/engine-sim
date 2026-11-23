@@ -53,6 +53,7 @@ class CombustionChamber : public atg_scs::ForceGenerator {
         void setEngine(Engine *engine) { m_engine = engine; }
         void setRandomSeed(std::uint64_t seed, std::uint32_t cylinder) { m_random.reset(seed, 1, cylinder); }
         virtual void apply(atg_scs::SystemState *system);
+        bool forceFailed() const noexcept { return m_forceFailed; }
 
         CylinderHead *getCylinderHead() { return m_head; }
         const CylinderHead *getCylinderHead() const { return m_head; }
@@ -118,6 +119,7 @@ class CombustionChamber : public atg_scs::ForceGenerator {
         static constexpr int StateSamples = 256;
 
         bool m_litLastFrame;
+        bool m_forceFailed = false;
 
         Piston *m_piston;
         CylinderHead *m_head;

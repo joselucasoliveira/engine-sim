@@ -28,12 +28,21 @@ void PullEngine::latch() {
 }
 
 bool PullEngine::tick(double *endpoint, std::size_t capacity) {
+    const auto status = tickChecked(endpoint, capacity);
+    if (status == ProcessingStatus::physics_no_progress) return false;
+    requireProcessing(status);
+    return true;
+}
+
+ProcessingStatus PullEngine::tickChecked(double *endpoint, std::size_t capacity) {
     const auto count = m_simulator.acousticChannelCount();
-    if (endpoint == nullptr || capacity < count) return false;
+    if (endpoint == nullptr || capacity < count) return ProcessingStatus::physics_no_progress;
     m_simulator.setSimulationFrequency(static_cast<int>(m_clock.tickFrequency()));
     if (m_beforeTick) m_beforeTick();
-    const auto excitation = m_simulator.advanceTick(capacity);
-    if (excitation.data == nullptr || excitation.count != count) return false;
+    AcousticExcitation excitation;
+    const auto status = m_simulator.advanceTickChecked(capacity, excitation);
+    if (status != ProcessingStatus::ok) return status;
+    if (excitation.data == nullptr || excitation.count != count) return ProcessingStatus::physics_no_progress;
     const auto dt = m_simulator.getTimestep();
     for (std::size_t i = 0; i < m_flowTotals.size(); ++i) {
         m_simulator.getEngine()->getIntake(static_cast<int>(i))->m_flowRate /= dt;
@@ -48,12 +57,16 @@ bool PullEngine::tick(double *endpoint, std::size_t capacity) {
     std::copy_n(excitation.data, excitation.count, endpoint);
     if (m_observer) m_observer(m_simulator);
     if (m_afterTick) m_afterTick();
-    return true;
+    return m_checkedAfterTick ? m_checkedAfterTick() : ProcessingStatus::ok;
 }
 
 bool PullEngine::native(AcousticExcitation input, std::int16_t &sample) {
-    sample = m_synthesis.renderNativeFrame(input);
+    requireProcessing(nativeChecked(input, sample));
     return true;
+}
+
+ProcessingStatus PullEngine::nativeChecked(AcousticExcitation input, std::int16_t &sample) {
+    return m_synthesis.renderNativeFrameChecked(input, sample);
 }
 
 void PullEngine::beginPresentation() {

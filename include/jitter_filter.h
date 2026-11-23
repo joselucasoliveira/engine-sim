@@ -7,6 +7,7 @@
 #include "utilities.h"
 
 #include "random_stream.h"
+#include <limits>
 
 class JitterFilter : public Filter {
 public:
@@ -30,6 +31,7 @@ public:
 
         const float position = static_cast<float>(m_random.uniform() * (m_maxJitter - 1));
         const float s = m_noiseFilter.fast_f(position * m_jitterScale * jitterScale);
+        if (!std::isfinite(s)) return std::numeric_limits<float>::quiet_NaN();
         const float s_i_0 = ::clamp(std::floor(s), 0.0f, static_cast<float>(m_maxJitter - 1));
         const float s_i_1 = ::clamp(std::ceil(s), 0.0f, static_cast<float>(m_maxJitter - 1));
 
