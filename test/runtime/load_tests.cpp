@@ -1,4 +1,3 @@
-#include "legacy_runtime.hpp"
 #include "runtime.hpp"
 #include "piston_engine_simulator.h"
 #include "checked_solver.h"
@@ -10,6 +9,9 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
+#include <locale>
+#include <sstream>
 #include <iostream>
 #include <limits>
 #include <vector>
@@ -57,7 +59,7 @@ protected:
     Handle prepare(std::uint32_t rate=44100,std::uint32_t frequency=10000,fs::path path={}) {
         if(path.empty())path=root;es_config c{};es_error e{};checked(es_config_init(ES_ABI_V2,sizeof(c),&c,&e),e);c.output_hz=rate;c.simulation_hz=frequency;
         es_runtime *raw=nullptr;checked(es_create(&c,&raw,&e),e);Handle r(raw,es_destroy);
-        checked(engine_sim::legacy_runtime::load(raw,(path/"main.mr").u8string().c_str(),(path/"library").u8string().c_str(),path.u8string().c_str(),&e),e);return r;
+        checked(es_load_json_file(raw,(path/"main.json").u8string().c_str(),path.u8string().c_str(),nullptr,&e),e);return r;
     }
 };
 TEST_F(LoadEngine, RequestedValueIsImmediateButReactionUsesTheEligibleCompletedTick) {
@@ -127,17 +129,28 @@ TEST_F(LoadEngine, LoadedTimelineResetAndEveryPartitionReturnIdenticalPcmAndTele
             for(std::size_t i=0;i+1<edges.size();++i) {controls(r,vector(i%3?1.:0.,i%2?.3:.2,true,i<6));auto pcm=render(r,edges[i+1]-edges[i],part);all.insert(all.end(),pcm.begin(),pcm.end());}return all;
         };
         const auto expected=run(a.get(),65536);EXPECT_EQ(run(b.get(),1),expected);const auto ta=telemetry(a.get()),tb=telemetry(b.get());EXPECT_EQ(std::memcmp(&ta,&tb,sizeof(ta)),0);
-        es_error e{};checked(engine_sim::legacy_runtime::reset(b.get(),&e),e);EXPECT_EQ(telemetry(b.get()).requested_load_nm,0);EXPECT_EQ(telemetry(b.get()).load_reaction_nm,0);EXPECT_EQ(run(b.get(),503),expected);
+        es_error e{};checked(es_reset(b.get(),&e),e);EXPECT_EQ(telemetry(b.get()).requested_load_nm,0);EXPECT_EQ(telemetry(b.get()).load_reaction_nm,0);EXPECT_EQ(run(b.get(),503),expected);
     }
 }
 TEST_F(LoadEngine, DemandPlateAndGovernorKeepTheirModelSemanticsWithAndWithoutLoad) {
     for(double load:{0.,8.}) {
         auto direct=prepare(44100,44100);controls(direct.get(),vector(load,.3,false,true));render(direct.get(),1);auto &d=RuntimeTestAccess::simulator(*direct);
         EXPECT_DOUBLE_EQ(d.getEngine()->getThrottle(),.7);EXPECT_DOUBLE_EQ(telemetry(direct.get()).plate_angle_rad,(1-.95*.7)*constants::pi/2);
-        const auto governedRoot=fs::current_path()/(load?"governed-loaded":"governed-free");fs::create_directories(governedRoot);fs::copy(root,governedRoot,fs::copy_options::recursive|fs::copy_options::overwrite_existing);
-        std::ifstream input(governedRoot/"main.mr",std::ios::binary|std::ios::ate);ASSERT_TRUE(input);std::string text(static_cast<std::size_t>(input.tellg()),'\0');input.seekg(0);ASSERT_TRUE(input.read(text.data(),text.size()));input.close();
-        const std::string from="throttle_gamma: 1.0",to="throttle: governor(min_speed: 100 * u.rpm, max_speed: 1200 * u.rpm, min_v: -2.0, max_v: 2.0, k_s: 0.001, k_d: 10.0, gamma: 1.0)";
-        const auto at=text.find(from);ASSERT_NE(at,std::string::npos);text.replace(at,from.size(),to);std::ofstream output(governedRoot/"main.mr",std::ios::binary);output<<text;output.close();ASSERT_TRUE(output);
+        const auto governedRoot=fs::current_path()/(load?"governed-loaded":"governed-free");fs::create_directories(governedRoot);fs::copy_file(root/"impulse.wav",governedRoot/"impulse.wav",fs::copy_options::overwrite_existing);
+        std::ifstream input(root/"main.json",std::ios::binary|std::ios::ate);ASSERT_TRUE(input);std::string text(static_cast<std::size_t>(input.tellg()),'\0');input.seekg(0);ASSERT_TRUE(input.read(text.data(),text.size()));input.close();
+        const std::string directThrottle = R"({"gamma":1.0,"id":"throttle-000001","kind":"direct"})";
+        std::ostringstream replacement;
+        replacement.imbue(std::locale::classic());
+        replacement << std::setprecision(17) << R"({"id":"throttle-000001","kind":"governor","min_speed":)"
+                    << units::rpm(100) << R"(,"max_speed":)" << units::rpm(1200)
+                    << R"(,"min_v":-2.0,"max_v":2.0,"k_s":0.001,"k_d":10.0,"gamma":1.0})";
+        const auto at = text.find(directThrottle);
+        ASSERT_NE(at,std::string::npos);
+        text.replace(at,directThrottle.size(),replacement.str());
+        std::ofstream output(governedRoot/"main.json",std::ios::binary);
+        output << text;
+        output.close();
+        ASSERT_TRUE(output);
         auto governed=prepare(44100,44100,governedRoot);auto &sim=RuntimeTestAccess::simulator(*governed);double plate=1,velocity=0,demand=.3;std::size_t checkedTicks=0;
         RuntimeTestAccess::pull(*governed).setTickObserver([&](const Simulator &){
             const double speed=sim.getEngine()->getSpeed(),target=units::rpm(100*(1-demand)+1200*demand),dt=sim.getTimestep();

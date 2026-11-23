@@ -1,4 +1,3 @@
-#include "legacy_runtime.hpp"
 #include "runtime.hpp"
 #include "simulation_fault.h"
 #include <gtest/gtest.h>
@@ -101,16 +100,18 @@ protected:
         const auto base = fs::current_path() / fs::u8path(std::string(testing::UnitTest::GetInstance()->current_test_info()->name()) + u8" espaço Ω");
         for (unsigned i = 0; i < roots.size(); ++i) {
             roots[i] = base / std::to_string(i); fs::create_directories(roots[i]);
-            fs::copy(fs::u8path(source) / "examples/runtime/fixture", roots[i], fs::copy_options::recursive | fs::copy_options::overwrite_existing);
-            auto script = read(roots[i] / "main.mr");
-            replace(script, "noise: 0.0, jitter: 0.0", "noise: 0.25, jitter: 0.2");
-            replace(script, "burning_efficiency_randomness: 0.0", "burning_efficiency_randomness: 0.15");
-            if (i) { replace(script, "throw: 0.040", "throw: 0.035"); replace(script, "simulation_frequency: 10000", "simulation_frequency: 20000"); }
-            write(roots[i] / "main.mr", script); write(roots[i] / "broken.mr", "broken (\n");
+            const auto fixture = fs::u8path(source) / "examples/runtime/fixture";
+            for (const auto *file : {"main.json", "impulse.wav"})
+                fs::copy_file(fixture / file, roots[i] / file, fs::copy_options::overwrite_existing);
+            auto document = read(roots[i] / "main.json");
+            replace(document, "\"jitter\":0.0", "\"jitter\":0.2"); replace(document, "\"noise\":0.0", "\"noise\":0.25");
+            replace(document, "\"burning_efficiency_randomness\":0.0", "\"burning_efficiency_randomness\":0.15");
+            if (i) { replace(document, "\"throw\":0.04", "\"throw\":0.035"); replace(document, "\"simulation_frequency\":10000.0", "\"simulation_frequency\":20000.0"); }
+            write(roots[i] / "main.json", document); write(roots[i] / "broken.json", "broken (\n");
         }
     }
-    es_status load(es_runtime *handle, unsigned index, es_error &error, const char *entry = "main.mr") {
-        return engine_sim::legacy_runtime::load(handle, (roots[index] / entry).u8string().c_str(), (roots[index] / "library").u8string().c_str(), roots[index].u8string().c_str(), &error);
+    es_status load(es_runtime *handle, unsigned index, es_error &error, const char *entry = "main.json") {
+        return es_load_json_file(handle, (roots[index] / entry).u8string().c_str(), roots[index].u8string().c_str(), nullptr, &error);
     }
     Handle prepare(unsigned index = 0, std::uint64_t seed = 17, unsigned rate = 44100) {
         es_config config{}; es_error error{}; checked(es_config_init(ES_ABI_V2, sizeof(config), &config, &error), error);
@@ -127,10 +128,10 @@ TEST_F(RuntimeDiagnostics, HundredRetirementCyclesKeepDefaultResetAndFailedRepla
         auto active = prepare(index, cycle, rate), reference = prepare(index, cycle, rate);
         controls(active.get()); controls(reference.get()); same(render(active.get(), 257), render(reference.get(), 257, 1));
         const auto before = snapshot(active.get()); es_error error{};
-        EXPECT_EQ(load(active.get(), index, error, "broken.mr"), engine_sim::legacy_runtime::script_error) << error.message;
+        EXPECT_EQ(load(active.get(), index, error, "broken.json"), ES_CONFIG) << error.message;
         const auto after = snapshot(active.get()); EXPECT_EQ(std::memcmp(&before, &after, sizeof(before)), 0);
         same(render(active.get(), 64), render(reference.get(), 64, 7));
-        checked(engine_sim::legacy_runtime::reset(active.get(), &error), error); checked(engine_sim::legacy_runtime::reset(reference.get(), &error), error);
+        checked(es_reset(active.get(), &error), error); checked(es_reset(reference.get(), &error), error);
         EXPECT_EQ(snapshot(active.get()).frames, 0U); same(render(active.get(), 64), render(reference.get(), 64));
         if (cycle % 3 == 0) {
             engine_sim::RuntimeTestAccess::pull(*active).setTickObserver([](const Simulator &) { throw engine_sim::SimulationFault("Diagnostic retirement fault"); });
@@ -138,20 +139,20 @@ TEST_F(RuntimeDiagnostics, HundredRetirementCyclesKeepDefaultResetAndFailedRepla
             EXPECT_EQ(es_render(active.get(), output.size(), output.data(), output.size(), &written, &error), ES_RENDER_FAULT);
             EXPECT_LT(written, output.size()); EXPECT_EQ(snapshot(active.get()).state, ES_FAULTED);
             EXPECT_TRUE(std::all_of(output.begin() + written, output.end(), [](float value) { return value == 42; }));
-            checked(engine_sim::legacy_runtime::reset(active.get(), &error), error); EXPECT_EQ(snapshot(active.get()).frames, 0U);
+            checked(es_reset(active.get(), &error), error); EXPECT_EQ(snapshot(active.get()).frames, 0U);
         }
         checked(es_unload(active.get(), &error), error); checked(es_unload(active.get(), &error), error);
-        EXPECT_EQ(snapshot(active.get()).state, ES_EMPTY); EXPECT_EQ(engine_sim::legacy_runtime::reset(active.get(), &error), ES_STATE);
+        EXPECT_EQ(snapshot(active.get()).state, ES_EMPTY); EXPECT_EQ(es_reset(active.get(), &error), ES_STATE);
         checked(load(active.get(), index, error), error); EXPECT_EQ(snapshot(active.get()).frames, 0U);
     }
 }
 TEST_F(RuntimeDiagnostics, LibraryPreparationAllocationFailurePreservesActiveContinuation) {
     auto active = prepare(), reference = prepare(); controls(active.get()); controls(reference.get());
     same(render(active.get(), 257), render(reference.get(), 257));
-    const auto entry = (roots[1] / "main.mr").u8string(), library = (roots[1] / "library").u8string(), assets = roots[1].u8string();
+    const auto entry = (roots[1] / "main.json").u8string(), assets = roots[1].u8string();
     for (long budget : {0L, 1L, 2L, 7L, 31L}) {
         const auto before = snapshot(active.get()); const auto failures = failedAllocations; es_error error{}; es_status status;
-        { AllocationFailure fail(budget); status = engine_sim::legacy_runtime::load(active.get(), entry.c_str(), library.c_str(), assets.c_str(), &error); }
+        { AllocationFailure fail(budget); status = es_load_json_file(active.get(), entry.c_str(), assets.c_str(), nullptr, &error); }
         ASSERT_GT(failedAllocations, failures); EXPECT_EQ(status, ES_NO_MEMORY) << error.message;
         EXPECT_NE(error.message[0], '\0'); EXPECT_NE(std::memchr(error.message, 0, sizeof(error.message)), nullptr);
         const auto after = snapshot(active.get()); EXPECT_EQ(std::memcmp(&before, &after, sizeof(before)), 0);
@@ -177,7 +178,7 @@ TEST_F(RuntimeDiagnostics, AllocationFaultCommitsOnlyCompleteIntervalsAtBothOutp
         EXPECT_EQ(state.ticks, std::uint64_t(written) * 10000 / rate);
         EXPECT_EQ(state.native_frames, (std::uint64_t(written) * 44100 + rate - 1) / rate);
         written = 99; EXPECT_EQ(es_render(active.get(), 0, nullptr, 0, &written, &error), ES_STATE); EXPECT_EQ(written, 0U);
-        checked(engine_sim::legacy_runtime::reset(active.get(), &error), error); auto fresh = prepare(0, 81, rate);
+        checked(es_reset(active.get(), &error), error); auto fresh = prepare(0, 81, rate);
         same(render(active.get(), 441), render(fresh.get(), 441, 7));
     }
 }

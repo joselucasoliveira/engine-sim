@@ -23,6 +23,5 @@ struct PreparedEngine {
 
 PreparedEngine prepareEngine(const es_script::PreparationContext &recipe, PreparationConfig config = {},
     const std::vector<es_script::ScriptInput> *expectedInputs = nullptr);
-PreparedEngine prepareDesktopEngine(EngineDefinition definition);
 }
 #endif

@@ -91,7 +91,7 @@ if (BUILD_TESTING)
 endif ()
 
 add_subdirectory(modules/config)
-if (BUILD_TESTING OR ENGINE_SIM_BUILD_RUNTIME OR ENGINE_SIM_BUILD_LEGACY_CONVERTER OR ENGINE_SIM_BUILD_DESKTOP)
+if (BUILD_TESTING OR ENGINE_SIM_BUILD_RUNTIME OR ENGINE_SIM_BUILD_LEGACY_CONVERTER OR ENGINE_SIM_BUILD_DESKTOP OR ENGINE_SIM_BUILD_CAPTURE)
     add_subdirectory(modules/json)
 endif ()
 if (BUILD_TESTING)
@@ -164,7 +164,7 @@ add_library(engine-sim STATIC
 find_package(Threads REQUIRED)
 target_link_libraries(engine-sim PUBLIC simple-2d-constraint-solver PRIVATE Threads::Threads)
 target_compile_features(engine-sim PUBLIC cxx_std_17)
-if (BUILD_TESTING OR ENGINE_SIM_BUILD_DESKTOP OR ENGINE_SIM_BUILD_RUNTIME)
+if (BUILD_TESTING OR ENGINE_SIM_BUILD_DESKTOP OR ENGINE_SIM_BUILD_RUNTIME OR ENGINE_SIM_BUILD_CAPTURE)
     add_subdirectory(modules/assembly)
 endif ()
 if (BUILD_TESTING)
@@ -258,17 +258,7 @@ if (ENGINE_SIM_BUILD_RUNTIME OR ENGINE_SIM_BUILD_DESKTOP OR ENGINE_SIM_BUILD_CAP
     engine_sim_diagnose(engine-sim-runtime-backend TRUE)
 endif ()
 
-if (PIRANHA_ENABLED AND TARGET engine-sim-runtime-backend AND
-        (ENGINE_SIM_BUILD_DESKTOP OR ENGINE_SIM_BUILD_CAPTURE OR BUILD_TESTING))
-    add_library(engine-sim-legacy-runtime STATIC src/runtime/legacy_runtime.cpp)
-    target_include_directories(engine-sim-legacy-runtime PUBLIC "${PROJECT_SOURCE_DIR}/src/runtime")
-    target_link_libraries(engine-sim-legacy-runtime PUBLIC engine-sim-script-interpreter engine-sim-runtime-backend)
-    target_compile_features(engine-sim-legacy-runtime PRIVATE cxx_std_17)
-    engine_sim_diagnose(engine-sim-legacy-runtime TRUE)
-endif ()
-
-if (TARGET engine-sim-runtime-backend AND TARGET engine-sim-assembly AND
-        (BUILD_TESTING OR ENGINE_SIM_BUILD_DESKTOP OR ENGINE_SIM_BUILD_RUNTIME))
+if (TARGET engine-sim-runtime-backend AND TARGET engine-sim-assembly)
     add_library(engine-sim-runtime-json-private STATIC src/runtime/json_runtime.cpp)
     target_include_directories(engine-sim-runtime-json-private
         PUBLIC "${PROJECT_SOURCE_DIR}/src/runtime"
@@ -292,7 +282,7 @@ endif ()
 if (PIRANHA_ENABLED AND ((BUILD_TESTING AND ENGINE_SIM_BUILD_HOST_TESTS) OR ENGINE_SIM_BUILD_DESKTOP))
     add_library(engine-sim-desktop-runtime STATIC src/runtime/desktop_runtime.cpp src/desktop_engine_views.cpp)
     target_link_libraries(engine-sim-desktop-runtime PRIVATE
-        engine-sim-legacy-runtime engine-sim-runtime-json-private)
+        engine-sim-runtime-backend engine-sim-runtime-json-private)
     target_compile_features(engine-sim-desktop-runtime PRIVATE cxx_std_17)
     engine_sim_diagnose(engine-sim-desktop-runtime TRUE)
     if (NOT MSVC)
@@ -332,7 +322,7 @@ if (PIRANHA_ENABLED AND ((BUILD_TESTING AND ENGINE_SIM_BUILD_HOST_TESTS) OR ENGI
         src/mixer_cluster.cpp
         src/info_cluster.cpp
     )
-    target_link_libraries(engine-sim-frontend PUBLIC engine-sim-script-interpreter engine-sim-host
+    target_link_libraries(engine-sim-frontend PUBLIC engine-sim engine-sim-host
         PRIVATE engine-sim-desktop-runtime)
     if (TARGET engine-sim-host-resources)
         target_link_libraries(engine-sim-frontend PUBLIC engine-sim-host-resources)
@@ -365,11 +355,6 @@ if (ENGINE_SIM_BUILD_DESKTOP AND engine_sim_windows)
         target_link_libraries(engine-sim-frontend PUBLIC direct-to-video)
         target_compile_definitions(engine-sim-frontend PUBLIC ATG_ENGINE_SIM_VIDEO_CAPTURE)
     endif (DTV)
-
-    if (PIRANHA_ENABLED)
-        target_link_libraries(engine-sim-app
-            PRIVATE engine-sim-script-interpreter)
-    endif (PIRANHA_ENABLED)
 
     if (DISCORD_ENABLED)
         add_library(discord-rpc STATIC IMPORTED)
@@ -565,7 +550,7 @@ if (TARGET engine-sim-render-legacy-test AND TARGET engine-sim-render AND TARGET
     add_executable(engine-sim-preset-runtime-probe test/config/preset_runtime_probe.cpp)
     target_include_directories(engine-sim-preset-runtime-probe PRIVATE "${PROJECT_SOURCE_DIR}/tools/capture")
     target_link_libraries(engine-sim-preset-runtime-probe PRIVATE
-        EngineSim::Runtime engine-sim-runtime-json-private engine-sim-legacy-runtime)
+        EngineSim::Runtime engine-sim-runtime-json-private engine-sim-legacy-fixture)
     engine_sim_diagnose(engine-sim-preset-runtime-probe TRUE)
 
     function(engine_sim_check_presets prefix behavior index count)

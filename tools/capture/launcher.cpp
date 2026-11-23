@@ -52,7 +52,7 @@ int main(int argc, char **argv) {
             resources = paths.root;
             for (std::size_t i = 2; i < arguments.size(); ++i) {
                 if (arguments[i] == "--resources") arguments[++i] = paths.root.u8string();
-                else if (arguments[i] == "--script") arguments[++i] = paths.script.u8string();
+                else if (arguments[i] == "--model") arguments[++i] = paths.model.u8string();
             }
         }
         std::vector<std::string> common{"-B", (helpers / "capture_cli.py").u8string(), executable.u8string(),

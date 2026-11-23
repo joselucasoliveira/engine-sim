@@ -1,4 +1,3 @@
-#include "legacy_runtime.hpp"
 #ifdef _WIN32
 #define NOMINMAX
 #include <windows.h>
@@ -119,7 +118,7 @@ namespace fs = std::filesystem;
 using Handle = std::unique_ptr<es_runtime, decltype(&es_destroy)>;
 void checked(es_status status, const es_error &error) { if (status != ES_OK) throw std::runtime_error(error.message); }
 struct Options {
-    fs::path entry, library, assets, output;
+    fs::path entry, assets, output;
     unsigned rate, block, instances, warmBlocks, measureBlocks;
     std::string pipeline, schedule;
     std::uint64_t seed;
@@ -136,10 +135,10 @@ unsigned integer32(const std::string &value) {
     return static_cast<unsigned>(number);
 }
 Options options(const std::vector<std::string> &args) {
-    if (args.size() != 13) throw std::invalid_argument("Expected entry library assets output rate block instances pipeline warm-blocks measure-blocks seed schedule");
-    Options value{fs::u8path(args[1]), fs::u8path(args[2]), fs::u8path(args[3]), fs::u8path(args[4]),
-        integer32(args[5]), integer32(args[6]), integer32(args[7]),
-        integer32(args[9]), integer32(args[10]), args[8], args[12], integer(args[11])};
+    if (args.size() != 12) throw std::invalid_argument("Expected model asset-root output rate block instances pipeline warm-blocks measure-blocks seed schedule");
+    Options value{fs::u8path(args[1]), fs::u8path(args[2]), fs::u8path(args[3]),
+        integer32(args[4]), integer32(args[5]), integer32(args[6]),
+        integer32(args[8]), integer32(args[9]), args[7], args[11], integer(args[10])};
     if ((value.rate != 44100 && value.rate != 48000) || value.block == 0 || value.block > ES_MAX_FRAMES ||
         value.instances == 0 || value.instances > 2 || value.warmBlocks < 150 || value.warmBlocks > 500 ||
         value.measureBlocks == 0 || value.measureBlocks > 100 ||
@@ -150,7 +149,7 @@ Options options(const std::vector<std::string> &args) {
 #if !ES_BENCH_PROBE
     if (value.pipeline == "profile") throw std::invalid_argument("Stage clocks require the separate diagnostic probe");
 #endif
-    for (const auto &path : {value.entry, value.library, value.assets, value.output}) if (!path.is_absolute()) throw std::invalid_argument("Benchmark paths must be absolute");
+    for (const auto &path : {value.entry, value.assets, value.output}) if (!path.is_absolute()) throw std::invalid_argument("Benchmark paths must be absolute");
     if (fs::exists(value.output)) throw std::invalid_argument("Benchmark output already exists");
     return value;
 }
@@ -199,15 +198,15 @@ public:
         es_runtime *raw = nullptr; auto start = Clock::now(); es_status status;
         { CountScope count(stats.createCounts); status = es_create(&config, &raw, &error); }
         stats.create = elapsed(start); checked(status, error); m_handle.reset(raw);
-        const auto entry = options.entry.u8string(), library = options.library.u8string(), assets = options.assets.u8string();
+        const auto entry = options.entry.u8string(), assets = options.assets.u8string();
         start = Clock::now();
-        { CountScope count(stats.loadCounts); status = engine_sim::legacy_runtime::load(raw, entry.c_str(), library.c_str(), assets.c_str(), &error); }
+        { CountScope count(stats.loadCounts); status = es_load_json_file(raw, entry.c_str(), assets.c_str(), nullptr, &error); }
         stats.load = elapsed(start); checked(status, error);
         start = Clock::now();
-        { CountScope count(stats.resetCounts); status = engine_sim::legacy_runtime::reset(raw, &error); }
+        { CountScope count(stats.resetCounts); status = es_reset(raw, &error); }
         stats.reset = elapsed(start); checked(status, error);
         checked(es_unload(raw, &error), error); start = Clock::now();
-        { CountScope count(stats.reloadCounts); status = engine_sim::legacy_runtime::load(raw, entry.c_str(), library.c_str(), assets.c_str(), &error); }
+        { CountScope count(stats.reloadCounts); status = es_load_json_file(raw, entry.c_str(), assets.c_str(), nullptr, &error); }
         stats.reload = elapsed(start); checked(status, error);
         es_telemetry metadata{}; metadata.size = sizeof(metadata); metadata.abi = ES_ABI_V2;
         checked(es_get_telemetry(raw, &metadata, &error), error); m_frequency = metadata.simulation_hz;
@@ -338,11 +337,11 @@ int cycles(const Options &config) {
     if (config.instances != 1) throw std::invalid_argument("Lifecycle probe uses one owner");
     es_config settings{}; es_error error{}; checked(es_config_init(ES_ABI_V2, sizeof(settings), &settings, &error), error);
     settings.output_hz = config.rate; settings.seed = config.seed;
-    const auto entry = config.entry.u8string(), library = config.library.u8string(), assets = config.assets.u8string();
+    const auto entry = config.entry.u8string(), assets = config.assets.u8string();
     std::array<float, 257> output{};
     auto cycle = [&] {
         es_runtime *raw = nullptr; checked(es_create(&settings, &raw, &error), error); Handle handle(raw, es_destroy);
-        checked(engine_sim::legacy_runtime::load(raw, entry.c_str(), library.c_str(), assets.c_str(), &error), error);
+        checked(es_load_json_file(raw, entry.c_str(), assets.c_str(), nullptr, &error), error);
         const es_controls controls{sizeof(controls), ES_ABI_V2, 1, 1, .3, 0, 0}; checked(es_set_controls(raw, &controls, &error), error);
         std::uint32_t written = 99; checked(es_render(raw, output.size(), output.data(), output.size(), &written, &error), error);
         if (written != output.size()) throw std::runtime_error("Lifecycle measurement lost frames");

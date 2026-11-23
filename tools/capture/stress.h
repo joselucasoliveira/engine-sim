@@ -98,20 +98,15 @@ inline void stressThread(const std::filesystem::path &out, std::uint64_t seed = 
 inline void stressLifecycle(const std::filesystem::path &resources, const std::filesystem::path &out,
         std::uint64_t seed = 1) {
     InputEvidence inputs(out);
-    const auto invalidEntry = out / "stress-invalid.mr";
-    { std::ofstream file(invalidEntry); file << "import \"engine_sim.mr\"\nset_engine(engine())\n"; }
+    const auto invalidEntry = out / "stress-invalid.json";
+    { std::ofstream file(invalidEntry); file << "{\"format_version\":1,\"engine\":null}\n"; }
     std::unique_ptr<RuntimeHost> active;
     int frames = 0;
     for (int cycle = 0; cycle < 10; ++cycle) {
-        const auto entry = out / ("stress-entry-" + std::to_string(cycle) + ".mr");
-        {
-            std::ofstream file(entry);
-            file << "import \"engine_sim.mr\"\nimport \"engines/"
-                << (cycle % 2 ? "atg-video-2/09_radial_9.mr" : "atg-video-1/02_kohler_ch750.mr") << "\"\nmain()\n";
-            stressRequire(static_cast<bool>(file), "cannot write lifecycle fixture");
-        }
-        auto candidate = RuntimeHost::prepare({entry, resources / "es", resources / "assets"}, seed);
-        inputs.append(candidate->inputs());
+        const auto entry = resources / "assets/engines" /
+            (cycle % 2 ? "atg-video-2/09_radial_9.json" : "atg-video-1/02_kohler_ch750.json");
+        auto candidate = RuntimeHost::prepare(entry, resources, seed);
+        inputs.append(*candidate);
         active.swap(candidate);
         stressRequire(active->engine().getCylinderCount() == (cycle % 2 ? 9 : 2), "lifecycle topology mismatch");
         active->setControls({0, 0, true, true, false});
@@ -125,7 +120,7 @@ inline void stressLifecycle(const std::filesystem::path &resources, const std::f
         auto *original = active.get();
         const auto before = active->telemetry();
         bool rejected = false;
-        try { auto invalid = RuntimeHost::prepare({invalidEntry, resources / "es", resources / "assets"}, seed); active.swap(invalid); }
+        try { auto invalid = RuntimeHost::prepare(invalidEntry, resources, seed); active.swap(invalid); }
         catch (const EngineLoadError &) { rejected = true; }
         stressRequire(rejected && active.get() == original && active->telemetry().frames == before.frames
             && active->telemetry().ticks == before.ticks, "failed reload replaced or advanced the running session");

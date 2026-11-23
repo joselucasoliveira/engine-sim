@@ -14,7 +14,7 @@ std::unique_ptr<RuntimeHost> fixture(std::uint64_t seed = 1) {
     const auto *root = std::getenv("ENGINE_SIM_TEST_SOURCE");
     if (!root) throw std::runtime_error("Missing test fixture root");
     const auto base = fs::path(root) / "examples/runtime/fixture";
-    return RuntimeHost::prepare({base / "main.mr", base / "library", base}, seed, true);
+    return RuntimeHost::prepare(base / "main.json", base, seed, true);
 }
 TEST(CaptureRuntime, ExactFramesTicksAndPartitionedDiagnostics) {
     auto whole = fixture(), parts = fixture();
@@ -65,7 +65,7 @@ TEST(CaptureRuntime, ZeroCapacityAndFailedPreparationKeepTimeline) {
     EXPECT_EQ(written, 441U); EXPECT_EQ(guarded.front(), 7); EXPECT_EQ(guarded.back(), 7);
     const auto before = active->telemetry();
     const auto base = fs::path(std::getenv("ENGINE_SIM_TEST_SOURCE")) / "examples/runtime/fixture";
-    EXPECT_THROW(RuntimeHost::prepare({base / "missing.mr", base / "library", base}, 1), EngineLoadError);
+    EXPECT_THROW(RuntimeHost::prepare(base / "missing.json", base, 1), EngineLoadError);
     EXPECT_EQ(active->telemetry().frames, before.frames);
     active->beginBlock(); written = 0;
     active->render(guarded.data() + 1, 441, written); active->endBlock();

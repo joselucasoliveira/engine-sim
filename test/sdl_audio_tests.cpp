@@ -258,7 +258,7 @@ TEST(DesktopAudio, ActualNineCylinderSourcePreservesOrderAcrossRejectedAndAccept
     { std::ofstream out(model, std::ios::binary); out << valid; }
     Observation observed; auto recording = std::make_shared<host_test::Recording>();
     auto backend = std::make_unique<AudioHost>(recording, observed); auto *host = backend.get();
-    EngineSimApplication app; app.initialize(std::move(backend), {resources, {}, model});
+    EngineSimApplication app; app.initialize(std::move(backend), {resources, model});
     auto *original = app.getSimulator(); ASSERT_NE(original,nullptr); ASSERT_EQ(original->getEngine()->getCylinderCount(),9);
     EXPECT_FALSE(app.loadEngine(nullptr,nullptr,nullptr)); EXPECT_EQ(app.getSimulator(),original); EXPECT_TRUE(host->audio.running());
     host->fixture.inputs[10].press(desktop::Key::Return);

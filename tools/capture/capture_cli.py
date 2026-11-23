@@ -6,14 +6,14 @@ import json
 import math
 from pathlib import Path
 import platform
-import shutil
 import struct
 import subprocess
 import sys
 import tempfile
 import time
 
-from capture_metrics import digest, phase_lag, summarize_signal, summarize_trace, validate_mechanics, write_wave
+from capture_metrics import (digest, first_sample_difference, first_tick_difference, phase_lag,
+                             summarize_signal, summarize_trace, validate_mechanics, write_wave)
 
 QUICK = ("FIR", "GAS", "TONE")
 REFERENCE = QUICK + ("KOHLER", "LS", "EJ25", "LOAD")
@@ -21,7 +21,8 @@ MECHANICS = ("MECHANICS-KOHLER", "MECHANICS-LS")
 SUITES = {"quick": QUICK, "reference": REFERENCE, "mechanics": MECHANICS,
           "holdout": ("HONDA",),
           "stress": ("QUEUE", "LIFECYCLE", "THREAD")}
-TRACE_COUNTS = {"GAS": 101, "TONE": 100, "TONE-QUIET": 100, "KOHLER": 1000, "LS": 1200, "EJ25": 1600, "HONDA": 1600}
+TRACE_COUNTS = {"GAS": 101, "TONE": 100, "TONE-QUIET": 100, "KOHLER": 1000, "LS": 1200, "EJ25": 1600, "HONDA": 1600,
+                **dict.fromkeys(MECHANICS, 400)}
 PCM_CASES = {"TONE", "TONE-QUIET", "KOHLER", "LS", "EJ25", "HONDA", *MECHANICS}
 NUM_CALIBRATION = 20
 NUM_HOLDOUT = 10
@@ -78,7 +79,7 @@ def arguments(argv, default_resources=None):
     run = actions.add_parser("run", allow_abbrev=False)
     run.add_argument("--suite", choices=SUITES, required=True)
     run.add_argument("--resources", required=default_resources is None, default=default_resources, type=absolute)
-    run.add_argument("--script", type=absolute, help="custom entry for the LOAD case")
+    run.add_argument("--model", type=absolute, help="canonical JSON entry for the LOAD case")
     run.add_argument("--out", required=True, type=absolute)
     run.add_argument("--seed", required=True, type=parse_uint)
     run.add_argument("--repetitions", required=True, type=parse_count)
@@ -103,23 +104,21 @@ class WorkerInput:
     diagnostic: str = None
 
 
-def prepare_load_cases(resources, fixtures):
+def prepare_load_cases(resources, fixtures, selected):
     fixtures.mkdir()
-    unknown = fixtures / "unknown-node.mr"
-    unknown.write_text('import "engine_sim.mr"\nnonexistent_test_node()\n', encoding="utf-8")
-    missing_import = fixtures / "missing-import.mr"
-    missing_import.write_text('import "nonexistent_module_test.mr"\n', encoding="utf-8")
+    malformed = fixtures / "malformed.json"
+    malformed.write_text("{", encoding="utf-8")
+    schema = fixtures / "bad-schema.json"
+    schema.write_text('{"format_version":1,"engine":null}', encoding="utf-8")
     missing_ir = fixtures / "missing-ir"
-    (missing_ir / "assets").mkdir(parents=True)
-    shutil.copytree(resources / "es", missing_ir / "es")
-    shutil.copytree(resources / "assets", missing_ir / "assets", dirs_exist_ok=True)
-    (missing_ir / "es/sound-library/new/minimal_muffling_02.wav").unlink()
+    missing_ir.mkdir()
+    entry = selected if selected is not None else resources / "assets/main.json"
     return {
-        "valid": WorkerInput("LOAD", resources),
-        "missing-entry": WorkerInput("LOAD", resources, fixtures / "missing-entry.mr", "Can't find file"),
-        "unknown-node": WorkerInput("LOAD", resources, unknown, "error R0010"),
-        "missing-import": WorkerInput("LOAD", resources, missing_import, "missing-import(1): error"),
-        "missing-ir": WorkerInput("LOAD", missing_ir, diagnostic="minimal_muffling_02.wav"),
+        "valid": WorkerInput("LOAD", resources, selected),
+        "missing-entry": WorkerInput("LOAD", resources, fixtures / "missing-entry.json", "CFG_RESOURCE_PATH"),
+        "bad-schema": WorkerInput("LOAD", resources, schema, "CFG_SHAPE"),
+        "malformed": WorkerInput("LOAD", resources, malformed, "CFG_SYNTAX"),
+        "missing-ir": WorkerInput("LOAD", missing_ir, entry, "CFG_RESOURCE_PATH"),
     }
 
 
@@ -143,7 +142,7 @@ def input_key(path, output, root, explicit_entry):
         return "fixture/" + path.relative_to(output).as_posix()
     if path.is_relative_to(root):
         return "resources/" + path.relative_to(root).as_posix()
-    if explicit_entry is not None:
+    if path == explicit_entry:
         return "external/" + path.as_posix()
     raise ValueError(f"resolved input is outside the explicit resources or fixture root: {path}")
 
@@ -218,7 +217,7 @@ def execute_worker(binary, request, directory, seed, spectra):
             if checksum is None and not (directory / "prepared-inputs-v2.tsv").exists() and request.entry.is_file():
                 checksum = digest(request.entry)
             if checksum is not None:
-                event["fixtures"]["fixture/input.mr"] = checksum
+                event["fixtures"]["fixture/input.json"] = checksum
         event["status"] = "pass"
     except (ValueError, OSError) as failure:
         event.update(status="fail", reason=str(failure))
@@ -281,7 +280,7 @@ def validate_artifacts(directory, name, spectra, event):
         event["trace"] = summarize_trace(directory / "trace.csv")
         if event["trace"]["rows"] != TRACE_COUNTS[name]:
             raise ValueError("incomplete trace capture")
-        if name in {"KOHLER", "LS", "EJ25", "HONDA"}:
+        if name in {"KOHLER", "LS", "EJ25", "HONDA", *MECHANICS}:
             if not schema_path.exists() or event["signal"]["frames"] != 441 * TRACE_COUNTS[name]:
                 raise ValueError("engine capture does not conserve exact requested frames")
             bounds = event["trace"]["bounds"]
@@ -298,18 +297,16 @@ def validate_artifacts(directory, name, spectra, event):
 
 def run_cases(options, binary, metadata, source):
     resources = options.resources
-    if not all((resources / name).is_dir() for name in ("assets", "es")):
-        raise ValueError(f"resources must contain assets and es directories: {resources}")
+    if not resources.is_dir():
+        raise ValueError(f"resources must be an existing directory: {resources}")
     pool = SUITES[options.suite]
     if options.case is not None and options.case not in pool:
         raise ValueError(f"case {options.case!r} is outside suite {options.suite!r}")
     cases = (options.case,) if options.case else pool
-    if options.script is not None and cases != ("LOAD",):
-        raise ValueError("--script requires --suite reference --case LOAD")
+    if options.model is not None and cases != ("LOAD",):
+        raise ValueError("--model requires --suite reference --case LOAD")
     fresh_output(options.out, source, resources)
-    fixtures = prepare_load_cases(resources, options.out / "load-fixtures") if "LOAD" in cases else None
-    if fixtures is not None and options.script is not None:
-        fixtures["valid"].entry = options.script
+    fixtures = prepare_load_cases(resources, options.out / "load-fixtures", options.model) if "LOAD" in cases else None
     run = {
         "version": 2, "selection": list(cases), "suite": options.suite, "mode": options.mode,
         "computation": "shared-runtime-engine; independent primitive kernels and legacy worker stress",
@@ -466,9 +463,32 @@ def compare(options, source):
         raise ValueError("candidate and reference case selections differ")
     fresh_output(options.out, source)
     mismatches = compare_trials(policy, candidate)
+    first_differences = []
     lags = {}
     for case, trials in candidate["cases"].items():
         lags[case] = {}
+        known = reference["cases"][case][0]
+        for number, trial in enumerate(trials, 1):
+            for variant, event in trial.items():
+                before = known.get(variant)
+                if before is None:
+                    continue
+                old_dir = options.reference / before["directory"]
+                new_dir = options.candidate / event["directory"]
+                location = {"case": case, "variant": variant, "trial": number}
+                if "signal" in before and "signal" in event and before["signal"]["sha256"] != event["signal"]["sha256"]:
+                    audio = "audio.f32le" if case == "FIR" else "audio.s16le"
+                    different = first_sample_difference(old_dir / audio, new_dir / audio)
+                    if different is not None:
+                        first_differences.append({**location, **different})
+                shaft = "mechanics-v1.csv"
+                old_shaft, new_shaft = before["artifacts"].get(shaft), event["artifacts"].get(shaft)
+                if old_shaft and new_shaft and old_shaft != new_shaft:
+                    different = first_tick_difference(old_dir / shaft, new_dir / shaft)
+                    if different is not None:
+                        difference = {**location, **different}
+                        first_differences.append(difference)
+                        mismatches.append({**difference, "reason": "shaft trace differs"})
         for variant, event in trials[0].items():
             if not event.get("signal"):
                 continue
@@ -484,6 +504,7 @@ def compare(options, source):
                     options.candidate / event["directory"] / f"audio.{suffix}")
     save_json(options.out / "comparison.json", {
         "status": "fail" if mismatches else "pass", "mismatches": mismatches,
+        "first_differences": first_differences,
         "phase_lag_frames": lags, "policy_sha256": digest(options.policy),
         "reference_sha256": digest(options.reference / "run.json"),
         "candidate_sha256": digest(options.candidate / "run.json"),
@@ -560,7 +581,7 @@ def self_test():
             pass
         else:
             raise AssertionError("missing source admitted")
-        source = root / "external.mr"
+        source = root / "external.json"
         source.write_bytes(b"prepared bytes")
         snapshot_root = root / "input-proof"
         snapshot_root.mkdir()
@@ -570,7 +591,7 @@ def self_test():
         before = input_hashes(snapshot_root, root, False)
         source.write_bytes(b"changed after preparation")
         assert input_hashes(snapshot_root, root, False) == before
-        assert before["resources/external.mr"] == digest(snapshot_root / "prepared-input-0.bin")
+        assert before["resources/external.json"] == digest(snapshot_root / "prepared-input-0.bin")
         (snapshot_root / "prepared-input-0.bin").write_bytes(b"truncated")
         try:
             input_hashes(snapshot_root, root, False)

@@ -171,6 +171,27 @@ The [ctypes example](../examples/runtime/ffi_smoke.py) sets cdecl signatures and
 record layouts for all thirteen functions and performs a two-second 48 kHz run,
 reset, unload and destroy with caller-owned storage.
 
+## Capture simulation diagnostics
+
+The offline capture tool reads JSON models from the resource directory and
+records the exact model and response bytes used during preparation. The
+mechanics suite writes a per-tick shaft trace, combustion events, audio queue
+counters and native PCM. Run it from any directory and write to a fresh
+output outside the checkout and installation.
+
+```sh
+engine-sim-capture run --suite mechanics --case MECHANICS-KOHLER \
+  --resources "$RESOURCE_ROOT" --out "$CAPTURE_OUT" --seed 209 \
+  --repetitions 1 --mode sync
+```
+
+Use `--suite reference --case LOAD --model "$MODEL_JSON"` to inspect a
+different canonical model. Pass its absolute asset directory to
+`--resources`. The test also records rejected syntax, schema and missing
+resource cases. If the executable is installed, omitting `--resources`
+uses its adjacent `share/engine-sim` directory. Convert old scripts with
+the offline tool before capture. [Legacy converter guide](legacy-converter.md)
+
 ## Signal, desktop and compatibility limits
 
 The native DSP remains mono 44.1 kHz, with the original noise/filter/convolution,

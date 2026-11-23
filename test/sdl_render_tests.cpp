@@ -97,7 +97,7 @@ TEST_F(DesktopRender, ActualApplicationRendersAllScreensAndNineCylinderEngine) {
     for (bool radial:{false,true}) {
         EngineSimApplication app;auto data=std::make_shared<render_test::Output>();const auto directory=scratch/(radial?"radial":"default");fs::create_directory(directory);
         auto host=std::make_unique<render_test::RenderingHost>(data,directory,radial?40:4);host->tabs=!radial;host->startEngine=radial;
-        auto options=engine_sim::ResourceOptions{paths.root,{}, {}};
+        auto options=engine_sim::ResourceOptions{paths.root,{}};
         if (radial) options.model = paths.assets / "engines/atg-video-2/09_radial_9.json";
         app.initialize(std::move(host),options);ASSERT_EQ(app.getSimulator()->getEngine()->getCylinderCount(),radial?9:4);
         data->onShutdown=[&]{EXPECT_EQ(app.getSimulator(),nullptr);};app.run();app.destroy();
@@ -139,7 +139,7 @@ TEST_F(DesktopRender, VisibleLoadDiagnosticRetainsRunningRadialAndRecoversOnNati
             EXPECT_EQ(app.getSimulator()->getEngine()->getCylinderCount(),9);
         }
     };
-    app.initialize(std::move(host),{paths.root,{},entry});original=app.getSimulator();
+    app.initialize(std::move(host),{paths.root,entry});original=app.getSimulator();
     ASSERT_NE(original,nullptr);ASSERT_EQ(original->getEngine()->getCylinderCount(),9);
     data->onShutdown=[&]{EXPECT_EQ(app.getSimulator(),nullptr);};
     app.run();app.destroy();EXPECT_TRUE(rejected);EXPECT_TRUE(recovered);EXPECT_EQ(data->shutdowns,1);

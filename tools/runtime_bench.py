@@ -74,7 +74,8 @@ def run(executable, model, folder, rate, block, instances, pipeline, schedule, c
     try:
         for index in range(jobs):
             output = folder / f"measure-{index}.csv"
-            argv = [str(executable), str(model["entry"]), str(model["library"]), str(model["assets"]), str(output),
+            sources = model["old"] if pipeline == "old" else (model["entry"], model["assets"])
+            argv = [str(executable), *map(str, sources), str(output),
                     str(rate), str(block), str(1 if pipeline == "old" else instances), pipeline, "200", "25", "1", schedule]
             affinity = [cores[index % len(cores)]] if pipeline == "old" and cores else cores[:instances]
             preexec = (lambda chosen=affinity: os.sched_setaffinity(0, chosen)) if affinity and hasattr(os, "sched_setaffinity") else None
@@ -130,6 +131,7 @@ def run(executable, model, folder, rate, block, instances, pipeline, schedule, c
             pcm.append({"path": str(raw), "sha256": digest(raw)})
             render_times.append(record[f"{instance}.render_seconds"])
     result = {"pipeline": pipeline, "processes": records, "pcm": pcm, "commands": commands,
+              "measurement_files": list(map(str, outputs)),
               "driver_wall_seconds": wall, "cpu_seconds": sum(record["process_cpu_seconds"] for record in records),
               "sum_process_peak_rss_bytes": sum(record["peak_rss_bytes"] for record in records)}
     if render_times:
@@ -183,19 +185,35 @@ def main():
             parser.error("Independent reference identity/self-check differs")
     inputs = output / "inputs"; inputs.mkdir()
     if args.fixture:
-        models = [{"name": "fixture", "entry": args.fixture / "main.mr", "library": args.fixture / "library", "assets": args.fixture}]
+        models = [{"name": "fixture", "entry": args.fixture / "main.json", "assets": args.fixture}]
+        if args.reference:
+            models[0]["old"] = (args.fixture / "main.mr", args.fixture / "library", args.fixture)
         schedule = "fixture"
     else:
         models, schedule = [], "legacy"
-        for name, module in (("KOHLER", "engines/atg-video-1/02_kohler_ch750.mr"), ("LS", "engines/atg-video-2/07_gm_ls.mr")):
-            entry = inputs / (name + ".mr")
-            entry.write_text(f'import "engine_sim.mr"\nimport "{module}"\nmain()\n', encoding="utf-8")
-            models.append({"name": name, "entry": entry, "library": args.resources / "es", "assets": args.resources / "assets"})
+        for name, module in (("KOHLER", "engines/atg-video-1/02_kohler_ch750"),
+                             ("LS", "engines/atg-video-2/07_gm_ls")):
+            model = {"name": name, "entry": args.resources / f"assets/{module}.json", "assets": args.resources}
+            if args.reference:
+                entry = inputs / (name + ".mr")
+                entry.write_text(f'import "engine_sim.mr"\nimport "{module}.mr"\nmain()\n', encoding="utf-8")
+                model["old"] = (entry, args.resources / "es", args.resources / "assets")
+            models.append(model)
     environment = conditions()
-    identities = sorted({path.resolve() for folder in (resources / "es", resources / "assets") if folder.is_dir()
-                         for path in folder.rglob("*") if path.is_file() and path.suffix.lower() in (".mr", ".wav")})
-    if args.fixture:
-        identities = sorted(path for path in args.fixture.rglob("*") if path.is_file())
+    identities = set()
+    for model in models:
+        entry = model["entry"]
+        identities.add(entry)
+        document = json.loads(entry.read_bytes())
+        identities.update(model["assets"] / ir["path"] for ir in document["components"]["impulses"])
+        if args.reference:
+            for place in model["old"]:
+                if place.is_file():
+                    identities.add(place)
+                else:
+                    identities.update(p.resolve() for p in place.rglob("*")
+                                      if p.is_file() and p.suffix.lower() in (".mr", ".wav"))
+    identities = sorted(identities)
     save(output / "input-identities.json", {str(path): digest(path) for path in identities})
     cores = (environment["affinity"] or [])[:2]
     report = {"version": 1, "status": "running", "smoke": args.smoke, "conditions": environment,
@@ -258,7 +276,7 @@ def main():
             for rate in (44100, 48000):
                 converted_model = {**model, "entry": source_file}
                 conversion = run(args.benchmark, converted_model, output / f'{model["name"]}-convert-{rate}', rate, 256, 1, "convert", schedule, cores)
-                target = Path(conversion["commands"][0]["argv"][4] + ".0.f32le")
+                target = Path(conversion["measurement_files"][0] + ".0.f32le")
                 expected_case = next(case for case in report["cases"] if case["model"] == model["name"] and case["rate"] == rate)
                 expected = expected_case["pairs"][0]["runs"]["public"]["pcm"][0]["sha256"]
                 if digest(target) != expected:

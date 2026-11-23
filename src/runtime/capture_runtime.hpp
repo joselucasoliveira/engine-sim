@@ -1,7 +1,8 @@
 #ifndef ENGINE_SIM_PRIVATE_CAPTURE_RUNTIME_HPP
 #define ENGINE_SIM_PRIVATE_CAPTURE_RUNTIME_HPP
 
-#include "legacy_runtime.hpp"
+#include "json_session.hpp"
+#include "runtime.hpp"
 #include <array>
 #include <limits>
 
@@ -32,16 +33,14 @@ struct Diagnostics {
 // diagnostics; file writes and descriptor evaluation happen after render.
 class RuntimeHost {
 public:
-    static std::unique_ptr<RuntimeHost> prepare(const es_script::PreparationContext &recipe,
+    static std::unique_ptr<RuntimeHost> prepare(const std::filesystem::path &entry, const std::filesystem::path &root,
         std::uint64_t seed, bool mechanics = false);
     const Engine &engine() const { return *simulator().getEngine(); }
     const Simulator &simulator() const { return *m_runtime.m_session->prepared.session->simulator; }
     Synthesizer::BufferStatistics synthesisStatistics() const {
         return m_runtime.m_session->prepared.session->synthesis.getBufferStatistics();
     }
-    const std::vector<es_script::ScriptInput> &inputs() const {
-        return engine_sim::legacy_runtime::Access::saved(m_runtime)->inputs;
-    }
+    void visitInputs(const engine_sim::json_runtime::InputVisitor &visitor) const;
     const es_telemetry &telemetry() const { return m_runtime.telemetry(); }
     const Diagnostics &diagnostics() const { return m_diagnostics; }
     TickSample current() const;

@@ -35,8 +35,7 @@ struct JsonRuntimeAccess {
 
     static const JsonRecipe *saved(const Runtime &runtime) {
         if (!runtime.m_session) return nullptr;
-        const auto *slot = std::get_if<std::shared_ptr<const JsonRecipe>>(&runtime.m_session->prepared.recipe);
-        return slot ? slot->get() : nullptr;
+        return runtime.m_session->prepared.recipe.get();
     }
 
     static void adopt(Runtime &runtime, json_runtime::PreparedModel prepared, const json_runtime::Checkpoint &checkpoint) {
@@ -172,6 +171,24 @@ PreparedModelResult reset_desktop(const JsonRecipe &saved, std::uint64_t seed) {
     recipe.root = saved.root;
     if (auto problem = read_document(recipe, &saved)) return std::move(*problem);
     return prepare(std::move(recipe), &saved, {assembly::Mode::desktop, 0, 0, seed}, {});
+}
+
+PreparedModel require_model(PreparedModelResult result, const fs::path &entry) {
+    if (const auto *error = std::get_if<cfg::Diagnostic>(&result)) {
+        auto location = error->code;
+        if (!error->pointer.empty()) location += " " + error->pointer;
+        if (error->line && error->column)
+            location += " line " + std::to_string(*error->line) + ", column " + std::to_string(*error->column);
+        throw EngineLoadError({error->stage, error->path.value_or(entry.u8string()), location + "\n" + error->message});
+    }
+    return std::get<PreparedModel>(std::move(result));
+}
+
+void visit_file_inputs(const JsonRecipe &recipe, const InputVisitor &visitor) {
+    if (!recipe.resolved_entry.empty()) visitor(recipe.resolved_entry, recipe.bytes);
+    for (const auto &resource : recipe.resources.files) {
+        visitor(resource.path, {reinterpret_cast<const char *>(resource.bytes.data()), resource.bytes.size()});
+    }
 }
 
 es_status load_file(es_runtime *runtime, const fs::path &entry, const fs::path &root,

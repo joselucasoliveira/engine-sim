@@ -1,6 +1,7 @@
 #include "desktop_runtime.hpp"
 #include "json_session.hpp"
-#include "legacy_runtime.hpp"
+#include "concrete_validation.hpp"
+#include "wave_reader.h"
 #include "../../include/simulation_fault.h"
 #include <chrono>
 
@@ -8,17 +9,6 @@ namespace desktop {
 namespace {
 constexpr std::uint64_t desktopSeed = 1;
 
-engine_sim::json_runtime::PreparedModel requireModel(engine_sim::json_runtime::PreparedModelResult result,
-                                                      const std::filesystem::path &entry = {}) {
-    if (const auto *error = std::get_if<engine_sim::config_v1::Diagnostic>(&result)) {
-        auto location = error->code;
-        if (!error->pointer.empty()) location += " " + error->pointer;
-        if (error->line && error->column)
-            location += " line " + std::to_string(*error->line) + ", column " + std::to_string(*error->column);
-        throw EngineLoadError({error->stage, error->path.value_or(entry.u8string()), location + "\n" + error->message});
-    }
-    return std::get<engine_sim::json_runtime::PreparedModel>(std::move(result));
-}
 }
 RuntimeHost::RuntimeHost()
     : m_runtime(es_config{sizeof(es_config), ES_ABI_V2, 44100, ES_FREE, desktopSeed, 0, 0, 0},
@@ -27,11 +17,6 @@ RuntimeHost::~RuntimeHost() {
     if (m_views) m_views->invalidate();
     m_commands.reset(); m_views.reset();
     m_runtime.unload();
-}
-std::unique_ptr<RuntimeHost> RuntimeHost::fromPrepared(engine_sim::PreparedEngine prepared) {
-    return fromSession(std::move(prepared.session),
-        std::make_shared<const engine_sim::legacy_runtime::Recipe>(engine_sim::legacy_runtime::Recipe{
-            std::move(prepared.recipe), prepared.config, std::move(prepared.inputs)}));
 }
 std::unique_ptr<RuntimeHost> RuntimeHost::fromSession(std::unique_ptr<EngineSession> session,
                                                        engine_sim::Runtime::Recipe recipe) {
@@ -51,27 +36,33 @@ std::unique_ptr<RuntimeHost> RuntimeHost::fromSession(std::unique_ptr<EngineSess
 }
 std::unique_ptr<RuntimeHost> RuntimeHost::prepareModel(const std::filesystem::path &entry,
                                                         const std::filesystem::path &root) {
-    auto prepared = requireModel(engine_sim::json_runtime::prepare_desktop(entry, root, desktopSeed), entry);
+    auto prepared = engine_sim::json_runtime::require_model(engine_sim::json_runtime::prepare_desktop(entry, root, desktopSeed), entry);
     return fromSession(std::move(prepared.session), std::move(prepared.recipe));
 }
-std::unique_ptr<RuntimeHost> RuntimeHost::prepare(const es_script::PreparationContext &recipe) {
-    engine_sim::PreparationConfig config;
-    config.desktop = true;
-    return fromPrepared(engine_sim::prepareEngine(recipe, config));
-}
 std::unique_ptr<RuntimeHost> RuntimeHost::adopt(EngineDefinition definition) {
-    return fromPrepared(engine_sim::prepareDesktopEngine(std::move(definition)));
+    const auto entry = std::filesystem::u8path(definition.sourcePath);
+    if (!definition.engine) throw EngineLoadError({"graph", definition.sourcePath, "No engine was selected"});
+    auto &engine = *definition.engine;
+    engine.setRandomSeed(engine.getRandomSeed());
+    engine_sim::validateConcreteModel(engine, engine.getSimulationFrequency(), true, entry);
+    auto session = EngineSession::prepare(std::move(definition), [](const ImpulseResponse &impulse) {
+        const auto path = std::filesystem::u8path(impulse.getFilename());
+        engine_sim::requireConcreteModel(std::isfinite(impulse.getVolume()) &&
+            std::abs(impulse.getVolume()) <= std::numeric_limits<float>::max(), "impulse gain exceeds float range", path);
+        try { return engine_sim::readImpulseWave(path); }
+        catch (const engine_sim::WaveError &failure) {
+            throw EngineLoadError({"resources", path.u8string(), failure.reason});
+        }
+    });
+    return fromSession(std::move(session), {});
 }
 std::unique_ptr<RuntimeHost> RuntimeHost::resetCandidate() const {
     m_views->requireQuiescent();
-    if (const auto *saved = std::get_if<std::shared_ptr<const engine_sim::JsonRecipe>>(&m_runtime.m_session->prepared.recipe)) {
-        auto prepared = requireModel(engine_sim::json_runtime::reset_desktop(**saved, desktopSeed));
-        return fromSession(std::move(prepared.session), std::move(prepared.recipe));
-    }
-    const auto *saved = engine_sim::legacy_runtime::Access::saved(m_runtime);
-    if (!saved || saved->paths.entry.empty() || saved->paths.libraryRoot.empty() || saved->paths.assetRoot.empty())
-        throw EngineLoadError({"unsupported", "", "Reset needs an owned script recipe"});
-    return fromPrepared(engine_sim::prepareEngine(saved->paths, saved->config, &saved->inputs));
+    const auto &saved = m_runtime.m_session->prepared.recipe;
+    if (!saved)
+        throw EngineLoadError({"unsupported", "", "Reset needs an owned JSON recipe"});
+    auto prepared = engine_sim::json_runtime::require_model(engine_sim::json_runtime::reset_desktop(*saved, desktopSeed));
+    return fromSession(std::move(prepared.session), std::move(prepared.recipe));
 }
 void RuntimeHost::render(float *output, std::uint32_t frames, std::uint32_t &written) {
     m_views->requireQuiescent();

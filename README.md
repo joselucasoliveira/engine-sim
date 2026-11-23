@@ -14,7 +14,7 @@ The Linux desktop runs the existing engine views and controls through SDL 3, Vul
 
 ## Embed or render without a desktop
 
-The C runtime SDK loads trusted engine scripts and renders caller-owned mono
+The C runtime SDK loads engine models from JSON and renders caller-owned mono
 float PCM at 44.1 or 48 kHz without a window, device or worker. It supports
 free-running engines, an independent shaft load and solver-driven clockwise
 rotation. Static/shared C11, C++17 and ctypes examples accompany the
@@ -26,7 +26,13 @@ SDK jobs remain pending; callback deadlines are unqualified.
 
 ## Driving the simulator
 
-The supplied entry script selects a Subaru EJ25 equal-length-header example and the default theme. The engine definitions in the two compilation-video folders expose a node named `main`. To select another engine, copy that entry to a writable location outside the checkout/install, change its engine import, retain the theme import/call and `main()`, and launch the installed app with `--script ABSOLUTE_ENTRY_PATH`. For example, `engines/atg-video-2/09_radial_9.mr` selects the nine-cylinder radial. Keep the packaged resource tree intact; installation verifies its allowlisted hashes. [Entry script](assets/main.mr) · [First preset collection](assets/engines/atg-video-1/README.md) · [Second preset collection](assets/engines/atg-video-2/README.md)
+The default model is a Subaru EJ25 with equal-length headers and the default
+theme. Pass `--model ABSOLUTE_JSON_PATH` to select another engine. For example,
+`assets/engines/atg-video-2/09_radial_9.json` selects the nine-cylinder radial.
+Pass `--resources ABSOLUTE_DIRECTORY` when using a different asset root.
+Keep the installed resource tree intact so its model and impulse paths retain
+their verified identities. Convert existing scripts with the offline
+converter. [Default model](assets/main.json) · [Legacy converter guide](docs/legacy-converter.md)
 
 | Input | Action |
 | --- | --- |

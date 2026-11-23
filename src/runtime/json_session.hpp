@@ -6,6 +6,8 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <functional>
+#include <string_view>
 #include <variant>
 
 namespace engine_sim {
@@ -17,10 +19,13 @@ struct PreparedModel {
     std::shared_ptr<const JsonRecipe> recipe;
 };
 using PreparedModelResult = std::variant<PreparedModel, config_v1::Diagnostic>;
+using InputVisitor = std::function<void(const std::filesystem::path &, std::string_view)>;
 
 PreparedModelResult prepare_desktop(const std::filesystem::path &entry,
                                     const std::filesystem::path &root, std::uint64_t seed);
 PreparedModelResult reset_desktop(const JsonRecipe &saved, std::uint64_t seed);
+PreparedModel require_model(PreparedModelResult result, const std::filesystem::path &entry = {});
+void visit_file_inputs(const JsonRecipe &recipe, const InputVisitor &visitor);
 }
 }
 #endif

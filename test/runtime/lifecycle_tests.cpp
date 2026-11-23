@@ -1,4 +1,3 @@
-#include "legacy_runtime.hpp"
 #include "runtime.hpp"
 #include "simulation_fault.h"
 #include <gtest/gtest.h>
@@ -60,19 +59,21 @@ protected:
         const auto base=fs::current_path()/fs::u8path(std::string(testing::UnitTest::GetInstance()->current_test_info()->name())+u8" espaço Ω");
         for(unsigned i=0;i<2;++i) {
             roots[i]=base/std::to_string(i);fs::create_directories(roots[i]);
-            fs::copy(fs::u8path(source)/"examples/runtime/fixture",roots[i],fs::copy_options::recursive|fs::copy_options::overwrite_existing);
-            auto text=read(roots[i]/"main.mr");replace(text,"noise: 0.0, jitter: 0.0","noise: 0.25, jitter: 0.2");replace(text,"burning_efficiency_randomness: 0.0","burning_efficiency_randomness: 0.15");
-            if(i) { replace(text,"throw: 0.040","throw: 0.035");replace(text,"simulation_frequency: 10000","simulation_frequency: 20000"); }
-            write(roots[i]/"main.mr",text);
+            const auto fixture = fs::u8path(source) / "examples/runtime/fixture";
+            for (const auto *file : {"main.json", "impulse.wav"})
+                fs::copy_file(fixture / file, roots[i] / file, fs::copy_options::overwrite_existing);
+            auto text=read(roots[i]/"main.json");replace(text,"\"jitter\":0.0","\"jitter\":0.2"); replace(text, "\"noise\":0.0", "\"noise\":0.25");replace(text,"\"burning_efficiency_randomness\":0.0","\"burning_efficiency_randomness\":0.15");
+            if(i) { replace(text,"\"throw\":0.04","\"throw\":0.035");replace(text,"\"simulation_frequency\":10000.0","\"simulation_frequency\":20000.0"); }
+            write(roots[i]/"main.json",text);
         }
     }
     Handle prepare(unsigned index=0,std::uint64_t seed=17,std::uint32_t hz=0,double torque=0) {
         es_error error{};es_config c{};checked(es_config_init(ES_ABI_V2,sizeof(c),&c,&error),error);c.seed=seed;c.simulation_hz=hz;c.starter_torque_nm=torque;
         es_runtime *p=nullptr;checked(es_create(&c,&p,&error),error);Handle rt(p,es_destroy);
-        auto entry=(roots[index]/"main.mr").u8string(),library=(roots[index]/"library").u8string(),assets=roots[index].u8string();
-        checked(engine_sim::legacy_runtime::load(p,entry.c_str(),library.c_str(),assets.c_str(),&error),error);
+        auto entry=(roots[index]/"main.json").u8string(),assets=roots[index].u8string();
+        checked(es_load_json_file(p,entry.c_str(),assets.c_str(),nullptr,&error),error);
         // The runtime must not retain any of these borrowed string buffers.
-        std::fill(entry.begin(),entry.end(),'!');std::fill(library.begin(),library.end(),'!');std::fill(assets.begin(),assets.end(),'!');
+        std::fill(entry.begin(),entry.end(),'!');std::fill(assets.begin(),assets.end(),'!');
         return rt;
     }
 };
@@ -80,15 +81,15 @@ TEST_F(RuntimeLifetime, ResetReproducesFreshPcmPhaseDefaultControlsAndOriginalCo
     for(const auto hz:{0u,4000u,96000u}) {
         auto used=prepare(0,UINT64_MAX,hz,25),fresh=prepare(0,UINT64_MAX,hz,25);
         const auto initial=telemetry(fresh.get());const auto expected=timeline(fresh.get(),503);
-        controls(used.get(),.7);render(used.get(),19007);es_error error{};checked(engine_sim::legacy_runtime::reset(used.get(),&error),error);
+        controls(used.get(),.7);render(used.get(),19007);es_error error{};checked(es_reset(used.get(),&error),error);
         const auto reset=telemetry(used.get());EXPECT_EQ(std::memcmp(&initial,&reset,sizeof(reset)),0);
         EXPECT_EQ(timeline(used.get(),7),expected);
-        auto defaultReference=prepare(0,UINT64_MAX,hz,25);checked(engine_sim::legacy_runtime::reset(used.get(),&error),error);
+        auto defaultReference=prepare(0,UINT64_MAX,hz,25);checked(es_reset(used.get(),&error),error);
         EXPECT_EQ(render(used.get(),4410),render(defaultReference.get(),4410));
     }
 }
 TEST_F(RuntimeLifetime, ChangedMalformedAndRemovedInputsRejectBeforeParsingAndKeepContinuation) {
-    for(const auto relative:{"main.mr","library/runtime_fixture.mr","impulse.wav"}) {
+    for(const auto relative:{"main.json","impulse.wav"}) {
         const auto path=roots[0]/relative;const auto original=read(path);
         for(int mode=0;mode<3;++mode) {
             auto active=prepare(),reference=prepare();controls(active.get());controls(reference.get());
@@ -97,51 +98,51 @@ TEST_F(RuntimeLifetime, ChangedMalformedAndRemovedInputsRejectBeforeParsingAndKe
             if(mode==0) write(path,original+"\n// changed bytes\n");
             if(mode==1) write(path,std::string("\xff\xc0",2));
             if(mode==2) fs::remove(path);
-            es_error error{};EXPECT_EQ(engine_sim::legacy_runtime::reset(active.get(),&error),ES_RESOURCE)<<error.message;
+            es_error error{};EXPECT_EQ(es_reset(active.get(),&error),ES_RESOURCE)<<error.message;
             const auto after=telemetry(active.get());EXPECT_EQ(std::memcmp(&before,&after,sizeof(before)),0);
             EXPECT_EQ(render(active.get(),4410),render(reference.get(),4410));
-            write(path,original);checked(engine_sim::legacy_runtime::reset(active.get(),&error),error);EXPECT_EQ(telemetry(active.get()).frames,0u);
+            write(path,original);checked(es_reset(active.get(),&error),error);EXPECT_EQ(telemetry(active.get()).frames,0u);
         }
     }
 }
 TEST_F(RuntimeLifetime, ExplicitLoadAcceptsModifiedInputsAndResetBindsTheNewIdentity) {
-    auto active=prepare();const auto path=roots[0]/"main.mr";auto text=read(path);replace(text,"noise: 0.25","noise: 0.45");write(path,text);
-    es_error error{};EXPECT_EQ(engine_sim::legacy_runtime::reset(active.get(),&error),ES_RESOURCE);
-    checked(engine_sim::legacy_runtime::load(active.get(),path.u8string().c_str(),(roots[0]/"library").u8string().c_str(),roots[0].u8string().c_str(),&error),error);
+    auto active=prepare();const auto path=roots[0]/"main.json";auto text=read(path);replace(text,"\"noise\":0.25","\"noise\":0.45");write(path,text);
+    es_error error{};EXPECT_EQ(es_reset(active.get(),&error),ES_RESOURCE);
+    checked(es_load_json_file(active.get(),path.u8string().c_str(),roots[0].u8string().c_str(),nullptr,&error),error);
     auto reference=prepare();EXPECT_EQ(timeline(active.get()),timeline(reference.get()));
-    checked(engine_sim::legacy_runtime::reset(active.get(),&error),error);auto fresh=prepare();EXPECT_EQ(timeline(active.get()),timeline(fresh.get()));
+    checked(es_reset(active.get(),&error),error);auto fresh=prepare();EXPECT_EQ(timeline(active.get()),timeline(fresh.get()));
 }
 TEST_F(RuntimeLifetime, ResolvedPathChangesAreRejectedEvenWhenBytesAreIdentical) {
-    const auto alias=roots[0]/"entry alias.mr",alternate=roots[0]/"alternate.mr";write(alternate,read(roots[0]/"main.mr"));
+    const auto alias=roots[0]/"entry alias.json",alternate=roots[0]/"alternate.json";write(alternate,read(roots[0]/"main.json"));
     // Retire only this test's prior alias when the same build is tested again.
     fs::remove(alias);
-    std::error_code failure;fs::create_symlink(roots[0]/"main.mr",alias,failure);
+    std::error_code failure;fs::create_symlink(roots[0]/"main.json",alias,failure);
 #ifdef _WIN32
     if(failure==std::errc::permission_denied || failure==std::errc::operation_not_supported)
         GTEST_SKIP()<<"Native symlink creation unavailable: "<<failure.message();
 #endif
     ASSERT_FALSE(failure)<<failure.message();
     auto active=prepare();es_error error{};
-    checked(engine_sim::legacy_runtime::load(active.get(),alias.u8string().c_str(),(roots[0]/"library").u8string().c_str(),roots[0].u8string().c_str(),&error),error);
+    checked(es_load_json_file(active.get(),alias.u8string().c_str(),roots[0].u8string().c_str(),nullptr,&error),error);
     controls(active.get());render(active.get(),441);const auto before=telemetry(active.get());
     fs::remove(alias);fs::create_symlink(alternate,alias);
-    EXPECT_EQ(engine_sim::legacy_runtime::reset(active.get(),&error),ES_RESOURCE)<<error.message;const auto after=telemetry(active.get());EXPECT_EQ(std::memcmp(&before,&after,sizeof(before)),0);
-    fs::remove(alias);fs::create_symlink(roots[0]/"main.mr",alias);checked(engine_sim::legacy_runtime::reset(active.get(),&error),error);EXPECT_EQ(telemetry(active.get()).frames,0u);
+    EXPECT_EQ(es_reset(active.get(),&error),ES_RESOURCE)<<error.message;const auto after=telemetry(active.get());EXPECT_EQ(std::memcmp(&before,&after,sizeof(before)),0);
+    fs::remove(alias);fs::create_symlink(roots[0]/"main.json",alias);checked(es_reset(active.get(),&error),error);EXPECT_EQ(telemetry(active.get()).frames,0u);
 }
 TEST_F(RuntimeLifetime, RepeatedFaultResetUnloadAndReloadRetireEverySession) {
-    es_error error{};EXPECT_EQ(engine_sim::legacy_runtime::reset(nullptr,&error),ES_INVALID);
+    es_error error{};EXPECT_EQ(es_reset(nullptr,&error),ES_INVALID);
     for(int repeat=0;repeat<12;++repeat) {
         auto active=prepare(repeat%2,repeat);controls(active.get());render(active.get(),257);
         engine_sim::RuntimeTestAccess::pull(*active).setTickObserver([](const Simulator &){throw engine_sim::SimulationFault("lifecycle fault");});
         std::array<float,64> pcm;pcm.fill(42);std::uint32_t written=99;
         EXPECT_EQ(es_render(active.get(),64,pcm.data(),64,&written,&error),ES_RENDER_FAULT);
         EXPECT_EQ(telemetry(active.get()).state,ES_FAULTED);
-        const auto path=roots[repeat%2]/"main.mr";const auto original=read(path);write(path,"broken (");
-        EXPECT_EQ(engine_sim::legacy_runtime::reset(active.get(),&error),ES_RESOURCE);EXPECT_EQ(telemetry(active.get()).state,ES_FAULTED);
-        write(path,original);checked(engine_sim::legacy_runtime::reset(active.get(),&error),error);EXPECT_EQ(telemetry(active.get()).frames,0u);
+        const auto path=roots[repeat%2]/"main.json";const auto original=read(path);write(path,"broken (");
+        EXPECT_EQ(es_reset(active.get(),&error),ES_RESOURCE);EXPECT_EQ(telemetry(active.get()).state,ES_FAULTED);
+        write(path,original);checked(es_reset(active.get(),&error),error);EXPECT_EQ(telemetry(active.get()).frames,0u);
         auto reference=prepare(repeat%2,repeat);EXPECT_EQ(timeline(active.get(),503),timeline(reference.get(),31));
-        checked(es_unload(active.get(),&error),error);checked(es_unload(active.get(),&error),error);EXPECT_EQ(engine_sim::legacy_runtime::reset(active.get(),&error),ES_STATE);
-        checked(engine_sim::legacy_runtime::load(active.get(),path.u8string().c_str(),(roots[repeat%2]/"library").u8string().c_str(),roots[repeat%2].u8string().c_str(),&error),error);
+        checked(es_unload(active.get(),&error),error);checked(es_unload(active.get(),&error),error);EXPECT_EQ(es_reset(active.get(),&error),ES_STATE);
+        checked(es_load_json_file(active.get(),path.u8string().c_str(),roots[repeat%2].u8string().c_str(),nullptr,&error),error);
         EXPECT_EQ(telemetry(active.get()).state,ES_READY);
     }
 }
@@ -158,7 +159,7 @@ TEST_F(RuntimeLifetime, InterleavedAndConcurrentDistinctHandlesMatchIsolatedTime
     auto asyncA=std::async(std::launch::async,[&]{return timeline(a.get(),1);});
     auto asyncB=std::async(std::launch::async,[&]{return timeline(b.get(),503);});
     EXPECT_EQ(asyncA.get(),expectedA);EXPECT_EQ(asyncB.get(),expectedB);EXPECT_FALSE(timeout.load());EXPECT_EQ(entered,2u);
-    es_error error{};checked(engine_sim::legacy_runtime::reset(a.get(),&error),error);checked(engine_sim::legacy_runtime::reset(b.get(),&error),error);
+    es_error error{};checked(es_reset(a.get(),&error),error);checked(es_reset(b.get(),&error),error);
     engine_sim::RuntimeTestAccess::pull(*a).setTickObserver({});engine_sim::RuntimeTestAccess::pull(*b).setTickObserver({});
     Result interleavedA,interleavedB;
     for(std::size_t n=0;n<88201;) {
@@ -187,6 +188,6 @@ TEST_F(RuntimeLifetime, OneHandleMovesBetweenOwnersOnlyAtSynchronizedBoundaries)
     auto active=prepare(),reference=prepare();controls(active.get());controls(reference.get());
     auto task=std::async(std::launch::async,[&]{return render(active.get(),5003,7);});const auto first=task.get();
     EXPECT_EQ(first,render(reference.get(),5003));EXPECT_EQ(render(active.get(),8009,503),render(reference.get(),8009,1));
-    es_error error{};checked(engine_sim::legacy_runtime::reset(active.get(),&error),error);auto fresh=prepare();EXPECT_EQ(timeline(active.get()),timeline(fresh.get()));
+    es_error error{};checked(es_reset(active.get(),&error),error);auto fresh=prepare();EXPECT_EQ(timeline(active.get()),timeline(fresh.get()));
 }
 }

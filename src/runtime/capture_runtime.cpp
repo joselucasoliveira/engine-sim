@@ -12,20 +12,24 @@ void Range::add(double value) {
 RuntimeHost::RuntimeHost()
     : m_runtime(es_config{sizeof(es_config), ES_ABI_V2, 44100, ES_FREE, 1, 0, 0, 0},
           engine_sim::SampleClock::Profile::Desktop) {}
-std::unique_ptr<RuntimeHost> RuntimeHost::prepare(const es_script::PreparationContext &recipe,
-        std::uint64_t seed, bool mechanics) {
-    engine_sim::PreparationConfig config;
-    config.desktop = true; config.seed = seed;
-    auto prepared = engine_sim::prepareEngine(recipe, config);
+std::unique_ptr<RuntimeHost> RuntimeHost::prepare(const std::filesystem::path &entry,
+        const std::filesystem::path &root, std::uint64_t seed, bool mechanics) {
+    using namespace engine_sim::json_runtime;
+    auto prepared = require_model(prepare_desktop(entry, root, seed), entry);
     const auto frequency = prepared.session->simulator->getSimulationFrequency();
     if (frequency < 4000 || frequency > 96000 || prepared.session->definition.engine->getCylinderCount() > 64)
         throw std::invalid_argument("Capture diagnostics support 4000..96000 Hz and at most 64 cylinders");
     auto result = std::unique_ptr<RuntimeHost>(new RuntimeHost);
     result->m_mechanics = mechanics;
     auto *owner = result.get();
-    engine_sim::legacy_runtime::Access::adopt(result->m_runtime, std::move(prepared), [owner] { owner->latch(); });
+    result->m_runtime.adoptSession(std::move(prepared.session), std::move(prepared.recipe), ES_FREE, true,
+                                  [owner] { owner->latch(); });
     result->m_runtime.m_session->pull->setTickObserver([owner](const Simulator &sim) { owner->observe(sim); });
     return result;
+}
+void RuntimeHost::visitInputs(const engine_sim::json_runtime::InputVisitor &visitor) const {
+    const auto &recipe = m_runtime.m_session->prepared.recipe;
+    engine_sim::json_runtime::visit_file_inputs(*recipe, visitor);
 }
 void RuntimeHost::setControls(Controls controls) {
     if (!std::isfinite(controls.demand) || controls.demand < 0 || controls.demand > 1 ||

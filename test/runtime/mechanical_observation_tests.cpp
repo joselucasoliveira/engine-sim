@@ -114,9 +114,10 @@ public:
         es_runtime *handle = nullptr;
         check(es_create(&config, &handle, &error), error);
         m_handle.reset(handle);
-        if (source == Source::legacy)
-            check(engine_sim::legacy_runtime::load(handle, (assets/"main.mr").u8string().c_str(), library.u8string().c_str(),
-                          assets.u8string().c_str(), &error), error);
+        if (source == Source::legacy) {
+            m_legacyPaths = {assets/"main.mr", library, assets};
+            m_legacyInputs = engine_sim::legacy_runtime::prepare(*handle, m_legacyPaths);
+        }
         else if (source == Source::file)
             check(json::load_file(handle, assets/"main.json", assets, nullptr, &error), error);
         else {
@@ -128,9 +129,10 @@ public:
 
     void reset() {
         es_error error{};
-        const auto result = m_source == Source::legacy ? engine_sim::legacy_runtime::reset(m_handle.get(), &error)
-            : json::reset(m_handle.get(), nullptr, &error);
-        check(result, error);
+        if (m_source == Source::legacy)
+            engine_sim::legacy_runtime::prepare(*m_handle, m_legacyPaths, &m_legacyInputs);
+        else
+            check(json::reset(m_handle.get(), nullptr, &error), error);
         m_observation.reset();
     }
 
@@ -188,6 +190,8 @@ private:
     std::unique_ptr<MechanicalObservation> m_observation;
     std::unique_ptr<es_runtime, decltype(&es_destroy)> m_handle;
     Source m_source;
+    es_script::PreparationContext m_legacyPaths;
+    std::vector<es_script::ScriptInput> m_legacyInputs;
 };
 
 class MechanicalObservationTest : public testing::Test {

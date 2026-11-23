@@ -179,7 +179,7 @@ void runTone(const fs::path &out, bool quiet, std::uint64_t seed) {
 }
 
 struct EngineScenario {
-    const char *module;
+    const char *model;
     int cylinders;
     int exhausts;
     int frequency;
@@ -189,10 +189,10 @@ struct EngineScenario {
 };
 
 EngineScenario selectEngine(std::string_view name) {
-    if (name == "KOHLER") return {"engines/atg-video-1/02_kohler_ch750.mr", 2, 1, 30000, 1000, false, false};
-    if (name == "LS") return {"engines/atg-video-2/07_gm_ls.mr", 8, 2, 10000, 1200, true, false};
-    if (name == "HONDA") return {"engines/atg-video-1/05_honda_vtec.mr", 4, 2, 20000, 1600, false, true};
-    return {nullptr, 4, 1, 20000, 1600, false, true};
+    if (name == "KOHLER") return {"assets/engines/atg-video-1/02_kohler_ch750.json", 2, 1, 30000, 1000, false, false};
+    if (name == "LS") return {"assets/engines/atg-video-2/07_gm_ls.json", 8, 2, 10000, 1200, true, false};
+    if (name == "HONDA") return {"assets/engines/atg-video-1/05_honda_vtec.json", 4, 2, 20000, 1600, false, true};
+    return {"assets/main.json", 4, 1, 20000, 1600, false, true};
 }
 
 engine_sim_capture::Controls schedule(const Engine &engine, const EngineScenario &scenario, int block, bool mechanics) {
@@ -247,24 +247,18 @@ void runEngine(const fs::path &resources, const fs::path &out, std::string_view 
                bool captureMechanics, std::uint64_t seed) {
     auto scenario = selectEngine(name);
     if (captureMechanics) scenario.blocks = 400;
-    fs::path entry = resources / "assets/main.mr";
-    if (!entryOverride.empty()) entry = entryOverride;
-    else if (scenario.module != nullptr) {
-        entry = out / "entry.mr";
-        openOutput(entry) << "import \"engine_sim.mr\"\nimport \"" << scenario.module << "\"\nmain()\n";
-    }
+    const fs::path entry = entryOverride.empty() ? resources / scenario.model : entryOverride;
 
     const auto parseStart = Clock::now();
-    auto runtime = engine_sim_capture::RuntimeHost::prepare(
-        {entry, resources / "es", resources / "assets"}, seed, captureMechanics);
+    auto runtime = engine_sim_capture::RuntimeHost::prepare(entry, resources, seed, captureMechanics);
     const auto prepareTime = microsecondsSince(parseStart);
     const auto &engine = runtime->engine();
     const auto &simulator = runtime->simulator();
-    if (engine.getCylinderCount() != scenario.cylinders || engine.getExhaustSystemCount() != scenario.exhausts
-        || simulator.getSimulationFrequency() != scenario.frequency)
+    if (name != "LOAD" && (engine.getCylinderCount() != scenario.cylinders ||
+        engine.getExhaustSystemCount() != scenario.exhausts || simulator.getSimulationFrequency() != scenario.frequency))
         throw std::runtime_error("unexpected or unsupported engine graph: " + entry.u8string());
     engine_sim_capture::InputEvidence inputs(out);
-    inputs.append(runtime->inputs());
+    inputs.append(*runtime);
     auto graph = openOutput(out / "graph.tsv");
     graph << engine.getName() << '\t' << engine.getCylinderCount() << '\t'
           << engine.getExhaustSystemCount() << '\t' << engine.getSimulationFrequency() << '\t'

@@ -213,7 +213,7 @@ TEST_F(HostApplication, FailedReturnReloadKeepsSessionAndSuccessfulReturnReplace
     const auto valid = readModel("assets/engines/atg-video-2/01_subaru_ej25_eh.json");
     const auto modelFile=entry(valid); Application app; auto backend=host(4); auto *control=backend.get();
     backend->inputs[1].press(Key::Return); backend->inputs[2].press(Key::Return);
-    app.initialize(std::move(backend),{resources, {}, modelFile}); auto *original=app.getSimulator();
+    app.initialize(std::move(backend),{resources, modelFile}); auto *original=app.getSimulator();
     control->onFrame=[&](std::size_t frame) {
         if (frame==1) write(modelFile, "{\"components\":");
         if (frame==2) { EXPECT_EQ(app.getSimulator(),original); write(modelFile, valid); }
@@ -246,7 +246,7 @@ TEST_F(HostApplication, KohlerAndNineCylinderSessionsRenderProducePcmAndRelease)
         Application app; auto backend=host(40); auto data=recording;
         for (auto &input : backend->inputs) input.hold(Key::S);
         backend->inputs[0].press(Key::A);
-        app.initialize(std::move(backend),{resources, {}, modelFile});
+        app.initialize(std::move(backend),{resources, modelFile});
         ASSERT_EQ(app.getSimulator()->getEngine()->getCylinderCount(),engine.second);
         data->onShutdown=[&] { EXPECT_EQ(app.getSimulator(),nullptr); };
         app.run(); EXPECT_EQ(data->frames.size(),40U); EXPECT_GT(data->pcm.size(),0U);
@@ -296,7 +296,7 @@ TEST_F(ViewsApplication, FailedDetachedViewsKeepPaletteGenerationControlsAndDraw
     const auto modelFile=entry(valid); Application app; auto backend=host(4); auto *control=backend.get();
     backend->inputs[0].press(Key::A).hold(Key::S);
     backend->inputs[1].press(Key::Return); backend->inputs[2].press(Key::Return);
-    app.initialize(std::move(backend),{resources, {}, modelFile});
+    app.initialize(std::move(backend),{resources, modelFile});
     auto old=app.engineObservation(); const auto generation=app.viewGeneration();
     const auto palette=app.getAppSettings()->colorForeground;
     control->onFrame=[&](std::size_t frame) {

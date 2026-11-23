@@ -1,4 +1,3 @@
-#include "legacy_runtime.hpp"
 #include "runtime.hpp"
 #include "shaft_drive.hpp"
 #include "checked_solver.h"
@@ -55,16 +54,14 @@ class Drive:public testing::Test {
 protected:
     fs::path source,fixture;
     void SetUp() override {const auto *s=std::getenv("ENGINE_SIM_TEST_SOURCE");ASSERT_NE(s,nullptr);source=fs::u8path(s);fixture=source/"examples/runtime/fixture";}
-    Handle prepare(const std::string &model="fixture",std::uint32_t rate=44100,std::uint32_t frequency=0,fs::path custom={}) {
-        fs::path entry,library,assets;
-        if(!custom.empty()||model=="fixture") {const auto root=custom.empty()?fixture:custom;entry=root/"main.mr";library=root/"library";assets=root;}
-        else {
-            library=source/"es";assets=source/"assets";
-            if(model=="EJ25")entry=assets/"main.mr";
-            else {entry=fs::current_path()/(std::string(testing::UnitTest::GetInstance()->current_test_info()->name())+"-"+model+".mr");std::ofstream f(entry);f<<"import \"engine_sim.mr\"\nimport \"engines/"<<(model=="KOHLER"?"atg-video-1/02_kohler_ch750.mr":"atg-video-2/07_gm_ls.mr")<<"\"\nmain()\n";if(!f)throw std::runtime_error("entry write failed");}
-        }
+    Handle prepare(const std::string &model="fixture",std::uint32_t rate=44100,std::uint32_t frequency=0) {
+        fs::path assets = model == "fixture" ? fixture : source;
+        fs::path entry = assets / "main.json";
+        if (model == "EJ25") entry = assets / "assets/main.json";
+        else if (model == "KOHLER") entry = assets / "assets/engines/atg-video-1/02_kohler_ch750.json";
+        else if (model == "LS") entry = assets / "assets/engines/atg-video-2/07_gm_ls.json";
         es_error e{};es_config c{};checked(es_config_init(ES_ABI_V2,sizeof(c),&c,&e),e);c.mode=ES_DRIVEN;c.output_hz=rate;c.simulation_hz=frequency;
-        es_runtime *raw=nullptr;checked(es_create(&c,&raw,&e),e);Handle owned(raw,es_destroy);checked(engine_sim::legacy_runtime::load(raw,entry.u8string().c_str(),library.u8string().c_str(),assets.u8string().c_str(),&e),e);return owned;
+        es_runtime *raw=nullptr;checked(es_create(&c,&raw,&e),e);Handle owned(raw,es_destroy);checked(es_load_json_file(raw,entry.u8string().c_str(),assets.u8string().c_str(),nullptr,&e),e);return owned;
     }
 };
 struct Statistics {double peakJoint=0,peakError=0,peakPhase=0,peakReaction=0,plateauReaction=0,energy=0;unsigned lit=0;std::uint64_t ticks=0;};
@@ -131,7 +128,7 @@ TEST_F(Drive, SaturatedKohlerStepReturnsOnlyTheGoodPrefixAndResetRecovers) {
     const auto before=telemetry(r.get());const auto good=render(reference.get(),1);controls(r.get(),3600,100);std::array<float,66> pcm;pcm.fill(42);std::uint32_t written=99;es_error e{};
     EXPECT_EQ(es_render(r.get(),64,pcm.data()+1,64,&written,&e),ES_RENDER_FAULT)<<e.message;EXPECT_NE(std::strstr(e.message,"saturat"),nullptr);EXPECT_EQ(written,1u);EXPECT_EQ(pcm[1],good[0]);EXPECT_EQ(pcm[0],42);EXPECT_TRUE(std::all_of(pcm.begin()+2,pcm.end(),[](auto x){return x==42;}));
     const auto fault=telemetry(r.get());EXPECT_EQ(fault.frames,before.frames+1);EXPECT_EQ(fault.ticks,before.ticks);EXPECT_EQ(fault.state,ES_FAULTED);EXPECT_EQ(fault.applied_driven_rpm,0);
-    EXPECT_EQ(es_render(r.get(),0,nullptr,0,&written,&e),ES_STATE);checked(engine_sim::legacy_runtime::reset(r.get(),&e),e);render(r.get(),2205);controls(r.get(),600,100);render(r.get(),4410);EXPECT_NEAR(telemetry(r.get()).measured_rpm,600,.1);
+    EXPECT_EQ(es_render(r.get(),0,nullptr,0,&written,&e),ES_STATE);checked(es_reset(r.get(),&e),e);render(r.get(),2205);controls(r.get(),600,100);render(r.get(),4410);EXPECT_NEAR(telemetry(r.get()).measured_rpm,600,.1);
 }
 TEST_F(Drive, NonconvergenceAndCorruptedGeometryFaultBeforePublishingTheInterval) {
     for(unsigned kind=0;kind<3;++kind) {
@@ -148,7 +145,7 @@ TEST_F(Drive, SameControlTimelineAtBothRatesIsBitIdenticalAcrossPartitionsAndRes
         auto a=prepare("fixture",rate),b=prepare("fixture",rate);
         const auto run=[&](es_runtime *r,const std::vector<std::size_t> &parts) {std::vector<float> pcm;const std::array<std::size_t,9> edges{0,1,147,160,257,441,47999,48007,96003};std::size_t index=0;
             for(std::size_t i=0;i+1<edges.size();++i) {controls(r,i==0?0:i<5?600:i<7?1200:0,i%2?100:0);for(std::size_t n=edges[i];n<edges[i+1];) {const auto count=std::min(parts[index++%parts.size()],edges[i+1]-n);auto x=render(r,count);pcm.insert(pcm.end(),x.begin(),x.end());n+=count;}}return pcm;};
-        const auto expected=run(a.get(),{65536});const auto ta=telemetry(a.get());EXPECT_EQ(run(b.get(),{1}),expected);const auto tb=telemetry(b.get());EXPECT_EQ(std::memcmp(&ta,&tb,sizeof(ta)),0);es_error e{};checked(engine_sim::legacy_runtime::reset(b.get(),&e),e);EXPECT_EQ(telemetry(b.get()).applied_driven_rpm,0);EXPECT_EQ(run(b.get(),{7,251,31,1,503}),expected);
+        const auto expected=run(a.get(),{65536});const auto ta=telemetry(a.get());EXPECT_EQ(run(b.get(),{1}),expected);const auto tb=telemetry(b.get());EXPECT_EQ(std::memcmp(&ta,&tb,sizeof(ta)),0);es_error e{};checked(es_reset(b.get(),&e),e);EXPECT_EQ(telemetry(b.get()).applied_driven_rpm,0);EXPECT_EQ(run(b.get(),{7,251,31,1,503}),expected);
     }
 }
 TEST_F(Drive, IndependentDrivenOwnersOverlapAndMatchIsolatedRendering) {

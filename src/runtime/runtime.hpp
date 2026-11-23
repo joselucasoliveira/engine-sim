@@ -5,19 +5,15 @@
 #include "engine_session.h"
 #include "pull_engine.h"
 #include <memory>
-#include <variant>
 
 namespace desktop { class RuntimeHost; }
 namespace engine_sim_capture { class RuntimeHost; }
 
 namespace engine_sim {
 struct RuntimeTestAccess;
+struct LayoutFixtureAccess;
 struct JsonRuntimeAccess;
 struct JsonRecipe;
-namespace legacy_runtime {
-struct Access;
-struct Recipe;
-}
 class DrivenShaft;
 class Runtime {
 public:
@@ -31,8 +27,8 @@ private:
     friend struct JsonRuntimeAccess;
     friend class desktop::RuntimeHost;
     friend class engine_sim_capture::RuntimeHost;
-    friend struct legacy_runtime::Access;
-    using Recipe = std::variant<std::shared_ptr<const JsonRecipe>, std::shared_ptr<const legacy_runtime::Recipe>>;
+    friend struct LayoutFixtureAccess;
+    using Recipe = std::shared_ptr<const JsonRecipe>;
     struct PreparedGraph {
         Recipe recipe;
         std::unique_ptr<EngineSession> session;

@@ -17,7 +17,6 @@
 #include "../include/simulation_fault.h"
 
 #ifdef ATG_ENGINE_SIM_PIRANHA_ENABLED
-#include "../scripting/include/compiler.h"
 #endif
 
 #include <chrono>

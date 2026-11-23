@@ -36,7 +36,8 @@ protected:
         if (!file) throw std::runtime_error("cannot write external resource fixture");
     }
     void tree(const fs::path &path) {
-        fs::create_directories(path / "es"); text(path / "assets/main.mr", "fixture");
+        text(path / "assets/main.json", "{}");
+        text(path / "assets/assets.ysce");
     }
     fs::path source, root;
 };
@@ -70,25 +71,25 @@ TEST_F(Resources, InstalledAndBundleRootsIgnoreWorkingDirectory) {
     WorkingDirectory cwd(decoy);
     const auto paths = ResourcePaths::resolve(exe, {}, true);
     EXPECT_EQ(paths.root, fs::canonical(prefix / "share/engine-sim"));
-    EXPECT_EQ(paths.script, paths.assets / "main.mr");
-    EXPECT_NO_THROW(paths.validateBase());
+    EXPECT_EQ(paths.model, paths.assets / "main.json");
+    EXPECT_NO_THROW(paths.validateDesktop());
     const auto bundle = prefix / "EngineSim.app/Contents";
     text(bundle / "MacOS/app"); tree(bundle / "Resources");
     EXPECT_EQ(ResourcePaths::resolve(bundle / "MacOS/app", {}).root, fs::canonical(bundle / "Resources"));
 }
 
-TEST_F(Resources, ExplicitRootsAndScriptsOverrideLegacyConfiguration) {
+TEST_F(Resources, ExplicitRootsAndModelsOverrideWindowsConfiguration) {
     const auto exe = root / "program/bin/app"; text(exe);
     text(exe.parent_path() / "delta.conf", "wrong\nwrong\n");
     const auto data = root / fs::u8path("data \xC3\xA1"); tree(data);
-    const auto custom = root / fs::u8path("custom \xCE\xA9/main.mr"); text(custom);
-    const auto args = std::vector<std::string>{"ignored-argv0", "--resources", data.u8string(), "--script", custom.u8string()};
+    const auto custom = root / fs::u8path("custom \xCE\xA9/main.json"); text(custom);
+    const auto args = std::vector<std::string>{"ignored-argv0", "--resources", data.u8string(), "--model", custom.u8string()};
     auto paths = ResourcePaths::resolve(exe, engine_sim::parseResourceOptions(args), true);
-    EXPECT_EQ(paths.root, fs::canonical(data)); EXPECT_EQ(paths.script, fs::canonical(custom));
-    EXPECT_NO_THROW(paths.validateBase());
+    EXPECT_EQ(paths.root, fs::canonical(data)); EXPECT_EQ(paths.model, fs::canonical(custom));
+    EXPECT_NO_THROW(paths.validateDesktop());
     WorkingDirectory cwd(root);
-    paths = ResourcePaths::resolve(exe, {fs::u8path("data \xC3\xA1"), fs::u8path("custom \xCE\xA9/main.mr")});
-    EXPECT_EQ(paths.root, fs::canonical(data)); EXPECT_EQ(paths.script, fs::canonical(custom));
+    paths = ResourcePaths::resolve(exe, {fs::u8path("data \xC3\xA1"), fs::u8path("custom \xCE\xA9/main.json")});
+    EXPECT_EQ(paths.root, fs::canonical(data)); EXPECT_EQ(paths.model, fs::canonical(custom));
 }
 
 TEST_F(Resources, LegacyConfigurationIsModuleRelativeAndUtf8) {
@@ -96,31 +97,31 @@ TEST_F(Resources, LegacyConfigurationIsModuleRelativeAndUtf8) {
     text(exe.parent_path() / "delta.conf", "/delta\r\n/assets\r\n");
     auto paths = ResourcePaths::resolve(exe, {}, true);
     EXPECT_EQ(paths.assets, exe.parent_path() / "assets");
-    EXPECT_EQ(paths.library, exe.parent_path() / "es");
     EXPECT_EQ(paths.desktop, exe.parent_path() / "delta");
-    EXPECT_NO_THROW(paths.validateBase());
+    EXPECT_NO_THROW(paths.validateDesktop());
     const auto data = root / fs::u8path("local \xCE\xA9"); tree(data);
     text(exe.parent_path() / "delta.conf", "\xEF\xBB\xBF../local \xCE\xA9/delta\r\n../local \xCE\xA9/assets\r\n");
     paths = ResourcePaths::resolve(exe, {}, true);
     EXPECT_EQ(paths.root, fs::canonical(data)); EXPECT_EQ(paths.desktop, data / "delta");
-    EXPECT_NO_THROW(paths.validateBase());
+    EXPECT_NO_THROW(paths.validateDesktop());
     text(exe.parent_path() / "delta.conf", (data / "delta").u8string() + "\n" + (data / "assets").u8string() + "\n");
     EXPECT_EQ(ResourcePaths::resolve(exe, {}, true).assets, data / "assets");
 }
 
 TEST_F(Resources, MissingInputsAndMalformedOptionsNameTheFailure) {
     EXPECT_THROW(engine_sim::parseResourceOptions({"app", "--resources"}), ResourceError);
-    EXPECT_THROW(engine_sim::parseResourceOptions({"app", "--script"}), ResourceError);
+    EXPECT_THROW(engine_sim::parseResourceOptions({"app", "--model"}), ResourceError);
+    EXPECT_THROW(engine_sim::parseResourceOptions({"app", "--script", "old.mr"}), ResourceError);
     EXPECT_THROW(engine_sim::parseResourceOptions({"app", "--resources", "a", "--resources", "b"}), ResourceError);
     EXPECT_THROW(engine_sim::parseResourceOptions({"app", "--unknown"}), ResourceError);
     const auto exe = root / "bin/app"; text(exe);
     text(exe.parent_path() / "delta.conf", "one-line\n");
     EXPECT_THROW(ResourcePaths::resolve(exe, {}, true), ResourceError);
     tree(root / "data"); auto paths = ResourcePaths::resolve(exe, {root / "data", {}});
-    fs::remove(paths.script);
-    try { paths.validateBase(); FAIL() << "accepted missing script"; }
-    catch (const ResourceError &error) { EXPECT_NE(std::string(error.what()).find(paths.script.u8string()), std::string::npos); }
-    text(paths.script);
+    fs::remove(paths.model);
+    try { paths.validateDesktop(); FAIL() << "accepted missing model"; }
+    catch (const ResourceError &error) { EXPECT_NE(std::string(error.what()).find(paths.model.u8string()), std::string::npos); }
+    text(paths.model);
     EXPECT_THROW(paths.validateLegacyDesktop(), ResourceError);
 }
 

@@ -82,9 +82,11 @@ ResourceOptions parseResourceOptions(const std::vector<std::string> &arguments, 
     ResourceOptions options;
     for (std::size_t i = 1; i < arguments.size(); ++i) {
         const auto &option = arguments[i];
-        if (option == "--resources" || option == "--script") {
+        if (option == "--script" || option.rfind("--script=", 0) == 0)
+            throw ResourceError({}, "--script was removed; convert the model with engine-sim-convert and pass --model");
+        if (option == "--resources" || option == "--model") {
             if (++i == arguments.size() || arguments[i].empty()) throw ResourceError({}, option + " requires a path");
-            auto &target = option == "--resources" ? options.resources : options.script;
+            auto &target = option == "--resources" ? options.resources : options.model;
             if (!target.empty()) throw ResourceError({}, "duplicate " + option);
             target = fs::u8path(arguments[i]);
         }
@@ -107,7 +109,6 @@ ResourcePaths ResourcePaths::resolve(const fs::path &executable, const ResourceO
     const auto directory = absolutePath(executable).parent_path();
     paths.root = options.resources.empty() ? defaultRoot(executable) : absolutePath(options.resources);
     paths.assets = paths.root / "assets";
-    paths.library = paths.root / "es";
     paths.desktop = paths.root / "delta";
     if (!options.resources.empty() && !fs::is_directory(paths.desktop)) {
         const auto development = paths.root / "dependencies/submodules/delta-studio/engines/basic";
@@ -126,16 +127,11 @@ ResourcePaths ResourcePaths::resolve(const fs::path &executable, const ResourceO
         paths.desktop = absolutePath(legacyPath(directory, desktop));
         paths.assets = absolutePath(legacyPath(directory, assets));
         paths.root = paths.assets.parent_path();
-        paths.library = paths.root / "es";
     }
-    paths.script = options.script.empty() ? paths.assets / "main.mr" : absolutePath(options.script);
     paths.model = options.model.empty() ? paths.assets / "main.json" : absolutePath(options.model);
     return paths;
 }
 
-void ResourcePaths::validateBase() const {
-    requireDirectory(assets); requireDirectory(library); requireFile(script);
-}
 void ResourcePaths::validateDesktop() const {
     requireDirectory(assets);
     requireFile(model);

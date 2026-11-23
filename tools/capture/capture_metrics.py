@@ -4,6 +4,7 @@ import array
 import csv
 import functools
 import hashlib
+from itertools import zip_longest
 import math
 from pathlib import Path
 import statistics
@@ -11,6 +12,34 @@ import sys
 import wave
 
 RATE = 44100
+
+
+def first_sample_difference(reference, candidate):
+    """Return the first differing zero-based PCM frame, including an extent change."""
+    width = 4 if reference.suffix == ".f32le" else 2
+    with reference.open("rb") as left, candidate.open("rb") as right:
+        frame = 0
+        while True:
+            before, after = left.read(width), right.read(width)
+            if before != after:
+                return {"frame": frame, "expected_bits_le": before.hex(), "actual_bits_le": after.hex()}
+            if not before:
+                return None
+            frame += 1
+
+
+def first_tick_difference(reference, candidate):
+    """Compare the saved per-tick shaft fields in their original row order."""
+    with reference.open(encoding="utf-8", newline="") as left, candidate.open(encoding="utf-8", newline="") as right:
+        for before, after in zip_longest(csv.DictReader(left), csv.DictReader(right)):
+            if before == after:
+                continue
+            tick = int((before if before is not None else after)["tick"])
+            if before is None or after is None:
+                return {"tick": tick, "field": "extent", "expected": before, "actual": after}
+            field = next(key for key in dict.fromkeys((*before, *after)) if before.get(key) != after.get(key))
+            return {"tick": tick, "field": field, "expected": before.get(field), "actual": after.get(field)}
+    return None
 
 
 def digest(path):

@@ -421,10 +421,10 @@ TEST(RuntimeDesktop, PrivatePreparationAdmitsLegacyRatesWithoutChangingPublicLim
         adjusted.replace(setting, knob.size(), "\"simulation_frequency\":" + std::to_string(declared));
         {std::ofstream target(canonical.root/"main.json");target<<adjusted;}
         EXPECT_THROW(engine_sim::prepareEngine(recipe),EngineLoadError);
-        auto legacy=desktop::RuntimeHost::prepare(recipe);
+        auto legacy=engine_sim::prepareEngine(recipe, {0, ES_FREE, 0, 1, true});
         auto host=desktop::RuntimeHost::prepareModel(canonical.root/"main.json", canonical.root);
         EXPECT_EQ(host->simulator()->getSimulationFrequency(),frequency);
-        EXPECT_EQ(host->simulator()->getSimulationFrequency(),legacy->simulator()->getSimulationFrequency());
+        EXPECT_EQ(host->simulator()->getSimulationFrequency(),legacy.session->simulator->getSimulationFrequency());
         auto view=host->views().at<Engine>();const auto generation=view.generation();
         float sample;std::uint32_t written=0;host->render(&sample,1,written);EXPECT_EQ(written,1u);
         if(frequency==400) {

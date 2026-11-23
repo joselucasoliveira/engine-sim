@@ -1,7 +1,7 @@
 #ifndef ENGINE_SIM_CAPTURE_INPUT_EVIDENCE_H
 #define ENGINE_SIM_CAPTURE_INPUT_EVIDENCE_H
 
-#include "compiler.h"
+#include "capture_runtime.hpp"
 #include <fstream>
 
 namespace engine_sim_capture {
@@ -15,18 +15,19 @@ public:
         m_paths.exceptions(std::ios::badbit | std::ios::failbit);
         m_map.exceptions(std::ios::badbit | std::ios::failbit);
     }
-    void append(const std::vector<es_script::ScriptInput> &inputs) {
-        for (const auto &input : inputs) {
+    void append(const RuntimeHost &runtime) {
+        runtime.visitInputs([&](const std::filesystem::path &path, std::string_view bytes) {
             const auto prefix = "prepared-input-" + std::to_string(m_index);
-            write(m_out / (prefix + ".bin"), input.bytes);
-            write(m_out / (prefix + ".path"), input.resolvedPath.u8string());
-            m_paths << input.resolvedPath.u8string() << '\n';
-            m_map << m_index++ << '\t' << input.bytes.size() << '\n';
-        }
+            const auto resolved = path.u8string();
+            write(m_out / (prefix + ".bin"), bytes);
+            write(m_out / (prefix + ".path"), resolved);
+            m_paths << resolved << '\n';
+            m_map << m_index++ << '\t' << bytes.size() << '\n';
+        });
         m_paths.flush(); m_map.flush();
     }
 private:
-    static void write(const std::filesystem::path &path, const std::string &bytes) {
+    static void write(const std::filesystem::path &path, std::string_view bytes) {
         std::ofstream stream(path, std::ios::binary);
         stream.exceptions(std::ios::badbit | std::ios::failbit);
         stream.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));

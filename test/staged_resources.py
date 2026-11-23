@@ -75,14 +75,14 @@ def main():
         if row["component"] == "base":
             assert before["share/engine-sim/" + row["destination"]] == row["sha256"]
     for name in ("licenses/engine-sim-MIT.txt", "licenses/THIRD_PARTY_NOTICES.md", "licenses/solver-MIT.txt",
-                 "licenses/Piranha-MIT.txt", "licenses/Boost.txt", "licenses/FlexLexer-notice.h"):
+                 "licenses/nlohmann-json-MIT.txt"):
         assert (resources / name).is_file(), name
-    assert not list(stage.rglob("*.dia"))
-    assert len(list((resources / "es/sound-library").rglob("*.wav"))) == 10
+    assert not list(stage.rglob("*.dia")) and not list(stage.rglob("*.mr"))
+    assert len(list((resources / "es/sound-library").rglob("*.wav"))) == 6
     decoy = scratch / "unrelated cwd"
     (decoy / "assets").mkdir(parents=True)
     (decoy / "es").mkdir()
-    (decoy / "assets/main.mr").write_text("invalid_decoy()\n")
+    (decoy / "assets/main.json").write_text("{invalid decoy}\n")
     child_environment = dict(os.environ, PATH=str(stage / "bin") + os.pathsep + os.environ["PATH"])
     namespace = []
     if platform.system() == "Linux":
@@ -119,28 +119,29 @@ else:
     result = json.loads((result_root / "run.json").read_text())
     assert result["status"] == "pass" and result["resources"] == str(resources)
     trial = result["cases"]["LOAD"][0]
-    assert set(trial) == {"valid", "missing-entry", "unknown-node", "missing-import", "missing-ir"}
+    assert set(trial) == {"valid", "missing-entry", "bad-schema", "malformed", "missing-ir"}
     for event in trial.values():
         assert event["status"] == "pass"
-    assert trial["valid"]["fixtures"]
+    assert trial["valid"]["fixtures"]["resources/assets/main.json"] == before["share/engine-sim/assets/main.json"]
     valid = result_root / trial["valid"]["directory"]
     for line in (valid / "inputs.txt").read_text(encoding="utf-8").splitlines():
         assert Path(line).is_relative_to(resources), line
     assert (valid / "graph.tsv").stat().st_size > 0
     missing_ir = result_root / trial["missing-ir"]["directory"] / "stderr.log"
     diagnostic = missing_ir.read_text(encoding="utf-8")
-    assert str(result_root / "load-fixtures/missing-ir/es/sound-library/new/minimal_muffling_02.wav") in diagnostic
+    first_ir = json.loads((resources / "assets/main.json").read_bytes())["components"]["impulses"][0]["path"]
+    assert "CFG_RESOURCE_PATH" in diagnostic and str(result_root / "load-fixtures/missing-ir" / first_ir) in diagnostic
     # Resolve explicit relative CLI paths before the helper changes cwd for each worker.
     relative_resources = os.path.relpath(resources, decoy)
-    relative_script = os.path.relpath(resources / "assets/main.mr", decoy)
-    run(command + [scratch / "explicit-run", "--resources", relative_resources, "--script", relative_script],
+    relative_model = os.path.relpath(resources / "assets/main.json", decoy)
+    run(command + [scratch / "explicit-run", "--resources", relative_resources, "--model", relative_model],
         cwd=decoy, environment=child_environment)
     missing = scratch / "absent resources \u03a9"
     failure = run(command + [scratch / "missing-run", "--resources", missing], expected=1,
                   cwd=decoy, environment=child_environment)
     assert str(missing) in json.loads(failure.stderr)["reason"]
     assert hashes(stage) == before, "installed tree was changed during execution"
-    assert hashes(decoy) == {"assets/main.mr": hashlib.sha256(b"invalid_decoy()\n").hexdigest()}
+    assert hashes(decoy) == {"assets/main.json": hashlib.sha256(b"{invalid decoy}\n").hexdigest()}
     (scratch / "result.json").write_text(json.dumps({"status": "pass", "files": len(before),
         "source_inaccessible": bool(namespace), "stage_immutable_mount": bool(namespace),
         "source": str(options.source), "build": str(options.build), "stage": str(stage)}, indent=2))

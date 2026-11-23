@@ -46,12 +46,12 @@ public:
     void initialize(const engine_sim::ResourcePaths &paths,const engine_sim::CompiledScene &scene) override {
         ++recording->initialized;
         loadModels(scene);
-        entry=paths.script;
+        entry=paths.model;
         if (!outputDirectory.empty()) {
             std::filesystem::create_directories(outputDirectory);
             std::ofstream info(outputDirectory/"fixture.txt");
             info<<"Explicit record/replay fixture; no native pixels or device output\nresources="<<paths.root.u8string()
-                <<"\nscript="<<paths.script.u8string()<<"\nmodels="<<scene.meshes.size()<<'\n';
+                <<"\nmodel="<<paths.model.u8string()<<"\nmodels="<<scene.meshes.size()<<'\n';
         }
         if (failInitialize) throw desktop::DesktopError("initialize","injected startup failure");
     }
