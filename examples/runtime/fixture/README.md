@@ -21,3 +21,15 @@ The response consists of eight explicitly specified PCM16 samples at 44.1 kHz.
 Supply this directory as the asset root, `main.mr` as the entry and `library`
 as the script library root. The library closure contains only the script
 types, units, operations, actions and model objects used to prepare engines.
+
+`main.json` is the deterministic format-v1 conversion of this fixture's
+`main.mr` entry, evaluated directly with its local library and no arguments.
+It uses the same MIT terms and synthetic response. The converted document
+uses `impulse.wav` relative to this directory and materializes the original
+vehicle and transmission defaults. Select this directory as the asset root
+when loading `main.json`.
+
+The JSON SHA-256 is
+`b0d67dae7bab867eed3f79fd9aae581b3eabaac329e0a769c1f82a3408e12bfe`.
+The source entry SHA-256 is
+`50ccecfa33a19ca3a07fd466344411edea69b11e5ae9b6db8f42fb267c2cbf06`.

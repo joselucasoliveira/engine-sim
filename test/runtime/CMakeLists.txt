@@ -230,4 +230,13 @@ if (TARGET engine-sim-runtime AND TARGET engine-sim-assembly)
     add_test(NAME JsonResetIdentity
         COMMAND engine-sim-json-runtime-test identity "${json_fixture}" "${impulse_fixture}")
     set_tests_properties(JsonTransactionalRuntime JsonResetIdentity PROPERTIES LABELS r25-json-runtime TIMEOUT 90)
+
+    target_link_libraries(engine-sim-mechanical-observation-test PRIVATE engine-sim-runtime-json-private EngineSim::Json)
+    add_test(NAME ConvertedFixtureStructure COMMAND engine-sim-mechanical-observation-test
+        --gtest_filter=MechanicalObservationTest.ConvertedFixtureStructure)
+    add_test(NAME ConvertedFixtureParity COMMAND engine-sim-mechanical-observation-test
+        --gtest_filter=MechanicalObservationTest.ConvertedFixtureParity)
+    set_tests_properties(ConvertedFixtureStructure ConvertedFixtureParity
+        PROPERTIES LABELS r25-corpus TIMEOUT 90
+        ENVIRONMENT "ENGINE_SIM_TEST_SOURCE=${PROJECT_SOURCE_DIR};ENGINE_SIM_TEST_MECHANICAL_FIXTURE=${mechanical_fixture}")
 endif ()
