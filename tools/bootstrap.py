@@ -214,8 +214,6 @@ def requirements(profile, overlays, tests, windows, video):
     names = []
     if selected - {"config", "synthesis"}:
         names.append("simple-2d-constraint-solver")
-    if selected & {"core", "capture", "desktop"}:
-        names.append("csv-io")
     inputs = ["googletest"] if tests else []
     if "converter" in selected:
         names.append("piranha")

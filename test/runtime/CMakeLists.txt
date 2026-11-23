@@ -201,6 +201,16 @@ if (TARGET engine-sim-runtime AND ENGINE_SIM_BUILD_RUNTIME_EXAMPLES)
     target_link_libraries(engine-sim-example-reference PRIVATE EngineSim::Runtime)
     set_target_properties(engine-sim-example-reference PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO LINKER_LANGUAGE CXX)
     engine_sim_diagnose(engine-sim-example-reference TRUE)
+    if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND ENGINE_SIM_SANITIZER STREQUAL "none")
+        set(csv_gate "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/csv_gate.py"
+            --source "${PROJECT_SOURCE_DIR}" --deps-root "${ENGINE_SIM_PRESET_ROOT}"
+            --compiler "${CMAKE_CXX_COMPILER}" --cmake "${CMAKE_COMMAND}" --ctest "${CMAKE_CTEST_COMMAND}"
+            --render "$<TARGET_FILE:engine-sim-render>" --reference "$<TARGET_FILE:engine-sim-example-reference>")
+        add_test(NAME CsvFreeBuildProfiles COMMAND ${csv_gate} profiles)
+        add_test(NAME CaptureTextFormats COMMAND ${csv_gate} formats)
+        set_tests_properties(CsvFreeBuildProfiles PROPERTIES LABELS "r25-profile-combined" RUN_SERIAL TRUE TIMEOUT 900)
+        set_tests_properties(CaptureTextFormats PROPERTIES RUN_SERIAL TRUE TIMEOUT 300)
+    endif ()
     add_test(NAME RuntimeExampleNative COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/example_tests.py"
         --cli "$<TARGET_FILE:engine-sim-render>" --reference "$<TARGET_FILE:engine-sim-example-reference>"
         --fixture "${PROJECT_SOURCE_DIR}/examples/runtime/fixture" --out "${CMAKE_CURRENT_BINARY_DIR}/example-admission")

@@ -18,9 +18,9 @@ Presets require `ES_OUT` to name an absolute directory outside the checkout. Use
 | --- | --- | --- |
 | `config`, `synthesis` | None | Config with JSON uses its checked-in parser and Python schema compiler. |
 | `physics`, `runtime` | `simple-2d-constraint-solver` | CMake, the native compiler and the system runtime. |
-| `core`, `capture` | `simple-2d-constraint-solver`, `csv-io` | Capture uses Python for orchestration. |
-| `desktop` on Linux or macOS | `simple-2d-constraint-solver`, `csv-io` | SDL 3.2.8 and the platform prerequisites below. |
-| `desktop` on Windows x64 | `simple-2d-constraint-solver`, `csv-io`, `delta-studio` | Boost.Filesystem 1.78.0, SDL2, SDL2_image and D3DX from the lock. |
+| `core`, `capture` | `simple-2d-constraint-solver` | Capture uses Python for orchestration. |
+| `desktop` on Linux or macOS | `simple-2d-constraint-solver` | SDL 3.2.8 and the platform prerequisites below. |
+| `desktop` on Windows x64 | `simple-2d-constraint-solver`, `delta-studio` | Boost.Filesystem 1.78.0, SDL2, SDL2_image and D3DX from the lock. |
 | `converter` | `simple-2d-constraint-solver`, `piranha` | Boost.Filesystem 1.78.0, Flex 2.6.4 and Bison 3.2 or newer. Windows bootstrap supplies the locked generators. |
 
 ## Linux x86_64
@@ -40,7 +40,7 @@ A functioning display, Vulkan ICD and audio endpoint are required for interactiv
 set -e
 export CMAKE_GENERATOR=Ninja
 export ES_OUT="$(cd .. && pwd)/engine-sim-output-linux"
-git submodule update --init -- dependencies/submodules/simple-2d-constraint-solver dependencies/submodules/csv-io
+git submodule update --init -- dependencies/submodules/simple-2d-constraint-solver
 python3 -B tools/bootstrap.py --profile desktop --tests --out "$ES_OUT"
 cmake --preset desktop
 cmake --build --preset desktop -j 4
@@ -61,7 +61,7 @@ Run the following in x64 Developer PowerShell.
 ```powershell
 $ErrorActionPreference = 'Stop'
 $env:ES_OUT = Join-Path (Get-Item ..).FullName 'engine-sim-output-windows'
-git submodule update --init -- dependencies/submodules/simple-2d-constraint-solver dependencies/submodules/csv-io dependencies/submodules/delta-studio
+git submodule update --init -- dependencies/submodules/simple-2d-constraint-solver dependencies/submodules/delta-studio
 if ($LASTEXITCODE) { throw 'Submodule setup failed' }
 py -3 -B tools/bootstrap.py --profile desktop --tests --out $env:ES_OUT
 if ($LASTEXITCODE) { throw 'Bootstrap failed' }
@@ -91,7 +91,7 @@ set -e
 export DEVELOPER_DIR=/Applications/Xcode_16.4.app/Contents/Developer
 export CMAKE_GENERATOR=Ninja
 export ES_OUT="$(cd .. && pwd)/engine-sim-output-mac"
-git submodule update --init -- dependencies/submodules/simple-2d-constraint-solver dependencies/submodules/csv-io
+git submodule update --init -- dependencies/submodules/simple-2d-constraint-solver
 python3 -B tools/bootstrap.py --profile desktop --tests --out "$ES_OUT"
 cmake --preset desktop -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0
 cmake --build --preset desktop -j 4
@@ -139,11 +139,11 @@ cmake --preset runtime-test -DENGINE_SIM_BUILD_DESKTOP=ON \
 cmake --build --preset runtime-test --config Release
 ```
 
-On Linux, run the two dependency audit checks explicitly using Ninja and bubblewrap. Point `ENGINE_SIM_PROFILE_CACHE` at the verified archive cache containing GoogleTest, SDL3 and Boost. The combined check also uses the installed Flex/Bison generators and the initialized desktop and converter sources. Keep `ES_OUT` external to the checkout.
+On Linux, run the dependency audits explicitly using Ninja and bubblewrap. Point `ENGINE_SIM_PROFILE_CACHE` at the verified archive cache containing GoogleTest, SDL3 and Boost. `CombinedProfileClosure` also uses the installed Flex and Bison generators and the initialized converter sources. Keep `ES_OUT` external to the checkout.
 
 ```sh
 ENGINE_SIM_PROFILE_CACHE=/absolute/cache ctest --test-dir "$ES_OUT/runtime-test" \
-  --output-on-failure -R '^(ProfileDependencyIsolation|CombinedProfileClosure)$'
+  --output-on-failure -R '^(ProfileDependencyIsolation|CombinedProfileClosure|CsvFreeBuildProfiles|CaptureTextFormats)$'
 ```
 
 ## Offline rebuilding

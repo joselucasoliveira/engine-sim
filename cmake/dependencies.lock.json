@@ -1,10 +1,6 @@
 {
   "version": 1,
   "git": {
-    "csv-io": {
-      "url": "https://github.com/ange-yaghi/csv-io",
-      "revision": "2112c55e1e831c8f7a1b91de23722b7926ad3d00"
-    },
     "delta-studio": {
       "url": "https://github.com/ange-yaghi/delta-studio",
       "revision": "b7d0a046733b924d12706baf1e5e59ba427aa7b1"

@@ -220,20 +220,22 @@ class Audit:
                  self.args.source / "test/script/legacy_converter.py", build / "bin/engine-sim-convert",
                  self.args.source / "examples/runtime/fixture", build, "cli"])
 
-    def sdk(self, source, out, variant, mixed=False):
+    def sdk(self, source, out, variant, mixed=False, converter=True):
         options = []
         if variant == "shared":
             path = out / "runtime-shared/sdk-link.map"
             options.append(f"-DCMAKE_SHARED_LINKER_FLAGS=-Wl,-Map,{path}")
         if mixed:
             options.extend(("-DENGINE_SIM_BUILD_DESKTOP=ON", "-DENGINE_SIM_BUILD_CAPTURE=ON",
-                            "-DENGINE_SIM_BUILD_LEGACY_CONVERTER=ON",
+                            f"-DENGINE_SIM_BUILD_LEGACY_CONVERTER={'ON' if converter else 'OFF'}",
                             f"-DBUILD_TESTING={'ON' if variant == 'static' else 'OFF'}",
                             f"-DENGINE_SIM_BUILD_HOST_TESTS={'ON' if variant == 'static' else 'OFF'}"))
         build = self.configure(source, out, "runtime-" + variant, *options)
         targets = ["engine-sim-runtime"]
         if mixed:
-            targets += ["engine-sim-app", "engine-sim-capture", "engine-sim-convert"]
+            targets += ["engine-sim-app", "engine-sim-capture"]
+            if converter:
+                targets.append("engine-sim-convert")
             if variant == "static":
                 targets += ["engine-sim-host-test", "engine-sim-pacing-test"]
         self.build(build, *targets)
@@ -387,7 +389,7 @@ def main():
             receipt = evidence.bootstrap(args.source, out, "runtime",
                         ("--with-desktop", "--with-capture", "--with-converter", "--tests"), cache)
             assert set(receipt["archives"]) == {"boost", "googletest", "sdl3"}, receipt
-            assert set(receipt["git"]) == {SOLVER, "csv-io", "piranha"}, receipt
+            assert set(receipt["git"]) == {SOLVER, "piranha"}, receipt
             actual = {variant: evidence.sdk(args.source, out, variant, mixed=True)
                       for variant in ("static", "shared")}
             write_json(work / "summary.json", actual)

@@ -23,7 +23,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Initialize locked core sources
-        run: git submodule update --init -- dependencies/submodules/simple-2d-constraint-solver dependencies/submodules/csv-io
+        run: git submodule update --init -- dependencies/submodules/simple-2d-constraint-solver
       - name: Replay the clean core checkout
         env:
           EXPECTED_REVISION: ${{ github.sha }}
@@ -55,7 +55,7 @@ jobs:
           persist-credentials: false
       - name: Prepare capture sources and diagnostic tools
         run: |
-          git submodule update --init -- dependencies/submodules/simple-2d-constraint-solver dependencies/submodules/csv-io
+          git submodule update --init -- dependencies/submodules/simple-2d-constraint-solver
           sudo apt-get update
           sudo apt-get install --yes clang-18 llvm-18 bubblewrap
           if ! bwrap --unshare-net --ro-bind / / -- /usr/bin/true; then
@@ -94,7 +94,7 @@ jobs:
           persist-credentials: false
       - name: Prepare the explicitly virtual desktop
         run: |
-          git submodule update --init -- dependencies/submodules/simple-2d-constraint-solver dependencies/submodules/csv-io
+          git submodule update --init -- dependencies/submodules/simple-2d-constraint-solver
           sudo apt-get update
           sudo apt-get install --yes xvfb xauth mesa-vulkan-drivers libvulkan1 \
             libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev \

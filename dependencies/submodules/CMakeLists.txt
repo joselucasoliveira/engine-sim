@@ -38,15 +38,6 @@ if (NOT MSVC)
         -include "${PROJECT_SOURCE_DIR}/cmake/SolverCompatibility.h")
 endif ()
 
-if (NOT ENGINE_SIM_MODULE_PROFILE AND (ENGINE_SIM_BUILD_DESKTOP OR ENGINE_SIM_BUILD_CAPTURE OR
-        (NOT ENGINE_SIM_BUILD_RUNTIME AND NOT ENGINE_SIM_BUILD_LEGACY_CONVERTER)))
-    engine_sim_locked_source(csv csv-io)
-    add_library(csv-io STATIC EXCLUDE_FROM_ALL "${csv}/src/csv_data.cpp" "${csv}/src/information.cpp")
-    target_compile_definitions(csv-io PRIVATE PROJECT_NAMESPACE=atg_csv)
-    target_include_directories(csv-io PUBLIC "${csv}/include")
-
-endif ()
-
 if (ENGINE_SIM_BUILD_LEGACY_CONVERTER OR (ENGINE_SIM_BUILD_DESKTOP AND engine_sim_windows))
     include("${PROJECT_SOURCE_DIR}/cmake/BoostFilesystem.cmake")
 endif ()

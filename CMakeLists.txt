@@ -507,7 +507,7 @@ foreach(target IN ITEMS engine-sim engine-sim-host-resources engine-sim-desktop-
         engine-sim-displacement-test engine-sim-load-test engine-sim-wave-test engine-sim-resource-test engine-sim-capture)
     engine_sim_diagnose("${target}" TRUE)
 endforeach ()
-foreach(target IN ITEMS simple-2d-constraint-solver piranha csv-io gtest gtest_main delta-core delta-basic)
+foreach(target IN ITEMS simple-2d-constraint-solver piranha gtest gtest_main delta-core delta-basic)
     engine_sim_diagnose("${target}" FALSE)
 endforeach ()
 
