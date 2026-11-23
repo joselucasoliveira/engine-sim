@@ -16,6 +16,8 @@
 namespace es_script {
 
     class CylinderHeadNode : public ObjectReferenceNode<CylinderHeadNode> {
+        friend class LegacySnapshotBuilder;
+
     public:
         CylinderHeadNode() { /* void */ }
         virtual ~CylinderHeadNode() { /* void */ }

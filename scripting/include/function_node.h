@@ -10,6 +10,8 @@
 namespace es_script {
 
     class FunctionNode : public ObjectReferenceNode<FunctionNode> {
+        friend class LegacySnapshotBuilder;
+
     public:
         struct Sample {
             double x, y;

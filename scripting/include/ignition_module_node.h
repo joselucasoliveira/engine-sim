@@ -13,6 +13,8 @@
 namespace es_script {
 
     class IgnitionModuleNode : public ObjectReferenceNode<IgnitionModuleNode> {
+        friend class LegacySnapshotBuilder;
+
     public:
         struct Post {
             IgnitionWireNode *wire;

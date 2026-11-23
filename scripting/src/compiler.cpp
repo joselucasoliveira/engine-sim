@@ -54,19 +54,23 @@ void collectScripts(const piranha::IrCompilationUnit &unit,
 }
 }
 
-thread_local es_script::Compiler::Output *es_script::Compiler::s_output = nullptr;
+thread_local es_script::Compiler::ActiveEvaluation *es_script::Compiler::s_evaluation = nullptr;
 
 es_script::Compiler::Compiler() : m_compiler(nullptr) {}
 
 es_script::Compiler::~Compiler() { destroy(); }
 
 es_script::Compiler::Output *es_script::Compiler::output() {
-    if (s_output == nullptr) throw std::logic_error("No active script execution output");
-    return s_output;
+    if (s_evaluation == nullptr) throw std::logic_error("No active script execution output");
+    return &s_evaluation->output;
+}
+
+es_script::EvaluationObserver *es_script::Compiler::observer() noexcept {
+    return s_evaluation ? s_evaluation->observer : nullptr;
 }
 
 es_script::Compiler::Output es_script::Compiler::prepare(const PreparationContext &context,
-        std::vector<ScriptInput> &inputs, const InputVerifier &verify) {
+        std::vector<ScriptInput> &inputs, const InputVerifier &verify, EvaluationObserver *observer) {
     const auto entry = context.entry.u8string();
     if (!context.entry.is_absolute() || !context.libraryRoot.is_absolute() || !context.assetRoot.is_absolute()) {
         throw Error({"paths", entry, "Entry, library root and asset root must be absolute paths"});
@@ -91,7 +95,7 @@ es_script::Compiler::Output es_script::Compiler::prepare(const PreparationContex
         if (!detail.empty()) diagnostic.message = detail;
         throw Error(diagnostic);
     }
-    auto result = compiler.execute();
+    auto result = compiler.execute(observer);
     compiler.destroy();
     inputs = std::move(pending);
     return result;
@@ -178,19 +182,20 @@ bool es_script::Compiler::compile(const std::string &path, std::ostream &diagnos
     }
 }
 
-es_script::Compiler::Output es_script::Compiler::execute() {
+es_script::Compiler::Output es_script::Compiler::execute(EvaluationObserver *observer) {
     if (!m_compiled) {
         m_lastError = {"execute", m_entryPath, "No unexecuted successful compilation"};
         throw Error(m_lastError);
     }
     m_compiled = false;
     Output pending;
-    struct ActiveOutput {
-        Output *&slot;
-        Output *previous;
-        ~ActiveOutput() { slot = previous; }
-    } active{s_output, s_output};
-    s_output = &pending;
+    ActiveEvaluation evaluation{pending, observer};
+    struct ScopedEvaluation {
+        ActiveEvaluation *&slot;
+        ActiveEvaluation *previous;
+        ~ScopedEvaluation() { slot = previous; }
+    } active{s_evaluation, s_evaluation};
+    s_evaluation = &evaluation;
     try {
         pending.sourcePath = m_entryPath;
         if (!m_program->execute()) {

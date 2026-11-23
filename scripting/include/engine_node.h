@@ -20,6 +20,8 @@
 namespace es_script {
 
     class EngineNode : public ObjectReferenceNode<EngineNode> {
+        friend class LegacySnapshotBuilder;
+
     public:
         EngineNode() { /* void */ }
         virtual ~EngineNode() { /* void */ }

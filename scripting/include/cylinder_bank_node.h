@@ -17,6 +17,8 @@
 namespace es_script {
 
     class CylinderBankNode : public ObjectReferenceNode<CylinderBankNode> {
+        friend class LegacySnapshotBuilder;
+
     public:
         struct Cylinder {
             PistonNode *piston;

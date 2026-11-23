@@ -22,6 +22,8 @@ namespace es_script {
     };
 
     class DirectThrottleLinkageNode : public ThrottleNode {
+        friend class LegacySnapshotBuilder;
+
     public:
         DirectThrottleLinkageNode() { /* void */ }
         virtual ~DirectThrottleLinkageNode() { /* void */ }
@@ -46,6 +48,8 @@ namespace es_script {
     };
 
     class GovernorNode : public ThrottleNode {
+        friend class LegacySnapshotBuilder;
+
     public:
         GovernorNode() { /* void */ }
         virtual ~GovernorNode() { /* void */ }

@@ -10,6 +10,8 @@
 namespace es_script {
 
     class VtecValvetrainNode : public ValvetrainNode {
+        friend class LegacySnapshotBuilder;
+
     public:
         VtecValvetrainNode() { /* void */ }
         virtual ~VtecValvetrainNode() { /* void */ }

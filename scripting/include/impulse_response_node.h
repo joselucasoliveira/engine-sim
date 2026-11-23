@@ -15,6 +15,8 @@ namespace es_script {
 
     class ImpulseResponseNode
         : public ObjectReferenceNode<ImpulseResponseNode> {
+        friend class LegacySnapshotBuilder;
+
     public:
         ImpulseResponseNode() { /* void */ }
         virtual ~ImpulseResponseNode() { /* void */ }

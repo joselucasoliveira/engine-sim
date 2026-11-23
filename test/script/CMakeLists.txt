@@ -62,3 +62,24 @@ add_test(NAME RuntimeParserPreparation
     COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/preparation_probe.py"
         "$<TARGET_FILE:engine-sim-parser-preparation-test>" "${PROJECT_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}")
 set_tests_properties(RuntimeParserPreparation PROPERTIES LABELS "r2-parser;script" TIMEOUT 300)
+
+if (TARGET engine-sim-legacy-snapshot)
+    add_executable(engine-sim-legacy-capture-test legacy_capture.cpp)
+    target_link_libraries(engine-sim-legacy-capture-test
+        PRIVATE engine-sim-legacy-snapshot EngineSim::Json)
+    engine_sim_diagnose(engine-sim-legacy-capture-test TRUE)
+
+    set(capture_script "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/legacy_capture.mr")
+    set(capture_resources "${PROJECT_SOURCE_DIR}/examples/runtime/fixture")
+    set(capture_missing "${CMAKE_CURRENT_BINARY_DIR}/legacy-capture-missing.mr")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${capture_script}")
+    file(READ "${capture_script}" capture_input)
+    string(REPLACE "motor.add_ignition_module(ignition)\n" "" capture_input "${capture_input}")
+    file(WRITE "${capture_missing}" "${capture_input}")
+
+    add_test(NAME LegacyEvaluatedValues COMMAND engine-sim-legacy-capture-test values
+        "${capture_script}" "${capture_resources}/library" "${capture_resources}" "${capture_missing}")
+    add_test(NAME LegacyCurveIdentity COMMAND engine-sim-legacy-capture-test identity
+        "${capture_script}" "${capture_resources}/library" "${capture_resources}" "${capture_missing}")
+    set_tests_properties(LegacyEvaluatedValues LegacyCurveIdentity PROPERTIES LABELS "r25-convert;script" TIMEOUT 60)
+endif ()

@@ -27,6 +27,17 @@ namespace es_script {
         std::string bytes;
     };
 
+    class EngineNode;
+    class CylinderBankNode;
+    class IgnitionWireNode;
+
+    class EvaluationObserver {
+    public:
+        virtual ~EvaluationObserver() = default;
+        virtual void selectedEngine(const EngineNode &engine) = 0;
+        virtual void addedCylinder(const CylinderBankNode &bank, const IgnitionWireNode &wire) = 0;
+    };
+
     class Compiler {
     public:
         using Output = EngineDefinition;
@@ -36,20 +47,25 @@ namespace es_script {
         const Diagnostic &getLastError() const { return m_lastError; }
 
     private:
-        static thread_local Output *s_output;
+        struct ActiveEvaluation {
+            Output &output;
+            EvaluationObserver *observer;
+        };
+        static thread_local ActiveEvaluation *s_evaluation;
 
     public:
         Compiler();
         ~Compiler();
 
         static Output *output();
+        static EvaluationObserver *observer() noexcept;
         static Output prepare(const PreparationContext &context, std::vector<ScriptInput> &inputs,
-            const InputVerifier &verify = {});
+            const InputVerifier &verify = {}, EvaluationObserver *observer = nullptr);
 
         void initialize(const std::vector<std::string> &libraryRoots);
         bool compile(const std::string &path, std::ostream &diagnostics,
             std::vector<std::string> *resolvedScripts = nullptr);
-        Output execute();
+        Output execute(EvaluationObserver *observer = nullptr);
         void destroy();
 
     private:

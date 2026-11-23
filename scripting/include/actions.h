@@ -35,6 +35,7 @@ namespace es_script {
 
             requireModel(engineNode != nullptr, "set_engine requires an engine");
             engineNode->validate();
+            if (auto *observer = Compiler::observer()) observer->selectedEngine(*engineNode);
             auto engine = std::make_unique<Engine>();
             engineNode->buildEngine(engine.get());
             Compiler::output()->engine = std::move(engine);
@@ -178,6 +179,7 @@ namespace es_script {
                 m_soundAttenuation,
                 m_primaryLength
             );
+            if (auto *observer = Compiler::observer()) observer->addedCylinder(*m_cylinderBank, *m_ignitionWire);
         }
 
     protected:

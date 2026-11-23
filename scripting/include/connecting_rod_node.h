@@ -13,6 +13,8 @@
 namespace es_script {
 
     class ConnectingRodNode : public ObjectReferenceNode<ConnectingRodNode> {
+        friend class LegacySnapshotBuilder;
+
     public:
         ConnectingRodNode() { /* void */ }
         virtual ~ConnectingRodNode() { /* void */ }

@@ -14,6 +14,8 @@
 namespace es_script {
 
     class CrankshaftNode : public ObjectReferenceNode<CrankshaftNode> {
+        friend class LegacySnapshotBuilder;
+
     public:
         CrankshaftNode() { /* void */ }
         virtual ~CrankshaftNode() { /* void */ }

@@ -11,6 +11,8 @@
 namespace es_script {
 
     class ExhaustSystemNode : public ObjectReferenceNode<ExhaustSystemNode> {
+        friend class LegacySnapshotBuilder;
+
     public:
         ExhaustSystemNode() { /* void */ }
         virtual ~ExhaustSystemNode() { /* void */ }

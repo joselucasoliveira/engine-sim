@@ -14,6 +14,8 @@
 namespace es_script {
 
     class IntakeNode : public ObjectReferenceNode<IntakeNode> {
+        friend class LegacySnapshotBuilder;
+
     public:
         IntakeNode() { /* void */ }
         virtual ~IntakeNode() { /* void */ }

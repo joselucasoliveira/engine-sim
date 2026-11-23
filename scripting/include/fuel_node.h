@@ -14,6 +14,8 @@
 namespace es_script {
 
     class FuelNode : public ObjectReferenceNode<FuelNode> {
+        friend class LegacySnapshotBuilder;
+
     public:
         FuelNode() { /* void */ }
         virtual ~FuelNode() { /* void */ }

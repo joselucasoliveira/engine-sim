@@ -14,6 +14,8 @@
 namespace es_script {
 
     class PistonNode : public ObjectReferenceNode<PistonNode> {
+        friend class LegacySnapshotBuilder;
+
     public:
         PistonNode() { /* void */ }
         virtual ~PistonNode() { /* void */ }
