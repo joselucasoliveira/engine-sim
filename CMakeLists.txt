@@ -89,6 +89,11 @@ if (BUILD_TESTING)
     add_subdirectory("${ENGINE_SIM_GOOGLETEST_SOURCE}" googletest EXCLUDE_FROM_ALL)
 endif ()
 
+add_subdirectory(modules/config)
+if (BUILD_TESTING)
+    add_subdirectory(test/config)
+endif ()
+
 add_subdirectory(dependencies)
 
 add_library(engine-sim STATIC
