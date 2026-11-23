@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "source": "assets/engines/atg-video-2/01_subaru_ej25_eh.mr",
+      "model": "assets/engines/atg-video-2/01_subaru_ej25_eh.json",
+      "selection": "main",
+      "coverage": "deep"
+    },
+    {
+      "source": "assets/engines/atg-video-2/02_subaru_ej25_uh.mr",
+      "model": "assets/engines/atg-video-2/02_subaru_ej25_uh.json",
+      "selection": "main",
+      "coverage": "deep"
+    },
+    {
+      "source": "assets/engines/atg-video-2/03_2jz.mr",
+      "model": "assets/engines/atg-video-2/03_2jz.json",
+      "selection": "main",
+      "coverage": "all-entry"
+    },
+    {
+      "source": "assets/engines/atg-video-2/04_60_degree_v6.mr",
+      "model": "assets/engines/atg-video-2/04_60_degree_v6.json",
+      "selection": "main",
+      "coverage": "deep"
+    },
+    {
+      "source": "assets/engines/atg-video-2/05_odd_fire_v6.mr",
+      "model": "assets/engines/atg-video-2/05_odd_fire_v6.json",
+      "selection": "main",
+      "coverage": "deep"
+    },
+    {
+      "source": "assets/engines/atg-video-2/06_even_fire_v6.mr",
+      "model": "assets/engines/atg-video-2/06_even_fire_v6.json",
+      "selection": "main",
+      "coverage": "deep"
+    }
+  ],
+  "comparisons": [
+    {
+      "kind": "headers",
+      "left": "assets/engines/atg-video-2/01_subaru_ej25_eh.json",
+      "right": "assets/engines/atg-video-2/02_subaru_ej25_uh.json"
+    },
+    {
+      "kind": "ignition",
+      "left": "assets/engines/atg-video-2/05_odd_fire_v6.json",
+      "right": "assets/engines/atg-video-2/06_even_fire_v6.json"
+    }
+  ]
+}

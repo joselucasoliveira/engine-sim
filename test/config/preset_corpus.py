@@ -96,10 +96,15 @@ def coverage(args, work):
         visited.append(source.relative_to(args.repo))
 
     if args.numbered:
-        declarations = sorted(path.relative_to(args.repo) for path in args.index.parent.glob("[0-9][0-9]_*.mr"))
-        require(visited == declarations, "Numbered source order or helper exclusion differs")
-        actual = sorted(path.relative_to(args.repo) for path in args.index.parent.glob("[0-9][0-9]_*.json"))
-        require(actual == [source.with_suffix(".json") for source in declarations], "Numbered preset coverage differs")
+        numbers = range(args.first_number, args.first_number + args.count)
+        def numbered(suffix):
+            return sorted(path.relative_to(args.repo) for path in args.index.parent.glob(f"[0-9][0-9]_*{suffix}")
+                          if int(path.name[:2]) in numbers)
+        declarations = numbered(".mr")
+        require([int(path.name[:2]) for path in declarations] == list(numbers) and visited == declarations,
+                "Numbered source order or helper exclusion differs")
+        require(numbered(".json") == [source.with_suffix(".json") for source in declarations],
+                "Numbered preset coverage differs")
     require(len(visited) == args.count, "Incomplete preset coverage")
 
 
@@ -108,7 +113,7 @@ def legacy_entry(args, source, item, work):
         return source
     declared = source.relative_to(args.repo / "assets").as_posix()
     call = "main()" if item["selection"] == "main" else f"set_engine({item['selection']}())"
-    path = work / "entry.mr"
+    path = work / (source.stem + "-entry.mr")
     path.write_text(f'import "engine_sim.mr"\nimport "{declared}"\n{call}\n', encoding="utf-8")
     return path
 
@@ -119,8 +124,15 @@ def render_flags(model, root, mode, rate, frames, schedule, output):
 
 
 def behavior(args, work):
+    comparisons = json.loads(args.index.read_bytes()).get("comparisons", [])
+    paired = {row[side] for row in comparisons for side in ("left", "right")}
+    traces = {}
     for index, (item, source, model) in enumerate(indexed(args.repo, args.index, args.count)):
         entry = legacy_entry(args, source, item, work)
+        if item["model"] in paired:
+            target = work / f"trace-{index}"
+            run([args.probe, args.repo, entry, model, target], work)
+            traces[item["model"]] = target
         for flavor, mode, rate, frames, controls in render_cases(item):
             scenario = f"{index}-{flavor}-{mode}-{rate}"
             legacy = work / (scenario + "-legacy.wav")
@@ -140,6 +152,13 @@ def behavior(args, work):
             samples = struct.unpack_from(f"<{frames}f", raw, 58)
             require(all(map(math.isfinite, samples)) and any(value != 0 for value in samples),
                     f"{source.name}: missing finite nonzero acoustic output")
+
+    fields = {"headers": ("routes", "endpoints"), "ignition": ("firing", "combustion")}
+    for pair in comparisons:
+        left, right = (traces[pair[side]] for side in ("left", "right"))
+        for field in fields[pair["kind"]]:
+            require((left / field).read_bytes() != (right / field).read_bytes(),
+                    f"Expected distinct {field} for {pair['left']} and {pair['right']}")
 
     first = next(indexed(args.repo, args.index, args.count))[2]
     missing_root = work / "no-impulses"
@@ -162,9 +181,11 @@ if __name__ == "__main__":
     parser.add_argument("index", type=Path)
     parser.add_argument("count", type=int)
     parser.add_argument("--numbered", action="store_true")
+    parser.add_argument("--first-number", type=int, default=1)
     parser.add_argument("--writer", type=Path)
     parser.add_argument("--legacy", type=Path)
     parser.add_argument("--renderer", type=Path)
+    parser.add_argument("--probe", type=Path)
     options = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix="engine-sim-presets-") as directory:
         (coverage if options.check == "coverage" else behavior)(options, Path(directory))

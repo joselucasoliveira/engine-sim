@@ -559,15 +559,22 @@ endif ()
 if (TARGET engine-sim-render-json-test AND TARGET engine-sim-render AND TARGET engine-sim-config-roundtrip)
     find_package(Python3 3.9 COMPONENTS Interpreter REQUIRED)
     set(preset_check "${PROJECT_SOURCE_DIR}/test/config/preset_corpus.py")
-    function(engine_sim_check_presets prefix index count)
+    add_executable(engine-sim-preset-runtime-probe test/config/preset_runtime_probe.cpp)
+    target_link_libraries(engine-sim-preset-runtime-probe PRIVATE
+        engine-sim-runtime-json-private engine-sim-script-interpreter)
+    engine_sim_diagnose(engine-sim-preset-runtime-probe TRUE)
+
+    function(engine_sim_check_presets prefix behavior index count)
         add_test(NAME "${prefix}PresetCoverage"
             COMMAND "${Python3_EXECUTABLE}" -B "${preset_check}" coverage "${PROJECT_SOURCE_DIR}"
                 "${PROJECT_SOURCE_DIR}/${index}" "${count}" ${ARGN} --writer "$<TARGET_FILE:engine-sim-config-roundtrip>")
-        add_test(NAME "${prefix}Behavior"
+        add_test(NAME "${behavior}"
             COMMAND "${Python3_EXECUTABLE}" -B "${preset_check}" behavior "${PROJECT_SOURCE_DIR}"
                 "${PROJECT_SOURCE_DIR}/${index}" "${count}" --legacy "$<TARGET_FILE:engine-sim-render>"
-                --renderer "$<TARGET_FILE:engine-sim-render-json-test>")
-        set_tests_properties("${prefix}PresetCoverage" "${prefix}Behavior" PROPERTIES LABELS r25-corpus TIMEOUT 180)
+                --renderer "$<TARGET_FILE:engine-sim-render-json-test>"
+                --probe "$<TARGET_FILE:engine-sim-preset-runtime-probe>")
+        set_tests_properties("${prefix}PresetCoverage" "${behavior}" PROPERTIES LABELS r25-corpus TIMEOUT 180)
     endfunction()
-    engine_sim_check_presets(VideoOne assets/engines/atg-video-1/presets.json 8 --numbered)
+    engine_sim_check_presets(VideoOne VideoOneBehavior assets/engines/atg-video-1/presets.json 8 --numbered)
+    engine_sim_check_presets(VideoTwoSix HeaderAndIgnitionParity assets/engines/atg-video-2/presets-01-06.json 6 --numbered)
 endif ()
