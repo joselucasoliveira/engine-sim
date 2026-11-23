@@ -1,4 +1,4 @@
-add_library(engine-sim-legacy-snapshot STATIC snapshot.cpp)
+add_library(engine-sim-legacy-snapshot STATIC snapshot.cpp resources.cpp)
 target_include_directories(engine-sim-legacy-snapshot PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(engine-sim-legacy-snapshot PUBLIC EngineSim::Config engine-sim-script-interpreter)
 set_target_properties(engine-sim-legacy-snapshot PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO)

@@ -1,0 +1,148 @@
+// Synthetic legacy extraction fixture, derived from the MIT Runtime Single.
+// Dimensions describe a numerical fixture. See LICENSE.
+import "runtime_fixture.mr"
+import "../left/audio.mr"
+import "../right/audio.mr"
+
+private node apply_settings => __engine_sim__set_application_settings {
+    input start_fullscreen [bool]: false;
+    input power_units [string]: "hp";
+    input torque_units [string]: "lb-ft";
+    input speed_units [string]: "mph";
+    input pressure_units [string]: "inHg";
+    input boost_units [string]: "psi";
+    input color_background [int]: 1;
+    input color_foreground [int]: 2;
+    input color_shadow [int]: 3;
+    input color_highlight1 [int]: 4;
+    input color_highlight2 [int]: 5;
+    input color_pink [int]: 6;
+    input color_red [int]: 7;
+    input color_orange [int]: 8;
+    input color_yellow [int]: 9;
+    input color_blue [int]: 10;
+    input color_green [int]: 11;
+}
+
+left_audio first_ir()
+right_audio second_ir()
+
+units u()
+constants c()
+engine motor(
+    name: "Runtime Single",
+    simulation_frequency: 10000,
+    starter_speed: 600 * u.rpm,
+    starter_torque: 40 * u.Nm,
+    redline: 6000 * u.rpm,
+    noise: 0.0, jitter: 0.0,
+    fuel: fuel(burning_efficiency_randomness: 0.0),
+    throttle: governor(min_speed: 75 * u.rpm, max_speed: 2200 * u.rpm,
+        min_v: -1.25, max_v: 2.75, k_s: 1.5, k_d: 81.25, gamma: 0.625)
+)
+crankshaft shaft(
+    throw: 0.040, mass: 4.0, flywheel_mass: 4.0,
+    moment_of_inertia: 0.12, friction_torque: 1.0,
+    tdc: 90 * u.deg
+)
+rod_journal journal(angle: 0.0)
+shaft.add_rod_journal(journal)
+
+harmonic_cam_lobe lift(duration_at_50_thou: 230 * u.deg, lift: 0.008, gamma: 1.25, steps: 13)
+harmonic_cam_lobe independent(duration_at_50_thou: 230 * u.deg, lift: 0.008, gamma: 1.25, steps: 13)
+camshaft inlet_cam(lobe_profile: lift, base_radius: 0.012, advance: 0.125)
+camshaft outlet_cam(lobe_profile: lift, base_radius: 0.014, advance: -0.0625)
+camshaft high_cam(lobe_profile: independent, base_radius: 0.018, advance: 0.25)
+inlet_cam.add_lobe(470 * u.deg)
+outlet_cam.add_lobe(250 * u.deg)
+high_cam.add_lobe(475 * u.deg)
+function port(0.002)
+port.add_sample(0.0, 0.0).add_sample(0.004, k_28inH2O(50.0))
+    .add_sample(0.004, k_28inH2O(51.0)).add_sample(0.008, k_28inH2O(90.0))
+
+intake inlet(
+    plenum_volume: 0.001, plenum_cross_section_area: 0.001,
+    intake_flow_rate: k_carb(80.0), idle_flow_rate: 0.0,
+    idle_throttle_plate_position: 0.95, throttle_gamma: 1.75
+)
+exhaust_system outlet(
+    length: 0.6,
+    collector_cross_section_area: 0.001,
+    outlet_flow_rate: k_carb(200.0), primary_flow_rate: k_carb(150.0),
+    primary_tube_length: 0.4, audio_volume: 1.0,
+    impulse_response: first_ir
+)
+exhaust_system rear_outlet(
+    length: 0.6,
+    collector_cross_section_area: 0.001,
+    outlet_flow_rate: k_carb(200.0), primary_flow_rate: k_carb(150.0),
+    primary_tube_length: 0.4, audio_volume: 1.0,
+    impulse_response: second_ir
+)
+ignition_wire wire()
+ignition_wire rear_wire()
+rod_journal slave(angle: 87 * u.deg)
+connecting_rod master_rod(connecting_rod_parameters(
+    mass: 0.3, length: 0.150, moment_of_inertia: 0.001, slave_throw: 0.018
+))
+master_rod.add_slave_journal(slave)
+cylinder_bank bank(bore: 0.080, deck_height: 0.220, angle: 0.0)
+bank.add_cylinder(
+    piston: piston(piston_parameters(mass: 0.4, compression_height: 0.030, blowby: 0.0)),
+    connecting_rod: master_rod,
+    rod_journal: journal, intake: inlet, exhaust_system: outlet, ignition_wire: wire
+)
+cylinder_bank rear_bank(bore: 0.083, deck_height: 0.223, angle: 0.125)
+rear_bank.add_cylinder(
+    piston: piston(piston_parameters(mass: 0.4, compression_height: 0.030, blowby: 0.0)),
+    connecting_rod: connecting_rod(connecting_rod_parameters(mass: 0.3, length: 0.150, moment_of_inertia: 0.001)),
+    rod_journal: slave, intake: inlet, exhaust_system: rear_outlet, ignition_wire: rear_wire,
+    primary_length: 0.3125, sound_attenuation: 0.75
+)
+bank.set_cylinder_head(generic_cylinder_head(
+    valvetrain: vtec_valvetrain(
+        intake_camshaft: inlet_cam, exhaust_camshaft: outlet_cam,
+        vtec_intake_camshaft: high_cam, vtec_exhaust_camshaft: outlet_cam,
+        min_rpm: 3400 * u.rpm, min_speed: 12 * u.mph, manifold_vacuum: 94321.25,
+        min_throttle_position: 0.4375
+    ),
+    intake_port_flow: port, exhaust_port_flow: port,
+    chamber_volume: 0.000040,
+    intake_runner_volume: 0.00015, intake_runner_cross_section_area: 0.0008,
+    exhaust_runner_volume: 0.00015, exhaust_runner_cross_section_area: 0.0008
+))
+rear_bank.set_cylinder_head(generic_cylinder_head(
+    valvetrain: vtec_valvetrain(
+        intake_camshaft: inlet_cam, exhaust_camshaft: outlet_cam,
+        vtec_intake_camshaft: high_cam, vtec_exhaust_camshaft: outlet_cam,
+        min_rpm: 3400 * u.rpm, min_speed: 12 * u.mph, manifold_vacuum: 94321.25,
+        min_throttle_position: 0.4375
+    ),
+    intake_port_flow: port, exhaust_port_flow: port,
+    chamber_volume: 0.000040,
+    intake_runner_volume: 0.00015, intake_runner_cross_section_area: 0.0008,
+    exhaust_runner_volume: 0.00015, exhaust_runner_cross_section_area: 0.0008
+))
+motor.add_crankshaft(shaft).add_cylinder_bank(rear_bank).add_cylinder_bank(bank)
+function timing(1000 * u.rpm)
+timing.add_sample(0.0, 15 * u.deg).add_sample(6000 * u.rpm, 20 * u.deg)
+ignition_module ignition(timing_curve: timing, rev_limit: 6000 * u.rpm)
+ignition.connect_wire(rear_wire, 180 * u.deg).connect_wire(wire, 0.0)
+motor.add_ignition_module(ignition)
+engine first_motor(name: "Discarded first selection", simulation_frequency: 9000)
+first_motor.add_crankshaft(shaft).add_cylinder_bank(bank).add_cylinder_bank(rear_bank)
+first_motor.add_ignition_module(ignition)
+vehicle first_vehicle(mass: 1200)
+set_vehicle(first_vehicle)
+apply_settings(color_blue: 111)
+set_engine(first_motor)
+lift.add_sample(1.5, 0.01)
+set_engine(motor)
+lift.add_sample(1.75, 0.02)
+vehicle final_vehicle(mass: 1500, drag_coefficient: 0.375, diff_ratio: 3.25)
+set_vehicle(final_vehicle)
+transmission drive(max_clutch_torque: 320.5)
+drive.add_gear(2.75).add_gear(0.875)
+set_transmission(drive)
+drive.add_gear(0.625)
+apply_settings(start_fullscreen: true, torque_units: "Nm", color_blue: 222)

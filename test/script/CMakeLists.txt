@@ -83,3 +83,16 @@ if (TARGET engine-sim-legacy-snapshot)
         "${capture_script}" "${capture_resources}/library" "${capture_resources}" "${capture_missing}")
     set_tests_properties(LegacyEvaluatedValues LegacyCurveIdentity PROPERTIES LABELS "r25-convert;script" TIMEOUT 60)
 endif ()
+
+if (TARGET engine-sim-legacy-snapshot)
+    add_executable(engine-sim-legacy-routes-test legacy_routes.cpp)
+    target_link_libraries(engine-sim-legacy-routes-test PRIVATE engine-sim-legacy-snapshot EngineSim::Json)
+    engine_sim_diagnose(engine-sim-legacy-routes-test TRUE)
+    set(legacy_route_arguments "${CMAKE_CURRENT_SOURCE_DIR}/legacy_routes.py"
+        "$<TARGET_FILE:engine-sim-legacy-routes-test>"
+        "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/legacy_routes.mr"
+        "${PROJECT_SOURCE_DIR}/examples/runtime/fixture/library" "${CMAKE_CURRENT_BINARY_DIR}")
+    add_test(NAME LegacySelectionSnapshot COMMAND "${Python3_EXECUTABLE}" -B ${legacy_route_arguments} selection)
+    add_test(NAME LegacyActionRouting COMMAND "${Python3_EXECUTABLE}" -B ${legacy_route_arguments} routing)
+    set_tests_properties(LegacySelectionSnapshot LegacyActionRouting PROPERTIES LABELS "r25-convert;script" TIMEOUT 90)
+endif ()

@@ -10,6 +10,8 @@
 namespace es_script {
 
     class TransmissionNode : public ObjectReferenceNode<TransmissionNode> {
+        friend class LegacySnapshotBuilder;
+
     public:
         TransmissionNode() { /* void */ }
         virtual ~TransmissionNode() { /* void */ }

@@ -533,6 +533,7 @@ namespace es_script {
             requireModel(m_transmission != nullptr, "set_transmission requires a transmission");
             auto transmission = std::make_unique<Transmission>();
             m_transmission->validate();
+            if (auto *observer = Compiler::observer()) observer->selectedTransmission(*m_transmission);
             m_transmission->generate(transmission.get());
             Compiler::output()->transmission = std::move(transmission);
         }
@@ -559,6 +560,7 @@ namespace es_script {
             requireModel(vehicleNode != nullptr, "set_vehicle requires a vehicle");
             auto vehicle = std::make_unique<Vehicle>();
             vehicleNode->validate();
+            if (auto *observer = Compiler::observer()) observer->selectedVehicle(*vehicleNode);
             vehicleNode->generate(vehicle.get());
             Compiler::output()->vehicle = std::move(vehicle);
         }
@@ -599,6 +601,7 @@ namespace es_script {
         virtual void _evaluate() {
             readAllInputs();
 
+            if (auto *observer = Compiler::observer()) observer->selectedSettings(m_settings);
             Compiler::output()->applicationSettings = m_settings;
         }
 

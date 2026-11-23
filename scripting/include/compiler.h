@@ -30,12 +30,17 @@ namespace es_script {
     class EngineNode;
     class CylinderBankNode;
     class IgnitionWireNode;
+    class TransmissionNode;
+    class VehicleNode;
 
     class EvaluationObserver {
     public:
         virtual ~EvaluationObserver() = default;
         virtual void selectedEngine(const EngineNode &engine) = 0;
         virtual void addedCylinder(const CylinderBankNode &bank, const IgnitionWireNode &wire) = 0;
+        virtual void selectedVehicle(const VehicleNode &vehicle) = 0;
+        virtual void selectedTransmission(const TransmissionNode &transmission) = 0;
+        virtual void selectedSettings(const ApplicationSettings &settings) = 0;
     };
 
     class Compiler {

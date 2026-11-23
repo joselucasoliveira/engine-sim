@@ -4,6 +4,8 @@
 #include "engine_node.h"
 #include "model_validation.h"
 #include "standard_valvetrain_node.h"
+#include "transmission_node.h"
+#include "vehicle_node.h"
 #include "vtec_valvetrain_node.h"
 
 #include <algorithm>
@@ -32,6 +34,21 @@ std::string identifier(std::string_view kind, std::size_t ordinal) {
 class LegacySnapshotBuilder {
 public:
     explicit LegacySnapshotBuilder(const Wires &wires) : m_wires(wires) {}
+
+    static cfg::Vehicle vehicle(const VehicleNode &source) {
+        const auto &p = source.m_parameters;
+        return {{p.mass}, {p.dragCoefficient}, {p.crossSectionArea}, {p.diffRatio},
+                {p.tireRadius}, {p.rollingResistance}};
+    }
+
+    static cfg::Transmission transmission(const TransmissionNode &source) {
+        cfg::Transmission result;
+        result.max_clutch_torque = {source.m_parameters.MaxClutchTorque};
+        result.gears.reserve(source.m_gears.size());
+        for (const auto ratio : source.m_gears) result.gears.push_back({ratio});
+        return result;
+    }
+
 
     legacy::Snapshot capture(const EngineNode &node) {
         auto &result = m_snapshot.values.engine;
@@ -332,14 +349,51 @@ public:
         wires.push_back(&wire);
     }
 
+    void selectedVehicle(const VehicleNode &vehicle) override {
+        m_vehicle = LegacySnapshotBuilder::vehicle(vehicle);
+    }
+
+    void selectedTransmission(const TransmissionNode &transmission) override {
+        m_transmission = LegacySnapshotBuilder::transmission(transmission);
+    }
+
+    void selectedSettings(const ApplicationSettings &settings) override {
+        cfg::Desktop desktop;
+        desktop.start_fullscreen = settings.startFullscreen;
+        desktop.power_units = settings.powerUnits;
+        desktop.torque_units = settings.torqueUnits;
+        desktop.speed_units = settings.speedUnits;
+        desktop.pressure_units = settings.pressureUnits;
+        desktop.boost_units = settings.boostUnits;
+        desktop.color_background = settings.colorBackground;
+        desktop.color_foreground = settings.colorForeground;
+        desktop.color_shadow = settings.colorShadow;
+        desktop.color_highlight1 = settings.colorHighlight1;
+        desktop.color_highlight2 = settings.colorHighlight2;
+        desktop.color_pink = settings.colorPink;
+        desktop.color_red = settings.colorRed;
+        desktop.color_orange = settings.colorOrange;
+        desktop.color_yellow = settings.colorYellow;
+        desktop.color_blue = settings.colorBlue;
+        desktop.color_green = settings.colorGreen;
+        m_desktop = std::move(desktop);
+    }
+
     legacy::Snapshot take() {
         requireModel(m_latest.has_value(), "No evaluated engine snapshot");
-        return std::move(*m_latest);
+        auto current = std::move(*m_latest);
+        current.values.vehicle = std::move(m_vehicle);
+        current.values.transmission = std::move(m_transmission);
+        current.values.desktop = std::move(m_desktop);
+        return current;
     }
 
 private:
     Wires m_wires;
     std::optional<legacy::Snapshot> m_latest;
+    std::optional<cfg::Vehicle> m_vehicle;
+    std::optional<cfg::Transmission> m_transmission;
+    std::optional<cfg::Desktop> m_desktop;
 };
 }
 

@@ -8,6 +8,8 @@
 namespace es_script {
 
     class VehicleNode : public ObjectReferenceNode<VehicleNode> {
+        friend class LegacySnapshotBuilder;
+
     public:
         VehicleNode() { /* void */ }
         virtual ~VehicleNode() { /* void */ }
