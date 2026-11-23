@@ -1,6 +1,7 @@
 #include "json_runtime.hpp"
 #include "runtime.hpp"
 #include "piston_engine_simulator.h"
+#include "mechanical_observation.hpp"
 
 #include <cmath>
 #include <cstring>
@@ -38,8 +39,11 @@ void check(es_status status, const es_error &error) {
 }
 
 struct Trace {
-    Words routes, endpoints, firing, combustion;
+    Words routes, endpoints, firing, combustion, mechanics;
     bool heard = false;
+    bool mechanism_nonzero = false;
+    bool brake_nonzero = false;
+    bool distinct_reactions = false;
 };
 
 Trace measure(const fs::path &root, const fs::path &entry, bool canonical) {
@@ -59,7 +63,12 @@ Trace measure(const fs::path &root, const fs::path &entry, bool canonical) {
     }
 
     auto &session = engine_sim::RuntimeTestAccess::session(*handle);
+    const auto &simulator = static_cast<const PistonEngineSimulator &>(*session.prepared.session->simulator);
     const auto &engine = *session.prepared.session->definition.engine;
+    const auto ticks = std::size_t{24000} * simulator.getSimulationFrequency() / config.output_hz;
+    engine_sim_capture::MechanicalObservation mechanics(simulator, ticks);
+    trace.mechanics.push_back(bits(engine.getDisplacement()));
+    if (!(engine.getDisplacement() > 0)) throw std::runtime_error("Invalid prepared displacement");
     const auto *plugs = engine.getIgnitionModule()->*IgnitionAccess::plugs;
     trace.routes.push_back(static_cast<std::uint64_t>(engine.getExhaustSystemCount()));
     for (int i = 0; i < engine.getCylinderCount(); ++i) {
@@ -75,17 +84,29 @@ Trace measure(const fs::path &root, const fs::path &entry, bool canonical) {
 
     session.pull->setTickObserver([&](const Simulator &sim) {
         const auto &piston = static_cast<const PistonEngineSimulator &>(sim);
+        const double applied_load = piston.getExternalLoadReactionNm();
+        mechanics.record(applied_load, 0, 0);
+        const auto &current = mechanics.tick(mechanics.count() - 1);
+        trace.mechanics.push_back(bits(current.mechanismNm));
+        trace.mechanics.push_back(bits(current.loadReactionNm));
+        trace.mechanism_nonzero |= current.mechanismNm != 0;
+        trace.brake_nonzero |= current.loadReactionNm != 0;
+        trace.distinct_reactions |= current.loadReactionNm != 0 && current.mechanismNm != current.loadReactionNm;
         const auto *endpoints = piston.*ExhaustAccess::endpoints;
         for (int i = 0; i < engine.getExhaustSystemCount(); ++i)
             trace.endpoints.push_back(bits(endpoints[i]));
         trace.combustion.push_back(bits(engine.getOutputCrankshaft()->getCycleAngle()));
         for (int i = 0; i < engine.getCylinderCount(); ++i)
             trace.combustion.push_back(engine.getChamber(i)->isLit());
+        for (int i = 0; i < engine.getCylinderCount(); ++i) {
+            const auto &chamber = mechanics.cylinder(mechanics.count() - 1, static_cast<std::size_t>(i));
+            trace.mechanics.push_back(bits(chamber.pressurePa));
+        }
     });
 
     std::vector<float> pcm(16000);
     for (unsigned part = 0; part < 2; ++part) {
-        const es_controls controls{sizeof(controls), ES_ABI_V1, 1, part == 0, part == 0 ? 0.2 : 0.5, 0, 0};
+        const es_controls controls{sizeof(controls), ES_ABI_V1, 1, part == 0, part == 0 ? 0.2 : 0.5, part == 0 ? 0.0 : 1.0, 0};
         check(es_set_controls(handle, &controls, &error), error);
         const std::uint32_t frames = part == 0 ? 8000 : 16000;
         std::uint32_t written = 0;
@@ -93,6 +114,7 @@ Trace measure(const fs::path &root, const fs::path &entry, bool canonical) {
         if (written != frames) throw std::runtime_error("Incomplete preset observation");
         for (std::uint32_t frame = 0; frame < frames; ++frame) trace.heard |= pcm[frame] != 0;
     }
+    if (mechanics.count() != ticks + 1) throw std::runtime_error("Incomplete preset tick trace");
     return trace;
 }
 
@@ -114,14 +136,16 @@ int main(int argc, char **argv) {
         const auto canonical = measure(root, fs::u8path(argv[3]), true);
         if (legacy.routes != canonical.routes || legacy.endpoints != canonical.endpoints ||
             legacy.firing != canonical.firing || legacy.combustion != canonical.combustion ||
-            !legacy.heard || !canonical.heard)
-            throw std::runtime_error("Prepared routing, endpoint or ignition trace differs");
+            legacy.mechanics != canonical.mechanics || !legacy.heard || !canonical.heard ||
+            !canonical.mechanism_nonzero || !canonical.brake_nonzero || !canonical.distinct_reactions)
+            throw std::runtime_error("Prepared routing, endpoint, ignition or shaft trace differs");
         const auto output = fs::u8path(argv[4]);
         fs::create_directory(output);
         save(output / "routes", canonical.routes);
         save(output / "endpoints", canonical.endpoints);
         save(output / "firing", canonical.firing);
         save(output / "combustion", canonical.combustion);
+        save(output / "mechanics", canonical.mechanics);
     } catch (const std::exception &error) {
         std::cerr << error.what() << '\n';
         return 1;

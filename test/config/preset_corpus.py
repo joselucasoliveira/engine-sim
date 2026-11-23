@@ -15,12 +15,27 @@ PROFILES = ("all-entry", "deep")
 FRAMES = 24000
 
 
-def deep_controls(mode, rate, target):
+def deep_controls(mode, rate, target, drive_profile):
     if mode == "free":
         controls = [(0, .18, 0, 1, 1, 0), (rate//5, .28, 0, 1, 0, 0),
                     (rate//2, .55, 0, 1, 0, 0), (rate*4//5, .52, 3, 1, 0, 0),
                     (rate*6//5, .1, 0, 0, 0, 0), (rate*3//2, .22, 0, 1, 1, 0),
                     (rate*9//5, .38, 0, 1, 0, 0)]
+    elif drive_profile == "gentle":
+        controls = []
+        for step in range(200):
+            if step < 5 or step >= 190:
+                rpm = 0
+            elif step < 40:
+                rpm = 450 * (step - 5) / 35
+            elif step < 95:
+                rpm = 450 + (1100 - 450) * (step - 40) / 55
+            elif step < 125:
+                rpm = 1100
+            else:
+                rpm = 1100 * (190 - step) / 65
+            controls.append((rate*step//100, .28 if step < 125 else .10,
+                             5 if 95 <= step < 110 else 0, int(step < 125), 0, rpm))
     else:
         controls = []
         for step in range(200):
@@ -46,9 +61,11 @@ def render_cases(item):
     if item["coverage"] == "deep":
         target = item.get("deep_drive_rpm", 1800)
         require(type(target) is int and 0 < target <= 12000, "Invalid deep drive range")
+        drive_profile = item.get("deep_drive_profile", "standard")
+        require(drive_profile in ("standard", "gentle"), "Unknown frozen drive profile")
         for mode in ("free", "driven"):
             for rate in (44100, 48000):
-                yield "deep", mode, rate, 2 * rate, deep_controls(mode, rate, target)
+                yield "deep", mode, rate, 2 * rate, deep_controls(mode, rate, target, drive_profile)
 
 
 def require(condition, detail):
@@ -124,15 +141,29 @@ def render_flags(model, root, mode, rate, frames, schedule, output):
 
 
 def behavior(args, work):
-    comparisons = json.loads(args.index.read_bytes()).get("comparisons", [])
+    index_data = json.loads(args.index.read_bytes())
+    comparisons = index_data.get("comparisons", [])
     paired = {row[side] for row in comparisons for side in ("left", "right")}
+    observed = paired | set(index_data.get("observe", []))
+    rejected_order = index_data.get("reject_reordered_banks")
     traces = {}
     for index, (item, source, model) in enumerate(indexed(args.repo, args.index, args.count)):
         entry = legacy_entry(args, source, item, work)
-        if item["model"] in paired:
+        if item["model"] in observed:
             target = work / f"trace-{index}"
             run([args.probe, args.repo, entry, model, target], work)
             traces[item["model"]] = target
+        if item["model"] == rejected_order:
+            altered = json.loads(model.read_bytes())
+            banks = altered["engine"]["banks"]
+            require(len(banks) > 1, "Bank-order fixture must have multiple banks")
+            altered["engine"]["banks"] = banks[1:] + banks[:1]
+            path = work / "reordered-banks.json"
+            path.write_text(json.dumps(altered), encoding="utf-8")
+            target = work / "rejected-order"
+            result = run([args.probe, args.repo, entry, path, target], work, 1)
+            require(b"Prepared routing, endpoint, ignition or shaft trace differs" in result and not target.exists(),
+                    "A lawful high-count bank permutation escaped the numerical comparator")
         for flavor, mode, rate, frames, controls in render_cases(item):
             scenario = f"{index}-{flavor}-{mode}-{rate}"
             legacy = work / (scenario + "-legacy.wav")
@@ -153,6 +184,7 @@ def behavior(args, work):
             require(all(map(math.isfinite, samples)) and any(value != 0 for value in samples),
                     f"{source.name}: missing finite nonzero acoustic output")
 
+    require(set(traces) == observed, "Incomplete preset observations")
     fields = {"headers": ("routes", "endpoints"), "ignition": ("firing", "combustion")}
     for pair in comparisons:
         left, right = (traces[pair[side]] for side in ("left", "right"))

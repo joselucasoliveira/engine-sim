@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "source": "assets/engines/atg-video-2/07_gm_ls.mr",
+      "model": "assets/engines/atg-video-2/07_gm_ls.json",
+      "selection": "main",
+      "coverage": "deep"
+    },
+    {
+      "source": "assets/engines/atg-video-2/08_ferrari_f136_v8.mr",
+      "model": "assets/engines/atg-video-2/08_ferrari_f136_v8.json",
+      "selection": "main",
+      "coverage": "deep"
+    },
+    {
+      "source": "assets/engines/atg-video-2/09_radial_9.mr",
+      "model": "assets/engines/atg-video-2/09_radial_9.json",
+      "selection": "main",
+      "coverage": "deep",
+      "deep_drive_profile": "gentle"
+    },
+    {
+      "source": "assets/engines/atg-video-2/10_lfa_v10.mr",
+      "model": "assets/engines/atg-video-2/10_lfa_v10.json",
+      "selection": "main",
+      "coverage": "all-entry"
+    },
+    {
+      "source": "assets/engines/atg-video-2/11_merlin_v12.mr",
+      "model": "assets/engines/atg-video-2/11_merlin_v12.json",
+      "selection": "main",
+      "coverage": "deep",
+      "deep_drive_profile": "gentle"
+    },
+    {
+      "source": "assets/engines/atg-video-2/12_ferrari_412_t2.mr",
+      "model": "assets/engines/atg-video-2/12_ferrari_412_t2.json",
+      "selection": "main",
+      "coverage": "deep",
+      "deep_drive_profile": "gentle"
+    }
+  ],
+  "observe": [
+    "assets/engines/atg-video-2/07_gm_ls.json",
+    "assets/engines/atg-video-2/08_ferrari_f136_v8.json",
+    "assets/engines/atg-video-2/09_radial_9.json",
+    "assets/engines/atg-video-2/10_lfa_v10.json",
+    "assets/engines/atg-video-2/11_merlin_v12.json",
+    "assets/engines/atg-video-2/12_ferrari_412_t2.json"
+  ],
+  "reject_reordered_banks": "assets/engines/atg-video-2/09_radial_9.json"
+}

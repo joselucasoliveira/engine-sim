@@ -560,6 +560,7 @@ if (TARGET engine-sim-render-json-test AND TARGET engine-sim-render AND TARGET e
     find_package(Python3 3.9 COMPONENTS Interpreter REQUIRED)
     set(preset_check "${PROJECT_SOURCE_DIR}/test/config/preset_corpus.py")
     add_executable(engine-sim-preset-runtime-probe test/config/preset_runtime_probe.cpp)
+    target_include_directories(engine-sim-preset-runtime-probe PRIVATE "${PROJECT_SOURCE_DIR}/tools/capture")
     target_link_libraries(engine-sim-preset-runtime-probe PRIVATE
         engine-sim-runtime-json-private engine-sim-script-interpreter)
     engine_sim_diagnose(engine-sim-preset-runtime-probe TRUE)
@@ -577,4 +578,6 @@ if (TARGET engine-sim-render-json-test AND TARGET engine-sim-render AND TARGET e
     endfunction()
     engine_sim_check_presets(VideoOne VideoOneBehavior assets/engines/atg-video-1/presets.json 8 --numbered)
     engine_sim_check_presets(VideoTwoSix HeaderAndIgnitionParity assets/engines/atg-video-2/presets-01-06.json 6 --numbered)
+    engine_sim_check_presets(Large RadialAndBankOrderParity assets/engines/atg-video-2/presets-07-12.json 6
+        --numbered --first-number 7)
 endif ()

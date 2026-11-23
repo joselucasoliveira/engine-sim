@@ -31,3 +31,7 @@ root when loading these files.
 The JSON derives from the model scripts under the project's MIT terms.
 Impulse locators reference the existing sound library. Recording distribution
 is governed by the corresponding asset rights.
+
+The [remaining six presets](presets-07-12.json) preserve their ordered banks
+and cylinders, including the master and slave rods of the radial-nine
+engine. The radial helper remains an import of that engine.
