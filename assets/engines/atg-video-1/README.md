@@ -17,3 +17,13 @@ The following engines are included:
 6. Subaru EJ25 (version 1)
 7. Audi Inline-5
 8. Radial-5
+
+Each numbered engine also has a canonical JSON preset beside its script.
+The conversion evaluates that engine's `main()` selection with the supplied
+script library and retains its vehicle, transmission and impulse references.
+When loading a preset, use the repository's common data root containing
+`assets/` and `es/` as the asset root. [Preset index](presets.json)
+
+The presets derive from the corresponding model scripts under the project's
+MIT terms. The JSON files reference the existing sound library. The recording
+files retain their own rights and distribution requirements.

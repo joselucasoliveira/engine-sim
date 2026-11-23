@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "source": "assets/engines/atg-video-1/01_honda_trx520.mr",
+      "model": "assets/engines/atg-video-1/01_honda_trx520.json",
+      "selection": "main",
+      "coverage": "all-entry"
+    },
+    {
+      "source": "assets/engines/atg-video-1/02_kohler_ch750.mr",
+      "model": "assets/engines/atg-video-1/02_kohler_ch750.json",
+      "selection": "main",
+      "coverage": "deep"
+    },
+    {
+      "source": "assets/engines/atg-video-1/03_harley_davidson_shovelhead.mr",
+      "model": "assets/engines/atg-video-1/03_harley_davidson_shovelhead.json",
+      "selection": "main",
+      "coverage": "all-entry"
+    },
+    {
+      "source": "assets/engines/atg-video-1/04_hayabusa.mr",
+      "model": "assets/engines/atg-video-1/04_hayabusa.json",
+      "selection": "main",
+      "coverage": "all-entry"
+    },
+    {
+      "source": "assets/engines/atg-video-1/05_honda_vtec.mr",
+      "model": "assets/engines/atg-video-1/05_honda_vtec.json",
+      "selection": "main",
+      "coverage": "deep",
+      "deep_drive_rpm": 6200
+    },
+    {
+      "source": "assets/engines/atg-video-1/06_subaru_ej25.mr",
+      "model": "assets/engines/atg-video-1/06_subaru_ej25.json",
+      "selection": "main",
+      "coverage": "deep"
+    },
+    {
+      "source": "assets/engines/atg-video-1/07_audi_i5.mr",
+      "model": "assets/engines/atg-video-1/07_audi_i5.json",
+      "selection": "main",
+      "coverage": "all-entry"
+    },
+    {
+      "source": "assets/engines/atg-video-1/08_radial_5.mr",
+      "model": "assets/engines/atg-video-1/08_radial_5.json",
+      "selection": "main",
+      "coverage": "deep"
+    }
+  ]
+}

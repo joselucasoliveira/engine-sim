@@ -556,3 +556,18 @@ endif ()
 if (ENGINE_SIM_BUILD_RUNTIME_EXAMPLES)
     add_subdirectory(examples/runtime)
 endif ()
+if (TARGET engine-sim-render-json-test AND TARGET engine-sim-render AND TARGET engine-sim-config-roundtrip)
+    find_package(Python3 3.9 COMPONENTS Interpreter REQUIRED)
+    set(preset_check "${PROJECT_SOURCE_DIR}/test/config/preset_corpus.py")
+    function(engine_sim_check_presets prefix index count)
+        add_test(NAME "${prefix}PresetCoverage"
+            COMMAND "${Python3_EXECUTABLE}" -B "${preset_check}" coverage "${PROJECT_SOURCE_DIR}"
+                "${PROJECT_SOURCE_DIR}/${index}" "${count}" ${ARGN} --writer "$<TARGET_FILE:engine-sim-config-roundtrip>")
+        add_test(NAME "${prefix}Behavior"
+            COMMAND "${Python3_EXECUTABLE}" -B "${preset_check}" behavior "${PROJECT_SOURCE_DIR}"
+                "${PROJECT_SOURCE_DIR}/${index}" "${count}" --legacy "$<TARGET_FILE:engine-sim-render>"
+                --renderer "$<TARGET_FILE:engine-sim-render-json-test>")
+        set_tests_properties("${prefix}PresetCoverage" "${prefix}Behavior" PROPERTIES LABELS r25-corpus TIMEOUT 180)
+    endfunction()
+    engine_sim_check_presets(VideoOne assets/engines/atg-video-1/presets.json 8 --numbered)
+endif ()
