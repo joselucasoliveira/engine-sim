@@ -22,8 +22,16 @@ Runtime::Session::Session(std::unique_ptr<EngineSession> value, Recipe source, s
         if (sim.getTransmission()->getGear() != -1) sim.getTransmission()->changeGear(-1);
         sim.getTransmission()->setClutchPressure(0);
         sim.m_dyno.m_enabled = sim.m_dyno.m_hold = false;
+        const auto &system = *sim.getSystem();
+        const auto objects = system.getConstraintCount();
+        const auto rows = system.getFullConstraintCount();
+        const auto generators = system.getForceGeneratorCount();
         if (mode == ES_DRIVEN) drive = std::make_unique<DrivenShaft>(sim);
         else static_cast<PistonEngineSimulator &>(sim).enableExternalLoad();
+        if (system.getConstraintCount() - objects != 1 || system.getFullConstraintCount() - rows != 1 ||
+            system.getForceGeneratorCount() - generators != (drive ? 1 : 0))
+            throw SimulationFault("Unexpected final public mode solver topology");
+        sim.prepareFixedWorkspace();
     }
     else if (!desktop || !controls) {
         throw std::logic_error("Desktop session requires detached owner commands");

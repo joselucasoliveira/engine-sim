@@ -17,7 +17,8 @@ SOURCES = (
     "transmission", "utilities", "valvetrain", "vehicle", "vehicle_drag_constraint", "vtec_valvetrain",
 )
 HEADERS = (*SOURCES, "acoustic_excitation", "application_settings", "checked_solver", "constants",
-           "engine_definition", "filter", "random_stream", "ring_buffer", "scs", "simulation_fault", "units")
+           "engine_definition", "filter", "legacy_curves", "random_stream", "ring_buffer", "scs",
+           "simulation_fault", "units")
 DSP_HEADERS = ("synthesizer.h", "sample_clock.h", "engine_session.h", "desktop_engine_views.h", "nlohmann/json.hpp")
 SOLVER = Path("dependencies/submodules/simple-2d-constraint-solver")
 
@@ -29,6 +30,7 @@ def verify_physics(args, work, trace, deny):
         "modules/physics/CMakeLists.txt", "modules/assembly/src/mechanical.cpp", "modules/assembly/src/mechanical.hpp",
         "modules/assembly/src/definition.cpp", "modules/assembly/src/definition.hpp",
         "dependencies/submodules/CMakeLists.txt", "cmake/LockedSources.cmake", "cmake/SolverCompatibility.h",
+        "cmake/SolverOverlay.cmake", "dependencies/patches/solver-reservation.patch",
         "cmake/dependencies.lock.json", "test/runtime/physics_consumer.cpp", "test/runtime/physics_scenario.hpp",
         "examples/runtime/programmatic/model.hpp",
         *(f"src/{name}.cpp" for name in SOURCES), *(f"include/{name}.h" for name in HEADERS),

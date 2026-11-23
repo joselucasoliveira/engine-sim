@@ -23,6 +23,13 @@ Presets require `ES_OUT` to name an absolute directory outside the checkout. Use
 | `desktop` on Windows x64 | `simple-2d-constraint-solver`, `delta-studio` | Boost.Filesystem 1.78.0, SDL2, SDL2_image and D3DX from the lock. |
 | `converter` | `simple-2d-constraint-solver`, `piranha` | Boost.Filesystem 1.78.0, Flex 2.6.4 and Bison 3.2 or newer. Windows bootstrap supplies the locked generators. |
 
+The solver stays at the revision in `cmake/dependencies.lock.json`. CMake verifies
+the workspace allocation patch and the original and patched file hashes, then
+compiles the patched copy in the build tree. Build-tree C++ Physics consumers
+get the matching headers through `EngineSim::Physics`. The installed C Runtime
+SDK uses the same solver code and ships its MIT notice. Its public header
+requires only the C runtime interface.
+
 ## Linux x86_64
 
 For the Linux desktop, install Vulkan and the development headers for the selected display and audio backends. On Debian or Ubuntu use the following packages.

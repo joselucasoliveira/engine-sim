@@ -5,7 +5,7 @@ Ange Yaghi created the original Engine Simulator. This fork retains the original
 | Component | License and attribution | Source or accompanying notice |
 | --- | --- | --- |
 | Delta Studio | MIT, copyright 2020 Ange Yaghi. The Windows backend and portable widget math follow its conventions. Embedded code, fonts and SDK files have their own terms. | [Project](https://github.com/ange-yaghi/delta-studio) · [MIT license](assets/licenses/delta-studio.txt) |
-| simple-2d-constraint-solver | MIT, copyright 2022 Ange Yaghi. | [Solver](https://github.com/ange-yaghi/simple-2d-constraint-solver) |
+| simple-2d-constraint-solver | MIT, copyright 2022 Ange Yaghi. The build-tree copy applies the [workspace allocation patch](dependencies/patches/solver-reservation.patch) at the locked revision. | [Solver](https://github.com/ange-yaghi/simple-2d-constraint-solver) |
 | Piranha | MIT. The optional converter also uses the independent notice in the Flex lexer header. | [Piranha](https://github.com/ange-yaghi/piranha) · Accompanying Piranha and FlexLexer notices |
 | Boost | Boost Software License 1.0. The legacy converter and the Windows desktop adapter use Boost.Filesystem. | The locked Boost source archive includes `LICENSE_1_0.txt` |
 | SDL 3 | Zlib license. The Unix backend builds SDL 3.2.8 from the locked source archive. | [SDL](https://github.com/libsdl-org/SDL) · The archive includes `LICENSE.txt` |

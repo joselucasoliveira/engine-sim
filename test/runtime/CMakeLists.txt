@@ -360,6 +360,20 @@ if (TARGET engine-sim-runtime AND TARGET engine-sim-runtime-json-private)
     add_test(NAME R3CapacityReject COMMAND engine-sim-fleet-capacity-test reject "${fleet_fixture}")
     set_tests_properties(R3CapacityLedger R3CapacityReject PROPERTIES LABELS r3-capacity TIMEOUT 90)
 
+    add_executable(engine-sim-fleet-workspace-test fleet-workspace/main.cpp)
+    target_link_libraries(engine-sim-fleet-workspace-test PRIVATE
+        EngineSim::Runtime engine-sim-runtime-json-private engine-sim-runtime-backend Threads::Threads)
+    target_include_directories(engine-sim-fleet-workspace-test PRIVATE "${PROJECT_SOURCE_DIR}/modules/assembly/src")
+    target_compile_features(engine-sim-fleet-workspace-test PRIVATE cxx_std_17)
+    if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_CXX_COMPILER_ID MATCHES "^(GNU|Clang)$")
+        target_compile_definitions(engine-sim-fleet-workspace-test PRIVATE ES_WORKSPACE_WRAP_LOCK)
+        target_link_options(engine-sim-fleet-workspace-test PRIVATE "LINKER:--wrap=pthread_mutex_lock")
+    endif ()
+    engine_sim_diagnose(engine-sim-fleet-workspace-test TRUE)
+    add_test(NAME R3WorkspaceCold COMMAND engine-sim-fleet-workspace-test cold "${fleet_fixture}")
+    add_test(NAME R3WorkspaceRollback COMMAND engine-sim-fleet-workspace-test rollback "${fleet_fixture}")
+    set_tests_properties(R3WorkspaceCold R3WorkspaceRollback PROPERTIES LABELS r3-workspace TIMEOUT 120)
+
 endif ()
 
 if (TARGET engine-sim-runtime AND TARGET engine-sim-config-roundtrip AND ENGINE_SIM_BUILD_RUNTIME_EXAMPLES)

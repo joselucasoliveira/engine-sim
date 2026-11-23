@@ -19,6 +19,20 @@
       "revision": "e009f4ff1c9c4c5874e865e893cdb62e208fb2b3"
     }
   },
+  "solver_overlay": {
+    "revision": "e009f4ff1c9c4c5874e865e893cdb62e208fb2b3",
+    "patch_sha256": "6e4c78272fdc0fdc8c90eaf8cf80a52e510a4871e65c8d43e4cb23995bf2f2ac",
+    "files": {
+      "src/matrix.cpp": {
+        "input_sha256": "fd29898be0e9c5e637c55400794dc30e650d39f5ca4f3e3c17df2f4e87ac8b90",
+        "output_sha256": "9f752aa86de20e36f3c97e1948c52e3fc9baf251e47bf3e77be3cbde1bdb00c1"
+      },
+      "include/sparse_matrix.h": {
+        "input_sha256": "46035ee30fd4593fc3724983dde9be6278ac34099420ab4f9b9ecff36eac57ad",
+        "output_sha256": "0bd5b578da353ebf23b90029c7e6c63a4c7550d9d05c49ada4c367c2c2acfbfc"
+      }
+    }
+  },
   "archives": {
     "googletest": {
       "url": "https://codeload.github.com/google/googletest/zip/609281088cfefc76f9d0ce82e1ff6c30cc3591e5",

@@ -32,6 +32,10 @@ public:
     virtual void initialize(const Parameters &params);
     void loadSimulation(Engine *engine, Vehicle *vehicle, Transmission *transmission);
     void releaseSimulation();
+    // Used once by a detached, final public graph before it is published.
+    // Allocates and initializes the solver workspace without evaluating a step.
+    void prepareFixedWorkspace();
+    bool fixedWorkspaceStartsClear();
 
     // Run one mechanical/fluid tick. An extent smaller than the prepared
     // channel count returns an empty view without advancing any state.

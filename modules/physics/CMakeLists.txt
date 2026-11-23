@@ -33,11 +33,12 @@ add_library(engine-sim-physics-objects OBJECT
     "${physics_root}/src/vehicle_drag_constraint.cpp"
     "${physics_root}/src/vtec_valvetrain.cpp")
 target_compile_features(engine-sim-physics-objects PRIVATE cxx_std_17)
+target_link_libraries(engine-sim-physics-objects PRIVATE simple-2d-constraint-solver)
 
 add_library(engine-sim-physics-builders OBJECT EXCLUDE_FROM_ALL
     "${physics_root}/modules/assembly/src/mechanical.cpp"
     "${physics_root}/modules/assembly/src/definition.cpp")
-target_link_libraries(engine-sim-physics-builders PRIVATE EngineSim::Config)
+target_link_libraries(engine-sim-physics-builders PRIVATE EngineSim::Config simple-2d-constraint-solver)
 target_include_directories(engine-sim-physics-builders PRIVATE "${physics_root}/include")
 target_compile_features(engine-sim-physics-builders PRIVATE cxx_std_17)
 

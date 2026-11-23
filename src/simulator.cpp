@@ -1,14 +1,93 @@
 #include "../include/simulator.h"
 #include "../include/checked_solver.h"
 
+#include <algorithm>
+#include <cassert>
 #include <cmath>
+#include <limits>
 
 namespace {
 class OwnedOptimizedSystem : public atg_scs::OptimizedNsvRigidBodySystem {
 public:
     OwnedOptimizedSystem() { initialize(&m_solver); }
+
+    void prepareFixedWorkspace() {
+        if (m_prepared || m_rigidBodies.empty() || m_rigidBodies.size() > 255 || m_constraints.empty() ||
+            m_constraints.size() > std::numeric_limits<int>::max() ||
+            m_forceGenerators.size() > std::numeric_limits<int>::max())
+            throw engine_sim::SimulationFault("Invalid fixed solver graph");
+
+        const auto bodies = static_cast<int>(m_rigidBodies.size());
+        for (int i = 0; i < bodies; ++i) {
+            const auto *body = m_rigidBodies[i];
+            if (!body || body->index != i)
+                throw engine_sim::SimulationFault("Invalid fixed solver body index");
+        }
+        int rows = 0;
+        constexpr auto maximum = std::numeric_limits<int>::max();
+        for (const auto *constraint : m_constraints) {
+            if (!constraint || constraint->m_bodyCount < 1 || constraint->m_bodyCount > atg_scs::Constraint::MaxBodyCount)
+                throw engine_sim::SimulationFault("Unsupported fixed solver constraint");
+            const auto count = constraint->getConstraintCount();
+            if (count < 1 || count > atg_scs::Constraint::MaxConstraintCount || count > maximum - rows)
+                throw engine_sim::SimulationFault("Invalid fixed solver row count");
+            rows += count;
+            for (int lane = 0; lane < constraint->m_bodyCount; ++lane) {
+                const auto *body = constraint->m_bodies[lane];
+                if (!body || body->index < 0 || body->index >= bodies || m_rigidBodies[body->index] != body)
+                    throw engine_sim::SimulationFault("Invalid fixed solver row body binding");
+            }
+        }
+        if (rows > maximum / rows || static_cast<std::size_t>(rows) >
+                std::numeric_limits<std::size_t>::max() / sizeof(double) / static_cast<std::size_t>(rows))
+            throw engine_sim::SimulationFault("Fixed solver matrix extent exceeds addressability");
+
+        m_state.resize(bodies, rows);
+        for (auto *array : {m_state.a_theta, m_state.v_theta, m_state.theta, m_state.a_x, m_state.a_y,
+                m_state.v_x, m_state.v_y, m_state.p_x, m_state.p_y, m_state.f_x, m_state.f_y,
+                m_state.t, m_state.m})
+            std::fill_n(array, bodies, 0.0);
+        std::fill_n(m_state.indexMap, rows, 0);
+        for (auto *array : {m_state.r_x, m_state.r_y, m_state.r_t})
+            std::fill_n(array, 2 * rows, 0.0);
+
+        const auto coordinates = 3 * bodies;
+        for (auto *matrix : {&m_iv.M, &m_iv.M_inv, &m_iv.q_dot, &m_iv.q_dot_prime, &m_iv.F_ext})
+            matrix->initialize(1, coordinates);
+        for (auto *matrix : {&m_iv.v_bias, &m_iv.C, &m_iv.b_err, &m_iv.right, &m_iv.lambda})
+            matrix->initialize(1, rows);
+        m_iv.limits.initialize(2, rows);
+        m_iv.reg0.initialize(1, std::max(coordinates, rows));
+        m_iv.reg1.initialize(1, std::max(coordinates, rows));
+        engine_sim::CheckedSolver::initializeSparseWorkspace(m_iv.J_sparse, coordinates, rows);
+        engine_sim::CheckedSolver::initializeSparseWorkspace(m_iv.sreg0, coordinates, rows);
+        m_solver.prepareFixedWorkspace(coordinates, rows);
+        m_bodies = bodies;
+        m_rows = rows;
+        m_objects = getConstraintCount();
+        m_generators = getForceGeneratorCount();
+        m_prepared = true;
+    }
+
+    void process(double dt, int steps) override {
+        assert(!m_prepared || (getRigidBodyCount() == m_bodies && getConstraintCount() == m_objects &&
+            getFullConstraintCount() == m_rows && getForceGeneratorCount() == m_generators && steps == 1));
+        OptimizedNsvRigidBodySystem::process(dt, steps);
+    }
+
+    bool fixedWorkspaceStartsClear() {
+        if (!m_prepared) return false;
+        for (int row = 0; row < m_rows; ++row)
+            if (m_iv.lambda.get(0, row) != 0.0) return false;
+        return engine_sim::CheckedSolver::sparseWorkspaceStartsClear(m_iv.J_sparse, m_rows) &&
+            engine_sim::CheckedSolver::sparseWorkspaceStartsClear(m_iv.sreg0, m_rows) &&
+            m_solver.sparseWorkspaceStartsClear(m_rows);
+    }
+
 private:
     engine_sim::CheckedSolver m_solver;
+    bool m_prepared = false;
+    int m_bodies = 0, m_rows = 0, m_objects = 0, m_generators = 0;
 };
 
 class OwnedGenericSystem : public atg_scs::GenericRigidBodySystem {
@@ -89,6 +168,17 @@ void Simulator::releaseSimulation() {
     if (m_system != nullptr) m_system->reset();
 
     destroy();
+}
+
+void Simulator::prepareFixedWorkspace() {
+    auto *system = dynamic_cast<OwnedOptimizedSystem *>(m_system);
+    if (!system) throw engine_sim::SimulationFault("Fixed workspace requires the optimized solver");
+    system->prepareFixedWorkspace();
+}
+
+bool Simulator::fixedWorkspaceStartsClear() {
+    auto *system = dynamic_cast<OwnedOptimizedSystem *>(m_system);
+    return system && system->fixedWorkspaceStartsClear();
 }
 
 std::size_t Simulator::acousticChannelCount() const {

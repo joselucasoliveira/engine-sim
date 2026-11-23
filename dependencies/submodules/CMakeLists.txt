@@ -1,6 +1,8 @@
 include("${PROJECT_SOURCE_DIR}/cmake/LockedSources.cmake")
+include("${PROJECT_SOURCE_DIR}/cmake/SolverOverlay.cmake")
 
-engine_sim_locked_source(solver simple-2d-constraint-solver)
+engine_sim_locked_source(solver_original simple-2d-constraint-solver)
+engine_sim_project_solver(solver "${solver_original}")
 add_library(simple-2d-constraint-solver STATIC
     ${solver}/src/rigid_body_system.cpp
     ${solver}/src/matrix.cpp
@@ -32,7 +34,9 @@ add_library(simple-2d-constraint-solver STATIC
     ${solver}/src/conjugate_gradient_sle_solver.cpp
     ${solver}/src/rotation_friction_constraint.cpp
 )
-target_include_directories(simple-2d-constraint-solver PRIVATE "${solver}/include")
+target_include_directories(simple-2d-constraint-solver
+    PRIVATE "${solver}/include"
+    INTERFACE "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/solver-overlay>")
 if (NOT MSVC)
     target_compile_options(simple-2d-constraint-solver PRIVATE
         -include "${PROJECT_SOURCE_DIR}/cmake/SolverCompatibility.h")

@@ -1,0 +1,58 @@
+--- a/src/matrix.cpp
++++ b/src/matrix.cpp
+@@ -4,0 +5 @@
++#include <memory>
+@@ -43,0 +45,3 @@
++        std::unique_ptr<double[]> data(new double[(size_t)width * height]);
++        std::unique_ptr<double *[]> matrix(new double *[height]);
++
+@@ -45,11 +49,4 @@
+-
+-        m_capacityWidth = (width > m_capacityWidth)
+-            ? width
+-            : m_capacityWidth;
+-
+-        m_capacityHeight = (height > m_capacityHeight)
+-            ? height
+-            : m_capacityHeight;
+-
+-        m_data = new double[(size_t)m_capacityWidth * m_capacityHeight];
+-        m_matrix = new double *[m_capacityHeight];
++        m_data = data.release();
++        m_matrix = matrix.release();
++        m_capacityWidth = width;
++        m_capacityHeight = height;
+@@ -67,4 +63,0 @@
+-    if (m_matrix == nullptr) {
+-        return;
+-    }
+-
+--- a/include/sparse_matrix.h
++++ b/include/sparse_matrix.h
+@@ -6,0 +7 @@
++#include <memory>
+@@ -35,0 +37,4 @@
++                    std::unique_ptr<double[]> data(new double[(size_t)T_Stride * T_Entries * height]);
++                    std::unique_ptr<double *[]> matrix(new double *[height]);
++                    std::unique_ptr<uint8_t[]> blocks(new uint8_t[(size_t)height * T_Entries]);
++
+@@ -37,8 +42,4 @@
+-
+-                    m_capacityHeight = (height > m_capacityHeight)
+-                        ? height
+-                        : m_capacityHeight;
+-
+-                    m_data = new double[(size_t)T_Stride * T_Entries * m_capacityHeight];
+-                    m_matrix = new double *[m_capacityHeight];
+-                    m_blockData = new uint8_t[(size_t)m_capacityHeight * T_Entries];
++                    m_data = data.release();
++                    m_matrix = matrix.release();
++                    m_blockData = blocks.release();
++                    m_capacityHeight = height;
+@@ -56,4 +56,0 @@
+-                if (m_matrix == nullptr) {
+-                    return;
+-                }
+-
+@@ -68,0 +66 @@
++                m_capacityHeight = 0;

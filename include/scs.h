@@ -5,7 +5,7 @@
 #if !defined(_MSC_VER)
 #define __forceinline inline
 #endif
-#include "../dependencies/submodules/simple-2d-constraint-solver/include/scs.h"
+#include <engine_sim_solver/include/scs.h>
 #if !defined(_MSC_VER)
 #undef __forceinline
 #endif
