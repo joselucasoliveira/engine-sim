@@ -18,6 +18,7 @@
 #include <vector>
 
 namespace engine_sim_capture { struct PrimitiveAccess; }
+namespace engine_sim::assembly { struct CapacityInspection; }
 
 class Synthesizer {
     public:
@@ -65,6 +66,7 @@ class Synthesizer {
         ~Synthesizer();
 
         void initialize(const Parameters &p);
+        static unsigned effectiveImpulseTaps(const std::int16_t *samples, unsigned count) noexcept;
         void initializeImpulseResponse(
             const int16_t *impulseResponse,
             unsigned int samples,
@@ -142,6 +144,7 @@ class Synthesizer {
 
     private:
         friend struct engine_sim_capture::PrimitiveAccess;
+        friend struct engine_sim::assembly::CapacityInspection;
         float renderChannel(int channel, float input);
         int16_t finishSample(float signal, bool rejectNonfinite);
         void applyAudioParameters();

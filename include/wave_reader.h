@@ -8,7 +8,7 @@
 #include <vector>
 
 namespace engine_sim {
-enum class WaveFailure { Io, Size, Container, Chunk, Format, Data };
+enum class WaveFailure { Io, Size, Container, Chunk, Format, Data, Budget };
 class WaveError : public std::runtime_error {
 public:
     WaveError(WaveFailure failure, const std::filesystem::path &path, const std::string &reason)
@@ -16,6 +16,7 @@ public:
     WaveFailure failure;
     std::filesystem::path path;
     std::string reason;
+    std::uintmax_t requestedBytes = 0;
 };
 
 // The synthesis input contract is mono signed PCM16 LE at 44100 Hz, without resampling.
@@ -23,6 +24,7 @@ inline constexpr std::uintmax_t maxImpulseWaveBytes = 64 * 1024 * 1024;
 std::vector<std::int16_t> decodeImpulseWave(
     const std::vector<unsigned char> &bytes, const std::filesystem::path &source);
 std::vector<unsigned char> readImpulseWaveBytes(const std::filesystem::path &path);
+std::vector<unsigned char> readImpulseWaveBytes(const std::filesystem::path &path, std::uintmax_t remainingBytes);
 std::vector<std::int16_t> readImpulseWave(const std::filesystem::path &path);
 }
 #endif

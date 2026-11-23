@@ -3,6 +3,7 @@
 
 #include "definition.hpp"
 #include "engine_session.h"
+#include "capacity.hpp"
 
 #include <filesystem>
 #include <functional>
@@ -17,6 +18,7 @@ struct PreparationProfile {
     std::uint32_t simulation_hz = 0;
     double starter_torque_nm = 0.0;
     std::uint64_t seed = 1;
+    FleetPreparation *fleet = nullptr;
 };
 
 struct ResourceInput {
@@ -45,6 +47,11 @@ struct PreparedSession {
 enum class PreparationPhase { definition, pin, decode, channel, session };
 using PreparationCheckpoint = std::function<void(PreparationPhase, std::size_t)>;
 using PreparationResult = std::variant<PreparedSession, config_v1::Diagnostic>;
+
+bool account_pinned(FleetCapacity &report, const ResourceInputs &inputs);
+bool account_session(FleetCapacity &report, const config_v1::NormalizedDocument &model);
+bool verify_session(FleetCapacity &report, EngineSession &built);
+std::size_t path_capacity(const std::filesystem::path &path);
 
 // On reset, validate the complete identity set before decoding any WAVE.
 // Source is optional diagnostic context. Mode-specific runtime controls and

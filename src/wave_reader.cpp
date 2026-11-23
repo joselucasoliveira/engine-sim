@@ -6,10 +6,19 @@
 
 namespace engine_sim {
 std::vector<unsigned char> readImpulseWaveBytes(const std::filesystem::path &path) {
+    return readImpulseWaveBytes(path, maxImpulseWaveBytes);
+}
+
+std::vector<unsigned char> readImpulseWaveBytes(const std::filesystem::path &path, std::uintmax_t remainingBytes) {
     const auto fail = [&](WaveFailure failure, const char *reason) { throw WaveError(failure, path, reason); };
     std::ifstream stream(path, std::ios::binary | std::ios::ate);
     const auto size = stream.tellg();
     if (size < 0) fail(WaveFailure::Io, "cannot inspect impulse file");
+    if (remainingBytes < maxImpulseWaveBytes && static_cast<std::uintmax_t>(size) > remainingBytes) {
+        WaveError problem(WaveFailure::Budget, path, "WAVE exceeds the remaining pinned byte budget");
+        problem.requestedBytes = static_cast<std::uintmax_t>(size);
+        throw problem;
+    }
     if (static_cast<std::uintmax_t>(size) > maxImpulseWaveBytes)
         fail(WaveFailure::Size, "WAVE size must be between 12 bytes and 64 MiB");
     std::vector<unsigned char> bytes(static_cast<std::size_t>(size));

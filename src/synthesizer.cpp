@@ -100,6 +100,14 @@ void Synthesizer::initialize(const Parameters &p) {
     // Storage is initialized, while the queue starts empty.
 }
 
+unsigned Synthesizer::effectiveImpulseTaps(const std::int16_t *samples, unsigned count) noexcept {
+    unsigned clippedLength = 0;
+    for (unsigned i = 0; i < count; ++i) {
+        if (std::abs(samples[i]) > 100) clippedLength = i + 1;
+    }
+    return std::min(10000U, clippedLength);
+}
+
 void Synthesizer::initializeImpulseResponse(
     const int16_t *impulseResponse,
     unsigned int samples,
@@ -116,14 +124,7 @@ void Synthesizer::initializeImpulseResponse(
     if ((samples != 0 && impulseResponse == nullptr) || !std::isfinite(volume)) {
         throw std::invalid_argument("Invalid impulse response data or volume");
     }
-    unsigned int clippedLength = 0;
-    for (unsigned int i = 0; i < samples; ++i) {
-        if (std::abs(impulseResponse[i]) > 100) {
-            clippedLength = i + 1;
-        }
-    }
-
-    const unsigned int sampleCount = std::min(10000U, clippedLength);
+    const unsigned int sampleCount = effectiveImpulseTaps(impulseResponse, samples);
     m_filters[index].convolution.initialize(sampleCount);
     for (unsigned int i = 0; i < sampleCount; ++i) {
         m_filters[index].convolution.getImpulseResponse()[i] =

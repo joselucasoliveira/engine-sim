@@ -100,7 +100,7 @@ OptionsResult options_for(const cfg::Engine &engine, const PreparationProfile &p
 using PinResult = std::variant<ResourceInputs, cfg::Diagnostic>;
 
 PinResult pin(const std::vector<cfg::ImpulseResponse> &impulses, const fs::path &requested,
-              const ResourceInputs *expected, const PreparationCheckpoint &checkpoint) {
+              const ResourceInputs *expected, const PreparationCheckpoint &checkpoint, bool fleet) {
     const auto root_error = [&](std::string_view code, std::string_view reason) {
         return diagnostic(code, "resources", reason, requested.u8string(), "");
     };
@@ -118,6 +118,7 @@ PinResult pin(const std::vector<cfg::ImpulseResponse> &impulses, const fs::path 
     inputs.bindings.reserve(impulses.size());
     std::unordered_map<fs::path, std::size_t> by_path;
     std::unordered_map<std::string_view, std::size_t> by_locator;
+    std::size_t remaining = fleet_wave_limit;
     for (std::size_t i = 0; i < impulses.size(); ++i) {
         const auto &impulse = impulses[i];
         if (!portable_locator(impulse.path)) {
@@ -141,11 +142,17 @@ PinResult pin(const std::vector<cfg::ImpulseResponse> &impulses, const fs::path 
         const auto [slot, inserted] = by_path.try_emplace(actual, inputs.files.size());
         if (inserted) {
             try {
-                auto bytes = readImpulseWaveBytes(actual);
+                auto bytes = fleet ? readImpulseWaveBytes(actual, remaining) : readImpulseWaveBytes(actual);
                 if (expected && bytes != expected->files[expected->bindings[i].input].bytes)
                     return resource_error("CFG_RESOURCE_BYTES", actual, "Impulse input bytes changed", impulses, i);
+                if (fleet) remaining -= bytes.size();
                 inputs.files.push_back({actual, std::move(bytes)});
             } catch (const WaveError &problem) {
+                if (problem.failure == WaveFailure::Budget) {
+                    const auto budget = extent_error("unique WAVE bytes",
+                        fleet_wave_limit - remaining + problem.requestedBytes, fleet_wave_limit);
+                    return resource_error("CFG_LIMIT", actual, budget.message, impulses, i);
+                }
                 return resource_error("CFG_RESOURCE_BYTES", actual, problem.reason, impulses, i);
             }
             if (checkpoint) checkpoint(PreparationPhase::pin, slot->second);
@@ -165,6 +172,22 @@ PreparationResult prepare_session(const cfg::NormalizedDocument &model, const fs
                                   const ResourceInputs *expected, const PreparationCheckpoint &checkpoint) {
     auto options = options_for(model.values().engine, profile, source);
     if (auto *failure = std::get_if<cfg::Diagnostic>(&options)) return std::move(*failure);
+    FleetCapacity capacity;
+    const bool fleet = profile.fleet != nullptr;
+    if (fleet) {
+        capacity = profile.fleet->capacity;
+        capacity.output_hz = profile.fleet->output_hz;
+        capacity.simulation_hz = static_cast<std::uint32_t>(std::get<EngineSessionOptions>(options).simulationFrequency);
+        if (profile.mode == Mode::desktop || (capacity.output_hz != 44100 && capacity.output_hz != 48000)) {
+            auto problem = diagnostic("CFG_LIMIT", "initialize", "Fleet requires FREE or DRIVEN at 44100 or 48000 Hz", source, "");
+            problem.field = profile.mode == Mode::desktop ? "mode" : "output_hz";
+            return problem;
+        }
+        if (auto problem = check_fleet_model(model, capacity, profile.mode == Mode::driven)) {
+            if (!source.empty()) problem->path = source;
+            return std::move(*problem);
+        }
+    }
     auto built = build_definition(model, profile.seed, source);
     if (auto *failure = std::get_if<cfg::Diagnostic>(&built)) {
         if (!source.empty()) failure->path = std::move(source);
@@ -172,7 +195,7 @@ PreparationResult prepare_session(const cfg::NormalizedDocument &model, const fs
     }
     if (checkpoint) checkpoint(PreparationPhase::definition, 0);
     const auto &definitions = model.values().components.impulses;
-    auto pinned = pin(definitions, absolute_root, expected, checkpoint);
+    auto pinned = pin(definitions, absolute_root, expected, checkpoint, fleet);
     if (auto *failure = std::get_if<cfg::Diagnostic>(&pinned)) return std::move(*failure);
     auto inputs = std::get<ResourceInputs>(std::move(pinned));
 
@@ -190,10 +213,32 @@ PreparationResult prepare_session(const cfg::NormalizedDocument &model, const fs
         }
         if (samples[input].size() > std::numeric_limits<unsigned>::max())
             return resource_error("CFG_RESOURCE_BYTES", file.path, "Impulse sample count overflow", definitions, i);
+        if (fleet && (samples[input].size() > file.bytes.size() / sizeof(std::int16_t) ||
+                      !charge_capacity(capacity.decoded_sample_bytes, samples[input].capacity(),
+                                       sizeof(std::int16_t), fleet_wave_limit)))
+            return resource_error("CFG_LIMIT", file.path, "Decoded WAVE capacity exceeds admitted source bytes", definitions, i);
         if (checkpoint) checkpoint(PreparationPhase::decode, input);
     }
 
     auto definition = std::get<EngineDefinition>(std::move(built));
+    if (fleet) {
+        const auto &exhausts = model.values().components.exhausts;
+        const auto &routes = model.topology().exhausts;
+        for (std::size_t i = 0; i < routes.size(); ++i) {
+            const auto *response = definition.engine->getExhaustSystem(static_cast<int>(i))->getImpulseResponse();
+            const auto &decoded = samples[indices.at(response->getFilename())];
+            const auto taps = Synthesizer::effectiveImpulseTaps(decoded.data(), static_cast<unsigned>(decoded.size()));
+            if (auto problem = assign_taps(capacity, i, taps, exhausts[routes[i]].id.value)) {
+                if (!source.empty()) problem->path = source;
+                return std::move(*problem);
+            }
+        }
+        if (!account_pinned(capacity, inputs) || !account_session(capacity, model)) {
+            auto problem = extent_error("retained cell bytes", capacity.retained_bytes, fleet_cell_limit);
+            if (!source.empty()) problem.path = source;
+            return problem;
+        }
+    }
     std::size_t channel = 0;
     try {
         auto session = EngineSession::prepare(std::move(definition), [&](const ImpulseResponse &response)
@@ -201,7 +246,11 @@ PreparationResult prepare_session(const cfg::NormalizedDocument &model, const fs
             if (checkpoint) checkpoint(PreparationPhase::channel, channel++);
             return samples[indices.at(response.getFilename())];
         }, std::get<EngineSessionOptions>(options));
+        if (fleet && !verify_session(capacity, *session))
+            return diagnostic("CFG_INITIALIZE", "initialize", "Fleet graph or synthesis capacities differ from preparation plan",
+                              source, "/engine");
         if (checkpoint) checkpoint(PreparationPhase::session, 0);
+        if (fleet) profile.fleet->capacity = capacity;
         return PreparedSession{std::move(inputs), std::move(session)};
     } catch (const EngineLoadError &problem) {
         return diagnostic("CFG_INITIALIZE", "initialize", problem.diagnostic.message, problem.diagnostic.path, "/engine");

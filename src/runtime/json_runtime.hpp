@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <functional>
 
+namespace engine_sim::assembly { struct FleetCapacity; }
 namespace engine_sim::json_runtime {
 
 enum class Phase { document, normalized, prepared, snapshot };

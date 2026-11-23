@@ -7,6 +7,8 @@
 
 #include <cmath>
 
+namespace engine_sim::assembly { struct CapacityInspection; }
+
 class DelayFilter : public Filter {
 public:
     DelayFilter() {
@@ -44,6 +46,7 @@ public:
     }
 
 protected:
+    friend struct engine_sim::assembly::CapacityInspection;
     int m_latencySamples;
     RingBuffer<double> m_history;
 };

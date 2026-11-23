@@ -55,7 +55,7 @@ def normalization(source):
 def assembly(source):
     source = replace(source, "    auto options = options_for", scope("assembly") + "\n    auto options = options_for")
     fields = (("definition", "build_definition(model, profile.seed, source)"),
-              ("resource_io", "pin(definitions, absolute_root, expected, checkpoint)"),
+              ("resource_io", "pin(definitions, absolute_root, expected, checkpoint, fleet)"),
               ("resource_decode", "decodeImpulseWave(file.bytes, file.path)"))
     for phase, call in fields:
         source = replace(source, call, measured(phase, call))
@@ -63,7 +63,7 @@ def assembly(source):
 
 
 def runtime(source):
-    entry = "Outcome read_document(JsonRecipe &recipe, const JsonRecipe *expected) {"
+    entry = "Outcome read_document(JsonRecipe &recipe, const JsonRecipe *expected, bool fleet = false) {"
     source = replace(source, entry, entry + "\n" + scope("document_read"))
     source = replace(source, "if (size != 0) recipe.bytes.assign(bytes, static_cast<std::size_t>(size));",
                      """cost::observe(cost::Phase::document_copy, [&] {

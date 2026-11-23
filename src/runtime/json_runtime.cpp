@@ -3,6 +3,8 @@
 #include "json_session.hpp"
 #include "runtime.hpp"
 #include "preparation.hpp"
+#include "read.hpp"
+#include "shaft_drive.hpp"
 #include "simulation_fault.h"
 
 #include <engine_sim/config-json.hpp>
@@ -32,6 +34,10 @@ struct JsonRecipe {
 
 struct JsonRuntimeAccess {
     static es_config config(const Runtime &runtime) { return runtime.m_config; }
+
+    static std::size_t fleet_session_bytes(bool driven) {
+        return sizeof(Runtime::Session) + sizeof(PullEngine) + (driven ? sizeof(DrivenShaft) : 0);
+    }
 
     static const JsonRecipe *saved(const Runtime &runtime) {
         if (!runtime.m_session) return nullptr;
@@ -94,7 +100,7 @@ es_status boundary(cfg::Diagnostic *detail, es_error *error, const Operation &ru
     }
 }
 
-Outcome read_document(JsonRecipe &recipe, const JsonRecipe *expected) {
+Outcome read_document(JsonRecipe &recipe, const JsonRecipe *expected, bool fleet = false) {
     if (!absolute_path(recipe.entry))
         return issue("API_INVALID", "api", "An absolute JSON entry path is required", recipe.entry);
     std::error_code error;
@@ -110,6 +116,12 @@ Outcome read_document(JsonRecipe &recipe, const JsonRecipe *expected) {
         return issue("CFG_RESOURCE_BYTES", "resources", "Cannot open JSON entry", recipe.resolved_entry);
     if (expected && static_cast<std::uint64_t>(size) != expected->bytes.size())
         return issue("CFG_RESOURCE_BYTES", "resources", "JSON entry extent changed", recipe.resolved_entry);
+    if (fleet && static_cast<std::uint64_t>(size) > assembly::fleet_document_limit) {
+        auto problem = assembly::extent_error("document bytes", static_cast<std::uint64_t>(size), assembly::fleet_document_limit);
+        problem.stage = "parse";
+        problem.path = recipe.resolved_entry.u8string();
+        return problem;
+    }
     if (static_cast<std::uint64_t>(size) > document_limit)
         return issue("CFG_LIMIT", "parse", "JSON entry exceeds the 16 MiB document limit", recipe.resolved_entry);
     recipe.bytes.resize(static_cast<std::size_t>(size));
@@ -125,19 +137,50 @@ Outcome read_document(JsonRecipe &recipe, const JsonRecipe *expected) {
 PreparedModelResult prepare(JsonRecipe recipe, const JsonRecipe *expected,
                             assembly::PreparationProfile profile, const Checkpoint &checkpoint) {
     if (checkpoint) checkpoint(Phase::document);
-    auto parsed = config_json::read_model(recipe.bytes);
+    constexpr cfg::json_detail::ModelLimits fleet_limits{
+        assembly::fleet_document_limit, assembly::fleet_definition_limit,
+        assembly::fleet_curve_limit, assembly::fleet_point_limit};
+    auto parsed = profile.fleet ? cfg::json_detail::read_limited_model(recipe.bytes, fleet_limits)
+                                : config_json::read_model(recipe.bytes);
     if (auto *problem = std::get_if<cfg::Diagnostic>(&parsed)) {
         if (!recipe.resolved_entry.empty()) problem->path = recipe.resolved_entry.u8string();
         return std::move(*problem);
     }
     if (checkpoint) checkpoint(Phase::normalized);
-    auto result = assembly::prepare_session(std::get<cfg::NormalizedDocument>(parsed), recipe.root, profile,
+    const auto &model = std::get<cfg::NormalizedDocument>(parsed);
+    if (profile.fleet) {
+        auto &report = profile.fleet->capacity;
+        report.document_bytes = recipe.bytes.size();
+        report.recipe_bytes = sizeof(JsonRecipe) + recipe.bytes.capacity() + 1 +
+            assembly::path_capacity(recipe.entry) + assembly::path_capacity(recipe.resolved_entry) +
+            assembly::path_capacity(recipe.root);
+        report.graph_bytes = recipe.resolved_entry.u8string().size() + 1;
+        report.session_bytes = JsonRuntimeAccess::fleet_session_bytes(profile.mode == assembly::Mode::driven) +
+            sizeof(double) * (4 * model.topology().exhausts.size() + model.topology().intakes.size()) +
+            2 * 64 * sizeof(float);
+    }
+    auto result = assembly::prepare_session(model, recipe.root, profile,
                                             recipe.resolved_entry.u8string(), expected ? &expected->resources : nullptr);
     if (auto *problem = std::get_if<cfg::Diagnostic>(&result)) return std::move(*problem);
     if (checkpoint) checkpoint(Phase::prepared);
     auto prepared = std::get<assembly::PreparedSession>(std::move(result));
     recipe.resources = std::move(prepared.inputs);
     return PreparedModel{std::move(prepared.session), std::make_shared<const JsonRecipe>(std::move(recipe))};
+}
+
+PreparedModelResult prepare_fleet(JsonRecipe recipe, const es_config &config, assembly::FleetCapacity &capacity,
+                                  const Checkpoint &checkpoint) {
+    if (config.mode != ES_FREE && config.mode != ES_DRIVEN) {
+        auto problem = issue("API_INVALID", "api", "Fleet mode must be FREE or DRIVEN");
+        problem.field = "mode";
+        return problem;
+    }
+    assembly::FleetPreparation fleet{config.output_hz};
+    const auto mode = config.mode == ES_DRIVEN ? assembly::Mode::driven : assembly::Mode::free;
+    auto result = prepare(std::move(recipe), nullptr,
+                          {mode, config.simulation_hz, config.starter_torque_nm, config.seed, &fleet}, checkpoint);
+    if (std::holds_alternative<PreparedModel>(result)) capacity = fleet.capacity;
+    return result;
 }
 
 Outcome activate(Runtime &runtime, JsonRecipe recipe, const JsonRecipe *expected, const Checkpoint &checkpoint) {
@@ -163,6 +206,32 @@ PreparedModelResult prepare_desktop(const fs::path &entry, const fs::path &root,
     recipe.root = root;
     if (auto problem = read_document(recipe, nullptr)) return std::move(*problem);
     return prepare(std::move(recipe), nullptr, {assembly::Mode::desktop, 0, 0, seed}, {});
+}
+
+PreparedModelResult prepare_fleet_file(const fs::path &entry, const fs::path &root, const es_config &config,
+                                       assembly::FleetCapacity &capacity, const Checkpoint &checkpoint) {
+    if (!absolute_path(root)) return issue("API_INVALID", "api", "An absolute resource root is required", root);
+    JsonRecipe recipe;
+    recipe.entry = entry;
+    recipe.root = root;
+    if (auto problem = read_document(recipe, nullptr, true)) return std::move(*problem);
+    return prepare_fleet(std::move(recipe), config, capacity, checkpoint);
+}
+
+PreparedModelResult prepare_fleet_bytes(const char *bytes, std::uint64_t size, const fs::path &root,
+                                        const es_config &config, assembly::FleetCapacity &capacity,
+                                        const Checkpoint &checkpoint) {
+    if (!absolute_path(root) || (!bytes && size))
+        return issue("API_INVALID", "api", "A valid byte span and absolute resource root are required");
+    if (size > assembly::fleet_document_limit) {
+        auto problem = assembly::extent_error("document bytes", size, assembly::fleet_document_limit);
+        problem.stage = "parse";
+        return problem;
+    }
+    JsonRecipe recipe;
+    recipe.root = root;
+    if (size) recipe.bytes.assign(bytes, static_cast<std::size_t>(size));
+    return prepare_fleet(std::move(recipe), config, capacity, checkpoint);
 }
 
 PreparedModelResult reset_desktop(const JsonRecipe &saved, std::uint64_t seed) {

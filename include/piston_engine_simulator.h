@@ -14,6 +14,8 @@
 
 #include "scs.h"
 
+namespace engine_sim::assembly { struct CapacityInspection; }
+
 class PistonEngineSimulator : public Simulator {
     public:
         PistonEngineSimulator();
@@ -47,6 +49,7 @@ class PistonEngineSimulator : public Simulator {
         engine_sim::AcousticExcitation produceExhaustEndpoint() override;
 
     protected:
+        friend struct engine_sim::assembly::CapacityInspection;
         DelayFilter *m_delayFilters;
 
         atg_scs::FixedPositionConstraint *m_crankConstraints;

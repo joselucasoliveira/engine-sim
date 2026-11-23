@@ -342,6 +342,24 @@ if (TARGET engine-sim-runtime AND TARGET engine-sim-runtime-json-private)
     set_tests_properties(JsonTransactionalRuntime JsonResetIdentity PROPERTIES LABELS r25-json-runtime TIMEOUT 90)
     set_tests_properties(RuntimeV2Abi RuntimeV2Lifecycle PROPERTIES LABELS r25-runtime-v2 TIMEOUT 90)
 
+    add_executable(engine-sim-fleet-capacity-test fleet-capacity/main.cpp)
+    target_link_libraries(engine-sim-fleet-capacity-test PRIVATE
+        EngineSim::Runtime engine-sim-runtime-json-private engine-sim-runtime-backend)
+    target_include_directories(engine-sim-fleet-capacity-test PRIVATE "${PROJECT_SOURCE_DIR}/modules/assembly/src")
+    target_include_directories(engine-sim-fleet-capacity-test SYSTEM PRIVATE
+        "${PROJECT_SOURCE_DIR}/modules/json/third_party/nlohmann")
+    target_compile_features(engine-sim-fleet-capacity-test PRIVATE cxx_std_17)
+    if (ENGINE_SIM_SANITIZER STREQUAL "none" AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        target_sources(engine-sim-fleet-capacity-test PRIVATE cost-phases/observe.cpp)
+        target_include_directories(engine-sim-fleet-capacity-test PRIVATE cost-phases)
+        target_compile_definitions(engine-sim-fleet-capacity-test PRIVATE ES_CAPACITY_MEASURE_ALLOCATIONS)
+    endif ()
+    engine_sim_diagnose(engine-sim-fleet-capacity-test TRUE)
+    set(fleet_fixture "${PROJECT_SOURCE_DIR}/examples/runtime/fixture/main.json")
+    add_test(NAME R3CapacityLedger COMMAND engine-sim-fleet-capacity-test ledger "${fleet_fixture}")
+    add_test(NAME R3CapacityReject COMMAND engine-sim-fleet-capacity-test reject "${fleet_fixture}")
+    set_tests_properties(R3CapacityLedger R3CapacityReject PROPERTIES LABELS r3-capacity TIMEOUT 90)
+
 endif ()
 
 if (TARGET engine-sim-runtime AND TARGET engine-sim-config-roundtrip AND ENGINE_SIM_BUILD_RUNTIME_EXAMPLES)

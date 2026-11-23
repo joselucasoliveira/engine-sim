@@ -284,7 +284,7 @@ if (TARGET engine-sim-runtime-backend AND TARGET engine-sim-assembly)
     add_library(engine-sim-runtime-json-private STATIC src/runtime/json_runtime.cpp)
     target_include_directories(engine-sim-runtime-json-private
         PUBLIC "${PROJECT_SOURCE_DIR}/src/runtime"
-        PRIVATE "${PROJECT_SOURCE_DIR}/modules/assembly/src")
+        PRIVATE "${PROJECT_SOURCE_DIR}/modules/assembly/src" "${PROJECT_SOURCE_DIR}/modules/json/src")
     target_link_libraries(engine-sim-runtime-json-private
         PUBLIC EngineSim::Config
         PRIVATE engine-sim-assembly engine-sim-runtime-backend EngineSim::Json)

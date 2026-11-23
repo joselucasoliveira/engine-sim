@@ -181,6 +181,56 @@ std::size_t array_size(Value array) {
     return count;
 }
 
+std::optional<Diagnostic> limit_points(Value record, std::string_view collection, std::size_t index,
+                                      std::string_view field, std::size_t count, std::size_t &total,
+                                      const ModelLimits &limits) {
+    const auto exceeded = [&](std::string_view quantity, std::size_t requested, std::size_t allowed) {
+        return authoring_error(record, collection, index, field,
+            std::string(quantity) + " requested " + std::to_string(requested) +
+            ", limit " + std::to_string(allowed), "CFG_LIMIT");
+    };
+    if (count > limits.points_per_curve) return exceeded("Curve points", count, limits.points_per_curve);
+    if (count > limits.points_total - total)
+        return exceeded("Total curve points", total + count, limits.points_total);
+    total += count;
+    return {};
+}
+
+std::optional<Diagnostic> limit_definitions(const ParsedJson &parsed, int format, const ModelLimits &limits) {
+    const Value root{parsed, 0};
+    const auto components = root.member("components").value();
+    std::size_t count = 0;
+    for (auto i = components.index + 1; i < components.node().after; i = parsed.nodes[i].after)
+        count += array_size({parsed, i});
+    const auto tables = root.member("port_flow_tables");
+    const auto scales = root.member("port_flow_scales");
+    if (tables) count += array_size(*tables);
+    if (scales) count += array_size(*scales);
+    if (count > limits.definitions) {
+        Diagnostic problem;
+        problem.code = "CFG_LIMIT";
+        problem.stage = "normalize";
+        problem.pointer = "/components";
+        problem.field = "definitions";
+        problem.message = "Component definitions requested " + std::to_string(count) +
+            ", limit " + std::to_string(limits.definitions);
+        set_source_location(problem, parsed.bytes, components.node().span.begin);
+        return problem;
+    }
+    auto table = format == 1 ? components.member("functions") : tables;
+    if (!table) return {};
+    const auto collection = format == 1 ? "/components/functions" : "/port_flow_tables";
+    const auto field = format == 1 ? "samples" : "points";
+    std::size_t total = 0;
+    std::size_t index = 0;
+    for (auto i = table->index + 1; i < table->node().after; i = parsed.nodes[i].after, ++index) {
+        const Value record{parsed, i};
+        if (auto problem = limit_points(record, collection, index, field,
+                array_size(record.member(field).value()), total, limits)) return problem;
+    }
+    return {};
+}
+
 template<class Definition, class Read>
 std::optional<Diagnostic> read_registry(Value root, std::string_view field,
                                         std::unordered_map<std::string_view, Definition> &registry, Read read) {
@@ -275,7 +325,7 @@ Sample authored_point(PointStyle style, Value point) {
     return {{turbulence}, {(scale * value("flame_speed_multiplier")) * turbulence}};
 }
 
-std::variant<AuthoringPlan, Diagnostic> prepare_authoring(const ParsedJson &parsed) {
+std::variant<AuthoringPlan, Diagnostic> prepare_authoring(const ParsedJson &parsed, const ModelLimits *limits) {
     const Value root{parsed, 0};
     std::unordered_map<std::string_view, PortTable> tables;
     if (auto problem = read_registry(root, "port_flow_tables", tables, read_port_table)) return std::move(*problem);
@@ -290,6 +340,7 @@ std::variant<AuthoringPlan, Diagnostic> prepare_authoring(const ParsedJson &pars
     plans.reserve(document.components.functions.size());
     constexpr std::size_t sample_limit = 1'048'576;
     std::size_t sample_count = 0;
+    std::size_t limited_count = 0;
     for (auto child = list.index + 1; child < list.node().after; child = parsed.nodes[child].after) {
         const auto index = plans.size();
         const Value record{parsed, child};
@@ -369,6 +420,10 @@ std::variant<AuthoringPlan, Diagnostic> prepare_authoring(const ParsedJson &pars
         }
         if (count > sample_limit - sample_count)
             return curve_error(record, index, limit_field, "Too many curve samples after expansion", "CFG_LIMIT");
+        if (limits) {
+            if (auto problem = limit_points(record, "/components/functions", index, limit_field,
+                    count, limited_count, *limits)) return std::move(*problem);
+        }
         sample_count += count;
     }
 
@@ -448,14 +503,17 @@ using namespace config_v1;
 using namespace config_v1::json_detail;
 
 template<class Result, class ProcessV1, class ProcessV2>
-Result read_versioned(std::string_view input, ProcessV1 v1, ProcessV2 v2) {
+Result read_versioned(std::string_view input, ProcessV1 v1, ProcessV2 v2, const ModelLimits *limits = nullptr) {
     auto result = parse(input);
     if (auto *error = std::get_if<ParseError>(&result)) return std::move(error->diagnostic);
     auto &parsed = std::get<ParsedJson>(result);
     int format = 0;
     if (auto problem = validate_document(parsed, format, true)) return std::move(*problem);
+    if (limits) {
+        if (auto problem = limit_definitions(parsed, format, *limits)) return std::move(*problem);
+    }
     if (format == 1) return v1(normalize_v1(parsed));
-    auto plan = prepare_authoring(parsed);
+    auto plan = prepare_authoring(parsed, limits);
     if (auto *problem = std::get_if<Diagnostic>(&plan)) return std::move(*problem);
     return v2(parsed, std::get<AuthoringPlan>(std::move(plan)));
 }
@@ -465,6 +523,19 @@ config_v1::ModelResult read_model(std::string_view bytes) {
     return read_versioned<ModelResult>(bytes, [](ModelResult model) { return model; }, expand);
 }
 
+static config_v1::ModelResult read_limited(std::string_view bytes, const ModelLimits &limits) {
+    if (bytes.size() > limits.document_bytes) {
+        Diagnostic problem;
+        problem.code = "CFG_LIMIT";
+        problem.stage = "parse";
+        problem.field = "document bytes";
+        problem.message = "Document bytes requested " + std::to_string(bytes.size()) +
+            ", limit " + std::to_string(limits.document_bytes);
+        return problem;
+    }
+    return read_versioned<ModelResult>(bytes, [](ModelResult model) { return model; }, expand, &limits);
+}
+
 RewriteResult rewrite(std::string_view bytes) {
     return read_versioned<RewriteResult>(bytes, [](ModelResult model) -> RewriteResult {
         if (auto *problem = std::get_if<Diagnostic>(&model)) return std::move(*problem);
@@ -472,5 +543,11 @@ RewriteResult rewrite(std::string_view bytes) {
     }, [](ParsedJson &parsed, const AuthoringPlan &) -> RewriteResult {
         return std::move(parsed.bytes);
     });
+}
+}
+
+namespace engine_sim::config_v1::json_detail {
+ModelResult read_limited_model(std::string_view input, const ModelLimits &limits) {
+    return config_json::read_limited(input, limits);
 }
 }
