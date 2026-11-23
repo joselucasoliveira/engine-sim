@@ -19,6 +19,8 @@ def main():
     parser.add_argument("--frontend", action="store_true")
     parser.add_argument("--runtime", action="store_true")
     parser.add_argument("--capture", action="store_true")
+    parser.add_argument("--converter", action="store_true")
+    parser.add_argument("--host-resources", action="store_true")
     parser.add_argument("--sdl-window", action="store_true")
     parser.add_argument("--sdl-renderer", action="store_true")
     parser.add_argument("--sdl-audio", action="store_true")
@@ -31,21 +33,24 @@ def main():
     output.mkdir(parents=True, exist_ok=True)
     run = Path(tempfile.mkdtemp(prefix="analysis-", dir=output))
     selected = {source / name for name in ("src/audio_buffer.cpp", "src/convolution_filter.cpp",
-                "src/synthesizer.cpp", "src/engine.cpp", "scripting/src/compiler.cpp", "src/wave_reader.cpp", "src/resource_paths.cpp", "src/compiled_scene.cpp")}
+                "src/synthesizer.cpp", "src/engine.cpp", "src/wave_reader.cpp")}
     if options.runtime:
-        selected = {source / name for name in ("src/runtime/api.cpp", "src/runtime/runtime.cpp",
-                    "scripting/src/compiler.cpp", "scripting/src/prepared_engine.cpp", "src/engine.cpp",
-                    "src/simulator.cpp", "src/piston_engine_simulator.cpp", "src/sample_clock.cpp",
-                    "src/pull_engine.cpp", "src/synthesizer.cpp", "src/convolution_filter.cpp", "src/wave_reader.cpp")}
+        selected.update(source / name for name in ("src/runtime/api.cpp", "src/runtime/runtime.cpp",
+                        "src/runtime/json_runtime.cpp", "src/simulator.cpp", "src/piston_engine_simulator.cpp",
+                        "src/sample_clock.cpp", "src/pull_engine.cpp"))
     if options.capture:
         selected.update(source / name for name in ("src/runtime/runtime.cpp", "src/runtime/capture_runtime.cpp",
-                        "scripting/src/prepared_engine.cpp", "src/sample_clock.cpp", "src/pull_engine.cpp",
+                        "src/runtime/json_runtime.cpp", "src/sample_clock.cpp", "src/pull_engine.cpp",
                         "src/simulator.cpp", "src/piston_engine_simulator.cpp", "tools/capture/worker.cpp"))
     if options.frontend:
         selected.update(source / name for name in ("src/desktop_math.cpp", "src/desktop_host.cpp", "src/desktop_run.cpp", "src/shaders.cpp",
                         "src/engine_sim_application.cpp", "src/geometry_generator.cpp", "src/oscilloscope.cpp",
-                        "src/runtime/runtime.cpp", "src/runtime/desktop_runtime.cpp", "src/desktop_engine_views.cpp",
-                        "scripting/src/prepared_engine.cpp"))
+                        "src/runtime/runtime.cpp", "src/runtime/json_runtime.cpp", "src/runtime/desktop_runtime.cpp",
+                        "src/desktop_engine_views.cpp"))
+    if options.converter:
+        selected.update(source / name for name in ("scripting/src/compiler.cpp", "scripting/src/prepared_engine.cpp"))
+    if options.host_resources:
+        selected.update(source / name for name in ("src/resource_paths.cpp", "src/compiled_scene.cpp"))
     if options.sdl_window:
         selected.add(source / "src/sdl_window.cpp")
     if options.sdl_renderer:

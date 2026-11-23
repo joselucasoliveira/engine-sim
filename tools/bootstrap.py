@@ -118,7 +118,7 @@ def verify_submodules(names, git):
         path = REPO / "dependencies" / "submodules" / name
         expected = git[name]["revision"]
         if not (path / ".git").exists():
-            raise ValueError(f"missing {name} at {expected}; run git submodule update --init --recursive")
+            raise ValueError(f"missing {name} at {expected}; run git submodule update --init -- dependencies/submodules/{name}")
         revision = command("git", "rev-parse", "HEAD", cwd=path, capture=True)
         if revision != expected:
             raise ValueError(f"{name}: expected {expected}, found {revision}")
@@ -160,20 +160,20 @@ def find_file(root, name, architecture=None):
     return matches[0]
 
 
-def prepare_windows(paths):
-    flex = paths["winflexbison"]
+def prepare_windows_parser(flex):
     values = {
         "FLEX_EXECUTABLE": find_file(flex, "win_flex.exe"),
         "BISON_EXECUTABLE": find_file(flex, "win_bison.exe"),
     }
     for name in ("FLEX_EXECUTABLE", "BISON_EXECUTABLE"):
         command(values[name], "--version", cwd=values[name].parent)
-    if "sdl2" not in paths:
-        return values
+    return values
+
+
+def prepare_windows_desktop(paths):
     sdl, image, dx = (paths[name] for name in ("sdl2", "sdl2-image", "dxsdk"))
     sdl_library = find_file(sdl, "SDL2.lib", "x64")
     return {
-        **values,
         "SDL2_INCLUDE_DIR": sdl / "include",
         "SDL2_LIBRARY": sdl_library,
         "SDL2_LIBRARY_TEMP": sdl_library,
@@ -203,24 +203,44 @@ def write_atomic(path, text):
     temp.replace(path)
 
 
-def bootstrap(options):
-    windows = platform.system() == "Windows"
-    lock = json.loads(LOCK_PATH.read_text(encoding="utf-8"))
-    names = ["simple-2d-constraint-solver"]
-    if options.profile not in {"runtime", "converter"}:
+PROFILES = ("config", "physics", "synthesis", "core", "capture", "desktop", "runtime", "converter")
+OVERLAYS = ("desktop", "capture", "converter")
+
+
+def requirements(profile, overlays, tests, windows, video):
+    if overlays and profile in {"config", "physics", "synthesis"}:
+        raise ValueError("standalone module profiles do not support host or converter overlays")
+    selected = {profile, *overlays}
+    names = []
+    if selected - {"config", "synthesis"}:
+        names.append("simple-2d-constraint-solver")
+    if selected & {"core", "capture", "desktop"}:
         names.append("csv-io")
-    inputs = ["googletest"] if options.tests else []
-    if options.profile != "core":
+    inputs = ["googletest"] if tests else []
+    if "converter" in selected:
         names.append("piranha")
-        inputs.append("boost")
         if windows:
             inputs.append("winflexbison")
-    if options.profile == "desktop":
+    if "converter" in selected or (windows and "desktop" in selected):
+        inputs.append("boost")
+    if "desktop" in selected:
         if windows:
             names.append("delta-studio")
             inputs.extend(("sdl2", "sdl2-image", "dxsdk"))
         else:
             inputs.append("sdl3")
+    if video:
+        if not windows or "desktop" not in selected:
+            raise ValueError("native video requires the Windows desktop profile")
+        names.append("direct-to-video")
+    return names, inputs
+
+
+def bootstrap(options):
+    windows = platform.system() == "Windows"
+    lock = json.loads(LOCK_PATH.read_text(encoding="utf-8"))
+    overlays = [name for name in OVERLAYS if getattr(options, "with_" + name) and name != options.profile]
+    names, inputs = requirements(options.profile, overlays, options.tests, windows, options.with_video)
 
     revisions = verify_submodules(names, lock["git"])
     cache = options.cache or options.out / "cache"
@@ -241,12 +261,16 @@ def bootstrap(options):
         if "boost" in paths:
             values.update(prepare_boost(paths["boost"]))
         if "winflexbison" in paths:
-            values.update(prepare_windows(paths))
+            values.update(prepare_windows_parser(paths["winflexbison"]))
+        if "sdl2" in paths:
+            values.update(prepare_windows_desktop(paths))
         if "sdl3" in paths:
             values["ENGINE_SIM_SDL3_SOURCE"] = paths["sdl3"]
 
         receipt = {
             "profile": options.profile,
+            "overlays": overlays,
+            "video": options.with_video,
             "tests": options.tests,
             "offline": options.offline,
             "host": f"{platform.system()} {platform.machine()}",
@@ -258,7 +282,11 @@ def bootstrap(options):
             "cmake": {name: str(value) for name, value in values.items()},
         }
         write_atomic(options.out / "dependency-receipt.json", json.dumps(receipt, indent=2) + "\n")
-        write_atomic(options.out / "deps.cmake", "".join(
+        selection = cmake_value(";".join([options.profile, *overlays]))
+        archives = cmake_value(";".join(inputs))
+        write_atomic(options.out / "deps.cmake",
+            f"set(ENGINE_SIM_BOOTSTRAP_SELECTION {selection})\n"
+            f"set(ENGINE_SIM_BOOTSTRAP_ARCHIVES {archives})\n" + "".join(
             f"set({name} {cmake_value(value)} CACHE STRING \"Verified bootstrap input\" FORCE)\n"
             for name, value in values.items()))
     except (OSError, ValueError, subprocess.CalledProcessError, tarfile.TarError, zipfile.BadZipFile):
@@ -268,13 +296,20 @@ def bootstrap(options):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--profile", choices=("core", "capture", "desktop", "runtime", "converter"), required=True)
+    parser.add_argument("--profile", choices=PROFILES, action="append", required=True)
     parser.add_argument("--out", type=external_path, required=True)
     parser.add_argument("--cache", type=external_path)
     parser.add_argument("--offline", action="store_true")
     parser.add_argument("--tests", action="store_true")
+    for feature in OVERLAYS:
+        parser.add_argument("--with-" + feature, action="store_true", help=f"Include {feature} in the same dependency tree")
+    parser.add_argument("--with-video", action="store_true", help="Select the Windows desktop's optional video sources")
+    options = parser.parse_args()
+    if len(options.profile) != 1:
+        parser.error("select exactly one profile per invocation")
+    options.profile = options.profile[0]
     try:
-        bootstrap(parser.parse_args())
+        bootstrap(options)
     except (OSError, ValueError, subprocess.CalledProcessError, tarfile.TarError, zipfile.BadZipFile) as error:
         parser.exit(1, f"Bootstrap failed: {error}\n")
 

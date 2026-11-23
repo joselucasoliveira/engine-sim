@@ -6,8 +6,8 @@ Ange Yaghi created the original Engine Simulator. This fork retains the original
 | --- | --- | --- |
 | Delta Studio | MIT, copyright 2020 Ange Yaghi. The Windows backend and portable widget math follow its conventions. Embedded code, fonts and SDK files have their own terms. | [Project](https://github.com/ange-yaghi/delta-studio) · [MIT license](assets/licenses/delta-studio.txt) |
 | simple-2d-constraint-solver and csv-io | MIT, copyright 2022 Ange Yaghi. Each component retains its complete license. | [Solver](https://github.com/ange-yaghi/simple-2d-constraint-solver) · [csv-io](https://github.com/ange-yaghi/csv-io) |
-| Piranha | MIT. Parser builds also use the independent notice in the Flex lexer header. | [Piranha](https://github.com/ange-yaghi/piranha) · Accompanying Piranha and FlexLexer notices |
-| Boost | Boost Software License 1.0. The parser uses Boost.Filesystem. | The locked Boost source archive includes `LICENSE_1_0.txt` |
+| Piranha | MIT. The optional converter also uses the independent notice in the Flex lexer header. | [Piranha](https://github.com/ange-yaghi/piranha) · Accompanying Piranha and FlexLexer notices |
+| Boost | Boost Software License 1.0. The legacy converter and the Windows desktop adapter use Boost.Filesystem. | The locked Boost source archive includes `LICENSE_1_0.txt` |
 | SDL 3 | Zlib license. The Unix backend builds SDL 3.2.8 from the locked source archive. | [SDL](https://github.com/libsdl-org/SDL) · The archive includes `LICENSE.txt` |
 | SDL GPU shaders | MIT. The shader and buffer conventions are adapted from Open Engine Simulator and Delta Studio. | [Shader licenses and exact sources](assets/shaders/sdl/LICENSE.txt) |
 | stb_truetype 1.24 | MIT alternative, copyright 2017 Sean Barrett. The bundled copy retains the original Delta Studio and Open Engine Simulator rasterizer code, with one indentation correction. | [MIT notice](assets/licenses/stb_truetype-MIT.txt) · Full alternatives remain in the header |

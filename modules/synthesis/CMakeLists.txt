@@ -15,6 +15,7 @@ if (COMMAND engine_sim_diagnose)
 endif ()
 
 add_library(engine-sim-synthesis STATIC $<TARGET_OBJECTS:engine-sim-synthesis-objects>)
+add_library(EngineSim::Synthesis ALIAS engine-sim-synthesis)
 target_include_directories(engine-sim-synthesis PUBLIC "${synthesis_root}/include")
 target_link_libraries(engine-sim-synthesis PRIVATE Threads::Threads)
 target_compile_features(engine-sim-synthesis PUBLIC cxx_std_17)

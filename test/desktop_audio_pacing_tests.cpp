@@ -1,6 +1,10 @@
 #include "desktop_audio_pacer.h"
 #include "../src/runtime/desktop_runtime.hpp"
+#include "json_runtime.hpp"
+#include "json_session.hpp"
+#ifdef ENGINE_SIM_TEST_LEGACY_PREPARATION
 #include "prepared_engine.h"
+#endif
 #include "pull_engine.h"
 #include "simulation_fault.h"
 
@@ -237,7 +241,10 @@ TEST(DesktopPacing, RealPullPcmMatchesItsContinuousControlTimeline) {
     const auto *sourceRoot = std::getenv("ENGINE_SIM_TEST_SOURCE");
     ASSERT_NE(sourceRoot, nullptr);
     const auto root = std::filesystem::u8path(sourceRoot) / "examples/runtime/fixture";
-    const auto prepare = [&] { return engine_sim::prepareEngine({root / "main.mr", root / "library", root}); };
+    const auto prepare = [&] {
+        return engine_sim::json_runtime::require_model(
+            engine_sim::json_runtime::prepare_desktop(root / "main.json", root, 1));
+    };
     auto a = prepare(), b = prepare();
     auto controls = [](Simulator &sim, std::size_t n) {
         sim.getEngine()->setSpeedControl(.25);
@@ -278,7 +285,9 @@ fs::path runtimeFixture() {
     if (!root) throw std::runtime_error("Missing explicit fixture source");
     return fs::u8path(root)/"examples/runtime/fixture";
 }
+#ifdef ENGINE_SIM_TEST_LEGACY_PREPARATION
 es_script::PreparationContext recipeAt(const fs::path &root) { return {root/"main.mr",root/"library",root}; }
+#endif
 struct DesktopFiles {
     fs::path root=fs::current_path()/fs::u8path("owner space Ω-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     explicit DesktopFiles(bool canonical = false) {
@@ -405,26 +414,37 @@ TEST(RuntimeDesktop, ResetCandidateVerifiesOwnedInputsAndRetiresPreviousGenerati
 }
 
 TEST(RuntimeDesktop, PrivatePreparationAdmitsLegacyRatesWithoutChangingPublicLimitsOrSeed) {
-    DesktopFiles files;const auto recipe=recipeAt(files.root);
     DesktopFiles canonical(true);
+#ifdef ENGINE_SIM_TEST_LEGACY_PREPARATION
+    DesktopFiles files;const auto recipe=recipeAt(files.root);
     std::ifstream source(files.root/"main.mr");std::ostringstream contents;contents<<source.rdbuf();source.close();const auto original=contents.str();
+    const auto field=original.find("simulation_frequency: 10000");ASSERT_NE(field,std::string::npos);
+#endif
     std::ifstream modelFile(canonical.root/"main.json");std::ostringstream json;json<<modelFile.rdbuf();modelFile.close();
     const auto model = json.str();
     const std::string knob = "\"simulation_frequency\":10000.0";
     const auto setting = model.find(knob);ASSERT_NE(setting,std::string::npos);
-    const auto field=original.find("simulation_frequency: 10000");ASSERT_NE(field,std::string::npos);
     for (double declared:{400.0,400000.0,400.75,400000.75,10000.75}) {
         const auto frequency=static_cast<unsigned>(declared);
+#ifdef ENGINE_SIM_TEST_LEGACY_PREPARATION
         auto text=original;text.replace(field,std::string("simulation_frequency: 10000").size(),"simulation_frequency: "+std::to_string(declared));
         {std::ofstream target(files.root/"main.mr");target<<text;}
+#endif
         auto adjusted = model;
         adjusted.replace(setting, knob.size(), "\"simulation_frequency\":" + std::to_string(declared));
         {std::ofstream target(canonical.root/"main.json");target<<adjusted;}
+        es_runtime publicRuntime(es_config{sizeof(es_config), ES_ABI_V2, 44100, ES_FREE, 1, 0, 0, 0});
+        EXPECT_EQ(engine_sim::json_runtime::load_file(&publicRuntime, canonical.root/"main.json", canonical.root), ES_MODEL);
+#ifdef ENGINE_SIM_TEST_LEGACY_PREPARATION
         EXPECT_THROW(engine_sim::prepareEngine(recipe),EngineLoadError);
         auto legacy=engine_sim::prepareEngine(recipe, {0, ES_FREE, 0, 1, true});
+#endif
         auto host=desktop::RuntimeHost::prepareModel(canonical.root/"main.json", canonical.root);
         EXPECT_EQ(host->simulator()->getSimulationFrequency(),frequency);
+        EXPECT_EQ(host->simulator()->getEngine()->getRandomSeed(),1u);
+#ifdef ENGINE_SIM_TEST_LEGACY_PREPARATION
         EXPECT_EQ(host->simulator()->getSimulationFrequency(),legacy.session->simulator->getSimulationFrequency());
+#endif
         auto view=host->views().at<Engine>();const auto generation=view.generation();
         float sample;std::uint32_t written=0;host->render(&sample,1,written);EXPECT_EQ(written,1u);
         if(frequency==400) {
@@ -435,9 +455,11 @@ TEST(RuntimeDesktop, PrivatePreparationAdmitsLegacyRatesWithoutChangingPublicLim
         }
         EXPECT_EQ(view.generation(),generation);
     }
+#ifdef ENGINE_SIM_TEST_LEGACY_PREPARATION
     std::vector<es_script::ScriptInput> inputs;auto definition=es_script::Compiler::prepare(recipe,inputs);
     definition.engine->setRandomSeed(123);auto adopted=desktop::RuntimeHost::adopt(std::move(definition));
     EXPECT_EQ(adopted->simulator()->getEngine()->getRandomSeed(),123u);
+#endif
 }
 
 TEST(RuntimeDesktop, FaultsPublishOnlyCompletedFramesAndNeverAdvanceWhileAViewIsLeased) {

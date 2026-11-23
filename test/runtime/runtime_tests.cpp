@@ -1,5 +1,7 @@
 #include "runtime.hpp"
+#ifdef ENGINE_SIM_TEST_LEGACY_PREPARATION
 #include "prepared_engine.h"
+#endif
 #include "simulation_fault.h"
 #include <gtest/gtest.h>
 #include <algorithm>
@@ -241,6 +243,7 @@ TEST_F(RuntimeApi, RealCombustionAndPlateLinkageContinueAfterStarterRelease) {
     EXPECT_FALSE(sim.m_dyno.m_enabled);EXPECT_FALSE(sim.m_starterMotor.m_enabled);
 }
 
+#ifdef ENGINE_SIM_TEST_LEGACY_PREPARATION
 TEST_F(RuntimeApi, FacadeMatchesPreparedPullAcrossFrequenciesAndControlEdges) {
     for(const auto frequency:{4000u,30000u,96000u}) {
         config.simulation_hz=frequency;config.starter_torque_nm=25;
@@ -266,4 +269,5 @@ TEST_F(RuntimeApi, FacadeMatchesPreparedPullAcrossFrequenciesAndControlEdges) {
     }
 }
 
+#endif
 }

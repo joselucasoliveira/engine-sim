@@ -24,12 +24,41 @@
       }
     },
     {
+      "name": "config",
+      "inherits": "external",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "ENGINE_SIM_MODULE_PROFILE": "config",
+        "ENGINE_SIM_BUILD_DESKTOP": false,
+        "BUILD_TESTING": false
+      }
+    },
+    {
+      "name": "physics",
+      "inherits": "external",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "ENGINE_SIM_MODULE_PROFILE": "physics",
+        "ENGINE_SIM_BUILD_DESKTOP": false,
+        "BUILD_TESTING": false
+      }
+    },
+    {
+      "name": "synthesis",
+      "inherits": "external",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "ENGINE_SIM_MODULE_PROFILE": "synthesis",
+        "ENGINE_SIM_BUILD_DESKTOP": false,
+        "BUILD_TESTING": false
+      }
+    },
+    {
       "name": "core",
       "inherits": "external",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "BUILD_TESTING": true,
-        "PIRANHA_ENABLED": false,
         "ENGINE_SIM_BUILD_DESKTOP": false
       }
     },
@@ -39,7 +68,6 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "BUILD_TESTING": true,
-        "PIRANHA_ENABLED": false,
         "ENGINE_SIM_BUILD_DESKTOP": false
       }
     },
@@ -49,7 +77,6 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "BUILD_TESTING": true,
-        "PIRANHA_ENABLED": true,
         "ENGINE_SIM_BUILD_DESKTOP": false,
         "ENGINE_SIM_BUILD_CAPTURE": true
       }
@@ -60,7 +87,6 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "BUILD_TESTING": true,
-        "PIRANHA_ENABLED": true,
         "ENGINE_SIM_BUILD_DESKTOP": true
       }
     },
@@ -151,8 +177,7 @@
         "ENGINE_SIM_BUILD_RUNTIME": true,
         "ENGINE_SIM_BUILD_HOST_TESTS": false,
         "ENGINE_SIM_BUILD_DESKTOP": false,
-        "ENGINE_SIM_BUILD_CAPTURE": false,
-        "PIRANHA_ENABLED": false
+        "ENGINE_SIM_BUILD_CAPTURE": false
       }
     },
     {
@@ -161,7 +186,6 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "BUILD_TESTING": false,
-        "PIRANHA_ENABLED": true,
         "ENGINE_SIM_BUILD_LEGACY_CONVERTER": true,
         "ENGINE_SIM_BUILD_DESKTOP": false,
         "ENGINE_SIM_BUILD_RUNTIME": false,
@@ -175,7 +199,6 @@
       "cacheVariables": {
         "BUILD_TESTING": true,
         "ENGINE_SIM_BUILD_RUNTIME_EXAMPLES": true,
-        "PIRANHA_ENABLED": true,
         "CMAKE_EXPORT_COMPILE_COMMANDS": true
       }
     },
@@ -251,6 +274,27 @@
     }
   ],
   "buildPresets": [
+    {
+      "name": "config",
+      "configurePreset": "config",
+      "configuration": "Release"
+    },
+    {
+      "name": "physics",
+      "configurePreset": "physics",
+      "configuration": "Release",
+      "targets": [
+        "engine-sim-physics"
+      ]
+    },
+    {
+      "name": "synthesis",
+      "configurePreset": "synthesis",
+      "configuration": "Release",
+      "targets": [
+        "engine-sim-synthesis"
+      ]
+    },
     {
       "name": "core",
       "configurePreset": "core",
@@ -468,6 +512,11 @@
       "configuration": "Release",
       "output": {
         "outputOnFailure": true
+      },
+      "filter": {
+        "exclude": {
+          "label": "r25-profile-combined"
+        }
       },
       "execution": {
         "noTestsAction": "error"

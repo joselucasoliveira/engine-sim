@@ -44,6 +44,7 @@ target_compile_features(engine-sim-physics-builders PRIVATE cxx_std_17)
 add_library(engine-sim-physics STATIC EXCLUDE_FROM_ALL
     $<TARGET_OBJECTS:engine-sim-physics-objects>
     $<TARGET_OBJECTS:engine-sim-physics-builders>)
+add_library(EngineSim::Physics ALIAS engine-sim-physics)
 target_include_directories(engine-sim-physics PUBLIC
     "${physics_root}/include" "${physics_root}/modules/assembly/src")
 target_link_libraries(engine-sim-physics PUBLIC EngineSim::Config simple-2d-constraint-solver)

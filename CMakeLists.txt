@@ -16,6 +16,9 @@ set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+set(ENGINE_SIM_MODULE_PROFILE "" CACHE STRING "Standalone module family: config, physics or synthesis")
+set_property(CACHE ENGINE_SIM_MODULE_PROFILE PROPERTY STRINGS "" config physics synthesis)
+option(ENGINE_SIM_CONFIG_JSON "Build the JSON component in the standalone config profile" ON)
 if (NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
 endif ()
@@ -25,7 +28,11 @@ if (WIN32 AND MSVC AND CMAKE_SIZEOF_VOID_P EQUAL 8
         AND CMAKE_CXX_COMPILER_ARCHITECTURE_ID MATCHES "^[Xx]64$")
     set(engine_sim_windows TRUE)
 endif ()
-option(ENGINE_SIM_BUILD_DESKTOP "Build the Engine Simulator desktop app" ${engine_sim_windows})
+set(engine_sim_desktop_default ${engine_sim_windows})
+if (ENGINE_SIM_MODULE_PROFILE)
+    set(engine_sim_desktop_default OFF)
+endif ()
+option(ENGINE_SIM_BUILD_DESKTOP "Build the Engine Simulator desktop app" ${engine_sim_desktop_default})
 option(BUILD_TESTING "Build and register the Engine Simulator tests" OFF)
 option(ENGINE_SIM_BUILD_CAPTURE "Build the offline signal characterization tool" OFF)
 option(ENGINE_SIM_BUILD_RUNTIME "Build the device-free C runtime" OFF)
@@ -34,24 +41,37 @@ option(ENGINE_SIM_INSTALL_RUNTIME_EXAMPLE "Install the lawful synthetic runtime 
 option(ENGINE_SIM_BUILD_RUNTIME_EXAMPLES "Build public C API offline examples" OFF)
 option(ENGINE_SIM_BUILD_HOST_TESTS "Build the desktop host contract fixtures" ON)
 option(ENGINE_SIM_BUILD_LEGACY_CONVERTER "Build the optional legacy migration adapter" OFF)
-set(engine_sim_parser_default ${ENGINE_SIM_BUILD_DESKTOP})
-if (ENGINE_SIM_BUILD_CAPTURE OR ENGINE_SIM_BUILD_LEGACY_CONVERTER OR (BUILD_TESTING AND ENGINE_SIM_BUILD_RUNTIME))
-    set(engine_sim_parser_default ON)
-endif ()
-option(PIRANHA_ENABLED "Enable the engine script interpreter" ${engine_sim_parser_default})
-if (ENGINE_SIM_BUILD_LEGACY_CONVERTER AND NOT PIRANHA_ENABLED)
-    message(FATAL_ERROR "The legacy converter requires PIRANHA_ENABLED")
+if (DEFINED PIRANHA_ENABLED AND PIRANHA_ENABLED)
+    message(STATUS "PIRANHA_ENABLED is deprecated. Use ENGINE_SIM_BUILD_LEGACY_CONVERTER to build the offline converter.")
 endif ()
 option(DTV "Enable video output" OFF)
 option(DISCORD_ENABLED "Enable Discord Rich Presence (Windows x64)" OFF)
 include(cmake/Diagnostics.cmake)
 
+if (ENGINE_SIM_MODULE_PROFILE)
+    if (ENGINE_SIM_BUILD_RUNTIME OR ENGINE_SIM_BUILD_DESKTOP OR ENGINE_SIM_BUILD_CAPTURE OR ENGINE_SIM_BUILD_LEGACY_CONVERTER)
+        message(FATAL_ERROR "The standalone module profile requires a build without runtime, desktop, capture or converter targets")
+    endif ()
+    if (ENGINE_SIM_MODULE_PROFILE STREQUAL "config")
+        add_subdirectory(modules/config)
+        if (ENGINE_SIM_CONFIG_JSON)
+            add_subdirectory(modules/json)
+        endif ()
+    elseif (ENGINE_SIM_MODULE_PROFILE STREQUAL "physics")
+        add_subdirectory(modules/config)
+        add_subdirectory(dependencies)
+        add_subdirectory(modules/physics)
+    elseif (ENGINE_SIM_MODULE_PROFILE STREQUAL "synthesis")
+        add_subdirectory(modules/synthesis)
+    else ()
+        message(FATAL_ERROR "Unknown standalone module profile: ${ENGINE_SIM_MODULE_PROFILE}")
+    endif ()
+    return()
+endif ()
+
 if (ENGINE_SIM_BUILD_DESKTOP AND NOT engine_sim_windows
         AND NOT CMAKE_SYSTEM_NAME MATCHES "^(Linux|Darwin)$")
     message(FATAL_ERROR "Desktop adapters require Windows x64 with MSVC, Linux, or macOS")
-endif ()
-if (ENGINE_SIM_BUILD_DESKTOP AND NOT PIRANHA_ENABLED)
-    message(FATAL_ERROR "Desktop adapters require PIRANHA_ENABLED")
 endif ()
 if ((DTV OR DISCORD_ENABLED) AND (NOT ENGINE_SIM_BUILD_DESKTOP OR NOT engine_sim_windows))
     message(FATAL_ERROR "DTV and DISCORD_ENABLED require the Windows desktop app")
@@ -64,16 +84,20 @@ if (ENGINE_SIM_BUILD_RUNTIME AND ENGINE_SIM_RUNTIME_SHARED AND BUILD_TESTING)
     message(FATAL_ERROR "Use runtime-test for private static tests and runtime-shared for isolated public SDK consumers")
 endif ()
 
-if (ENGINE_SIM_BUILD_CAPTURE AND NOT PIRANHA_ENABLED)
-    message(FATAL_ERROR "The capture tool requires PIRANHA_ENABLED")
-endif ()
-
-if (BUILD_TESTING OR PIRANHA_ENABLED OR ENGINE_SIM_BUILD_DESKTOP)
+if (BUILD_TESTING OR ENGINE_SIM_BUILD_LEGACY_CONVERTER OR ENGINE_SIM_BUILD_DESKTOP)
     set(ENGINE_SIM_DEPS_FILE "$ENV{ES_OUT}/deps.cmake" CACHE FILEPATH "Bootstrap CMake initializer")
     if (NOT EXISTS "${ENGINE_SIM_DEPS_FILE}")
         message(FATAL_ERROR "Missing ${ENGINE_SIM_DEPS_FILE}. Run tools/bootstrap.py for the selected profile and set ES_OUT or ENGINE_SIM_DEPS_FILE.")
     endif ()
     include("${ENGINE_SIM_DEPS_FILE}")
+    if (DEFINED ENGINE_SIM_BOOTSTRAP_SELECTION)
+        if (ENGINE_SIM_BUILD_LEGACY_CONVERTER AND NOT "converter" IN_LIST ENGINE_SIM_BOOTSTRAP_SELECTION)
+            message(FATAL_ERROR "Run bootstrap with --profile converter or include --with-converter in this dependency tree")
+        endif ()
+        if (ENGINE_SIM_BUILD_DESKTOP AND NOT "desktop" IN_LIST ENGINE_SIM_BOOTSTRAP_SELECTION)
+            message(FATAL_ERROR "Run bootstrap with --profile desktop or include --with-desktop in this dependency tree")
+        endif ()
+    endif ()
 endif ()
 
 if (BUILD_TESTING)
@@ -118,7 +142,6 @@ add_library(engine-sim STATIC
     include/camshaft.h
     include/crankshaft.h
     include/combustion_chamber.h
-    include/compiled_scene.h
     include/connecting_rod.h
     include/convolution_filter.h
     include/cylinder_bank.h
@@ -145,7 +168,6 @@ add_library(engine-sim STATIC
     include/part.h
     include/piston.h
     include/piston_engine_simulator.h
-    include/resource_paths.h
     include/simulator.h
     include/standard_valvetrain.h
     include/starter_motor.h
@@ -170,12 +192,7 @@ endif ()
 if (BUILD_TESTING)
     add_subdirectory(test/config)
 endif ()
-if (NOT ENGINE_SIM_BUILD_RUNTIME)
-    target_sources(engine-sim PRIVATE src/compiled_scene.cpp src/resource_paths.cpp)
-    if (WIN32)
-        target_link_libraries(engine-sim PRIVATE shell32)
-    endif ()
-elseif (BUILD_TESTING OR ENGINE_SIM_BUILD_DESKTOP OR ENGINE_SIM_BUILD_CAPTURE)
+if (BUILD_TESTING OR ENGINE_SIM_BUILD_DESKTOP OR ENGINE_SIM_BUILD_CAPTURE)
     add_library(engine-sim-host-resources STATIC src/compiled_scene.cpp src/resource_paths.cpp)
     target_include_directories(engine-sim-host-resources PUBLIC include)
     target_compile_features(engine-sim-host-resources PUBLIC cxx_std_17)
@@ -184,9 +201,9 @@ elseif (BUILD_TESTING OR ENGINE_SIM_BUILD_DESKTOP OR ENGINE_SIM_BUILD_CAPTURE)
     endif ()
 endif ()
 
-target_include_directories(engine-sim PUBLIC include dependencies/submodules)
+target_include_directories(engine-sim PUBLIC include)
 
-if (PIRANHA_ENABLED)
+if (ENGINE_SIM_BUILD_LEGACY_CONVERTER)
     add_library(engine-sim-script-interpreter STATIC
         # Source files
         scripting/src/channel_types.cpp
@@ -279,7 +296,8 @@ if ((BUILD_TESTING AND ENGINE_SIM_BUILD_HOST_TESTS) OR ENGINE_SIM_BUILD_DESKTOP)
     endif ()
 endif ()
 
-if (PIRANHA_ENABLED AND ((BUILD_TESTING AND ENGINE_SIM_BUILD_HOST_TESTS) OR ENGINE_SIM_BUILD_DESKTOP))
+if (ENGINE_SIM_BUILD_DESKTOP OR (BUILD_TESTING AND ENGINE_SIM_BUILD_HOST_TESTS AND
+        (ENGINE_SIM_BUILD_CAPTURE OR ENGINE_SIM_BUILD_RUNTIME OR ENGINE_SIM_BUILD_LEGACY_CONVERTER)))
     add_library(engine-sim-desktop-runtime STATIC src/runtime/desktop_runtime.cpp src/desktop_engine_views.cpp)
     target_link_libraries(engine-sim-desktop-runtime PRIVATE
         engine-sim-runtime-backend engine-sim-runtime-json-private)
@@ -432,7 +450,7 @@ if (BUILD_TESTING)
     gtest_discover_tests(engine-sim-resource-test
         DISCOVERY_TIMEOUT 30 WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/resources-working"
         PROPERTIES LABELS resources TIMEOUT 90 ENVIRONMENT "ENGINE_SIM_TEST_SOURCE=${PROJECT_SOURCE_DIR}")
-    if (PIRANHA_ENABLED)
+    if (ENGINE_SIM_BUILD_LEGACY_CONVERTER)
         find_package(Python3 3.9 COMPONENTS Interpreter REQUIRED)
         add_test(NAME ImpulseReference
             COMMAND "${Python3_EXECUTABLE}" -B "${PROJECT_SOURCE_DIR}/test/impulse_reference.py"
@@ -440,22 +458,27 @@ if (BUILD_TESTING)
         set_tests_properties(ImpulseReference PROPERTIES LABELS impulse TIMEOUT 180
             WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/wave-working")
     endif ()
-    if (PIRANHA_ENABLED)
+    if (ENGINE_SIM_BUILD_LEGACY_CONVERTER)
         add_subdirectory(test/script)
-        if (TARGET engine-sim-host)
-            add_executable(engine-sim-pacing-test test/desktop_audio_pacing_tests.cpp)
-            target_link_libraries(engine-sim-pacing-test PRIVATE gtest_main engine-sim-host engine-sim-script-interpreter engine-sim-desktop-runtime)
-            engine_sim_diagnose(engine-sim-pacing-test TRUE)
-            file(MAKE_DIRECTORY "${PROJECT_BINARY_DIR}/pacing-working")
-            gtest_discover_tests(engine-sim-pacing-test TEST_FILTER "DesktopPacing.*" DISCOVERY_TIMEOUT 30
-                WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/pacing-working"
-                PROPERTIES LABELS "r2-desktop-pacing" TIMEOUT 180
-                ENVIRONMENT "ENGINE_SIM_TEST_SOURCE=${PROJECT_SOURCE_DIR}")
-            gtest_discover_tests(engine-sim-pacing-test TEST_FILTER "RuntimeDesktop.*" DISCOVERY_TIMEOUT 30
-                WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/pacing-working"
-                PROPERTIES LABELS "r2-desktop" TIMEOUT 180
-                ENVIRONMENT "ENGINE_SIM_TEST_SOURCE=${PROJECT_SOURCE_DIR}")
+    endif ()
+    if (TARGET engine-sim-desktop-runtime)
+        add_executable(engine-sim-pacing-test test/desktop_audio_pacing_tests.cpp)
+        target_link_libraries(engine-sim-pacing-test PRIVATE gtest_main engine-sim-host
+            engine-sim-desktop-runtime engine-sim-runtime-json-private engine-sim-runtime-backend)
+        if (ENGINE_SIM_BUILD_LEGACY_CONVERTER)
+            target_link_libraries(engine-sim-pacing-test PRIVATE engine-sim-script-interpreter)
+            target_compile_definitions(engine-sim-pacing-test PRIVATE ENGINE_SIM_TEST_LEGACY_PREPARATION=1)
         endif ()
+        engine_sim_diagnose(engine-sim-pacing-test TRUE)
+        file(MAKE_DIRECTORY "${PROJECT_BINARY_DIR}/pacing-working")
+        gtest_discover_tests(engine-sim-pacing-test TEST_FILTER "DesktopPacing.*" DISCOVERY_TIMEOUT 30
+            WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/pacing-working"
+            PROPERTIES LABELS "r2-desktop-pacing" TIMEOUT 180
+            ENVIRONMENT "ENGINE_SIM_TEST_SOURCE=${PROJECT_SOURCE_DIR}")
+        gtest_discover_tests(engine-sim-pacing-test TEST_FILTER "RuntimeDesktop.*" DISCOVERY_TIMEOUT 30
+            WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/pacing-working"
+            PROPERTIES LABELS "r2-desktop" TIMEOUT 180
+            ENVIRONMENT "ENGINE_SIM_TEST_SOURCE=${PROJECT_SOURCE_DIR}")
     endif ()
 endif ()
 
@@ -488,15 +511,22 @@ foreach(target IN ITEMS simple-2d-constraint-solver piranha csv-io gtest gtest_m
     engine_sim_diagnose("${target}" FALSE)
 endforeach ()
 
-if (PIRANHA_ENABLED AND CMAKE_EXPORT_COMPILE_COMMANDS AND NOT MSVC)
+if (BUILD_TESTING AND CMAKE_EXPORT_COMPILE_COMMANDS AND NOT MSVC)
     find_package(Python3 3.9 COMPONENTS Interpreter REQUIRED)
     find_program(ENGINE_SIM_ANALYZER NAMES clang++-19 clang++-18 clang++)
     if (ENGINE_SIM_ANALYZER)
         set(engine_sim_analysis_frontend)
         if (TARGET engine-sim-frontend)
-            set(engine_sim_analysis_frontend --frontend)
-        elseif (TARGET engine-sim-runtime)
-            set(engine_sim_analysis_frontend --runtime)
+            list(APPEND engine_sim_analysis_frontend --frontend)
+        endif ()
+        if (TARGET engine-sim-runtime)
+            list(APPEND engine_sim_analysis_frontend --runtime)
+        endif ()
+        if (TARGET engine-sim-host-resources)
+            list(APPEND engine_sim_analysis_frontend --host-resources)
+        endif ()
+        if (TARGET engine-sim-script-interpreter)
+            list(APPEND engine_sim_analysis_frontend --converter)
         endif ()
         if (TARGET engine-sim-capture)
             list(APPEND engine_sim_analysis_frontend --capture)
@@ -521,7 +551,9 @@ if (PIRANHA_ENABLED AND CMAKE_EXPORT_COMPILE_COMMANDS AND NOT MSVC)
     endif ()
 endif ()
 
-include(cmake/RuntimeInstall.cmake)
+if (TARGET engine-sim-app OR TARGET engine-sim-capture)
+    include(cmake/RuntimeInstall.cmake)
+endif ()
 if (BUILD_TESTING AND TARGET engine-sim-app AND TARGET engine-sim-pacing-test AND TARGET engine-sim-host-application-test)
     find_package(Python3 3.9 COMPONENTS Interpreter REQUIRED)
     set(desktop_gate "${Python3_EXECUTABLE}" -B "${PROJECT_SOURCE_DIR}/test/desktop_canonical_gate.py")

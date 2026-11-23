@@ -27,32 +27,34 @@ add_test(NAME RuntimeCAbi COMMAND engine-sim-c-abi-check)
 add_test(NAME RuntimeCxxAbi COMMAND engine-sim-cxx-abi-check)
 set_tests_properties(RuntimeCAbi RuntimeCxxAbi PROPERTIES LABELS "r2-abi")
 
-add_executable(engine-sim-preparation-test preparation_tests.cpp)
-target_link_libraries(engine-sim-preparation-test PRIVATE engine-sim-script-interpreter gtest_main)
-engine_sim_diagnose(engine-sim-preparation-test TRUE)
-file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/preparation-working")
-gtest_discover_tests(engine-sim-preparation-test
-    WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/preparation-working"
-    DISCOVERY_TIMEOUT 30
-    PROPERTIES LABELS "r2-prepare" TIMEOUT 180 ENVIRONMENT "ENGINE_SIM_TEST_SOURCE=${PROJECT_SOURCE_DIR}")
+if (TARGET engine-sim-script-interpreter)
+    add_executable(engine-sim-preparation-test preparation_tests.cpp)
+    target_link_libraries(engine-sim-preparation-test PRIVATE engine-sim-script-interpreter gtest_main)
+    engine_sim_diagnose(engine-sim-preparation-test TRUE)
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/preparation-working")
+    gtest_discover_tests(engine-sim-preparation-test
+        WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/preparation-working"
+        DISCOVERY_TIMEOUT 30
+        PROPERTIES LABELS "r2-prepare" TIMEOUT 180 ENVIRONMENT "ENGINE_SIM_TEST_SOURCE=${PROJECT_SOURCE_DIR}")
 
-add_executable(engine-sim-seed-test seed_tests.cpp)
-target_link_libraries(engine-sim-seed-test PRIVATE engine-sim-script-interpreter gtest_main)
-engine_sim_diagnose(engine-sim-seed-test TRUE)
-file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/seed-working")
-gtest_discover_tests(engine-sim-seed-test
-    WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/seed-working"
-    DISCOVERY_TIMEOUT 30 PROPERTIES LABELS "r2-seed" TIMEOUT 180
-    ENVIRONMENT "ENGINE_SIM_TEST_SOURCE=${PROJECT_SOURCE_DIR}")
+    add_executable(engine-sim-seed-test seed_tests.cpp)
+    target_link_libraries(engine-sim-seed-test PRIVATE engine-sim-script-interpreter gtest_main)
+    engine_sim_diagnose(engine-sim-seed-test TRUE)
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/seed-working")
+    gtest_discover_tests(engine-sim-seed-test
+        WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/seed-working"
+        DISCOVERY_TIMEOUT 30 PROPERTIES LABELS "r2-seed" TIMEOUT 180
+        ENVIRONMENT "ENGINE_SIM_TEST_SOURCE=${PROJECT_SOURCE_DIR}")
 
-add_executable(engine-sim-clock-test clock_tests.cpp)
-target_link_libraries(engine-sim-clock-test PRIVATE engine-sim-script-interpreter gtest_main)
-engine_sim_diagnose(engine-sim-clock-test TRUE)
-file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/clock-working")
-gtest_discover_tests(engine-sim-clock-test
-    WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/clock-working"
-    DISCOVERY_TIMEOUT 30 PROPERTIES LABELS "r2-clock" TIMEOUT 180
-    ENVIRONMENT "ENGINE_SIM_TEST_SOURCE=${PROJECT_SOURCE_DIR}")
+    add_executable(engine-sim-clock-test clock_tests.cpp)
+    target_link_libraries(engine-sim-clock-test PRIVATE engine-sim-script-interpreter gtest_main)
+    engine_sim_diagnose(engine-sim-clock-test TRUE)
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/clock-working")
+    gtest_discover_tests(engine-sim-clock-test
+        WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/clock-working"
+        DISCOVERY_TIMEOUT 30 PROPERTIES LABELS "r2-clock" TIMEOUT 180
+        ENVIRONMENT "ENGINE_SIM_TEST_SOURCE=${PROJECT_SOURCE_DIR}")
+endif ()
 
 if (TARGET engine-sim-runtime)
     add_executable(engine-sim-diagnostics-test diagnostics_tests.cpp)
@@ -72,8 +74,11 @@ if (TARGET engine-sim-runtime)
     add_test(NAME RuntimeCConsumer COMMAND engine-sim-runtime-c-test "${fixture}/main.json" "${fixture}")
     set_tests_properties(RuntimeCConsumer PROPERTIES LABELS "r2-runtime" TIMEOUT 180)
     add_executable(engine-sim-runtime-test runtime_tests.cpp)
-    target_link_libraries(engine-sim-runtime-test PRIVATE EngineSim::Runtime engine-sim-runtime-backend
-        engine-sim-script-interpreter gtest_main)
+    target_link_libraries(engine-sim-runtime-test PRIVATE EngineSim::Runtime engine-sim-runtime-backend gtest_main)
+    if (TARGET engine-sim-script-interpreter)
+        target_link_libraries(engine-sim-runtime-test PRIVATE engine-sim-script-interpreter)
+        target_compile_definitions(engine-sim-runtime-test PRIVATE ENGINE_SIM_TEST_LEGACY_PREPARATION=1)
+    endif ()
     target_include_directories(engine-sim-runtime-test PRIVATE "${PROJECT_SOURCE_DIR}/src/runtime")
     engine_sim_diagnose(engine-sim-runtime-test TRUE)
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/runtime-working")
@@ -171,6 +176,17 @@ if (TARGET engine-sim-runtime)
     add_test(NAME StandalonePhysicsConsumer COMMAND ${physics_projection})
     add_test(NAME ModuleDependencyDirection COMMAND ${physics_projection} --direction)
     set_tests_properties(StandalonePhysicsConsumer ModuleDependencyDirection PROPERTIES LABELS r25-physics TIMEOUT 180)
+
+    if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND ENGINE_SIM_SANITIZER STREQUAL "none")
+        set(profile_gate "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/profile_gate.py"
+            --source "${PROJECT_SOURCE_DIR}" --deps-root "${ENGINE_SIM_PRESET_ROOT}"
+            --compiler "${CMAKE_CXX_COMPILER}" --cmake "${CMAKE_COMMAND}" --ctest "${CMAKE_CTEST_COMMAND}")
+        add_test(NAME ProfileDependencyIsolation COMMAND ${profile_gate} isolation)
+        add_test(NAME CombinedProfileClosure COMMAND ${profile_gate} combined)
+        set_tests_properties(ProfileDependencyIsolation CombinedProfileClosure PROPERTIES RUN_SERIAL TRUE TIMEOUT 1200)
+        set_tests_properties(CombinedProfileClosure PROPERTIES
+            DEPENDS ProfileDependencyIsolation LABELS "r25-profile-combined" TIMEOUT 1800)
+    endif ()
 
     foreach(variant IN ITEMS static shared)
         add_test(NAME RuntimeSdk_${variant} COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/sdk_gate.py"

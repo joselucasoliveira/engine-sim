@@ -18,15 +18,17 @@ SOURCE = Path(__file__).resolve().parent.parent
 CORE = {"GasSystemTests": 19, "FunctionTests": 5, "SynthesizerTests": 7, "RingBuffer": 3,
         "Convolution": 2, "ThreadedSynthesis": 5, "WaveReader": 8, "Resources": 5,
         "SceneReader": 4, "HostContract": 4}
-SCRIPT = {"ScriptTests": 5, "Lifecycle": 5, "Displacement": 2, "Load": 8,
-          "HostApplication": 8, "DesktopRun": 5, "ImpulseReference": 1}
+MODEL = dict.fromkeys(("CanonicalCandidateLifetime", "CanonicalInductionAssembly", "CanonicalInitialization",
+                       "CanonicalMechanicalAssembly", "CanonicalResourcePreparation", "CanonicalRodPlacement",
+                       "ConfigDefaults", "ConfigJsonDeterminism", "ConfigJsonLexical", "ConfigJsonLimits",
+                       "ConfigJsonRoundTrip", "ConfigPublicHeader", "ConfigReferenceRules", "ConfigSchemaEmbedding",
+                       "ConfigSchemaParity", "ConfigTopologyRules", "ConfigUnitBoundaries", "ConfigValueOwnership"), 1)
+HOST = {"HostApplication": 8, "DesktopRun": 5, "DesktopPacing": 8, "ViewsApplication": 4,
+        "RuntimeDesktop": 5, "RuntimeCAbi": 1, "RuntimeCxxAbi": 1}
+DESKTOP = {"DesktopCanonicalSelection": 1, "DesktopReloadPacing": 1}
 SDL = {"DesktopInput": 8, "DesktopRender": 5, "DesktopAudio": 9}
-# Additive suites are explicit: missing/extra cases still fail admission. Keep
-# historical suites and their counts rather than inferring a green total.
-FOUNDATION = {"RuntimeParserPreparation": 1, "Preparation": 6, "Seed": 1,
-              "SeedEngines": 2, "Clock": 8, "RuntimeCAbi": 1, "RuntimeCxxAbi": 1,
-              "DesktopPacing": 8, "ViewsApplication": 4, "RuntimeDesktop": 5}
-CAPTURE = {"CaptureRuntime": 3, "CaptureMechanics": 1, "CaptureQuick": 1, "CaptureComparator": 1, "CaptureStress": 1, "StagedResources": 1}
+CAPTURE = {"CaptureRuntime": 3, "CaptureMechanics": 1, "CaptureQuick": 1, "CaptureComparator": 1,
+           "CaptureStress": 1, "StagedResources": 1, "CaptureCanonicalReplay": 1, "CaptureNoLegacyAdapter": 1}
 PRESETS = ("core", "capture", "desktop", "desktop-windows", "asan", "tsan", "desktop-asan", "desktop-tsan", "win-asan")
 
 
@@ -36,17 +38,17 @@ def sha256(path):
 
 def expected_suites(preset, windows):
     if preset == "tsan":
-        return {"ThreadedSynthesis": 5, "Load": 2}
+        return {"ThreadedSynthesis": 5}
     if preset == "desktop-tsan":
-        return {"ThreadedSynthesis": 5, "Load": 2, "DesktopAudio": 9, "DesktopRun": 5}
-    result = dict(CORE)
+        return {"ThreadedSynthesis": 5, "DesktopAudio": 9, "DesktopRun": 5}
+    result = {**CORE, **MODEL}
     if preset != "core":
-        result.update(SCRIPT)
-        result.update(FOUNDATION)
-    if preset in ("capture", "desktop", "desktop-windows", "asan", "desktop-asan", "win-asan"):
+        result.update(HOST)
         result.update(CAPTURE)
-    if not windows and preset in ("desktop", "desktop-asan"):
-        result.update(SDL)
+    if preset in ("desktop", "desktop-windows", "desktop-asan", "win-asan"):
+        result.update(DESKTOP)
+        if not windows:
+            result.update(SDL)
     return result
 
 
@@ -143,14 +145,13 @@ def main():
             command("compiler-version", ["cl.exe", "/nologo", "/Bv", "/c", str(probe), "/Fo" + str(output / "compiler-probe.obj")])
         else:
             command("compiler-version", [args.cxx_compiler or ("clang++" if "asan" in args.preset else "c++"), "--version"])
-            if args.preset != "core":
-                command("flex-version", ["flex", "--version"])
-                command("bison-version", ["bison", "--version"])
             if platform.system() == "Darwin":
                 command("xcode-version", ["xcodebuild", "-version"])
                 command("sdk-version", ["xcrun", "--show-sdk-version"])
         profile = "core" if args.preset == "core" else ("desktop" if "desktop" in args.preset or args.preset == "win-asan" else "capture")
         bootstrap = [sys.executable, "-B", str(SOURCE / "tools/bootstrap.py"), "--profile", profile, "--tests", "--out", str(output)]
+        if profile == "desktop":
+            bootstrap.append("--with-capture")
         if args.cache:
             bootstrap += ["--cache", str(args.cache)]
         if args.offline:

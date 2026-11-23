@@ -74,7 +74,12 @@ def inside(prefix, fixture, work, variant, report):
         env['PATH'] = str(location.parent)+os.pathsep+env.get('PATH','')
     extension = '.exe' if platform.system()=='Windows' else ''
     for name in ('runtime-c-consumer','runtime-cxx-consumer'):
-        command([executable(build,name),fixture/'main.json',fixture],work,report,env)
+        invocation = [executable(build,name),fixture/'main.json',fixture]
+        tracer = os.environ.get('ENGINE_SIM_STRACE')
+        if tracer and platform.system() == 'Linux':
+            trace = work / f'{name}.strace'
+            invocation = [tracer,'-f','-q','-s','4096','-e','trace=file,process,network','-o',trace,*invocation]
+        command(invocation,work,report,env)
     matrix_build = work / 'matrix-build'
     command([cmake,'-S',work/'matrix-source','-B',matrix_build,'-DCMAKE_BUILD_TYPE=Release',f'-DCMAKE_PREFIX_PATH={prefix}',
              '-DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF','-DCMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY=OFF'],work,report)
@@ -232,7 +237,10 @@ def main():
             for path in ('/usr','/lib','/lib64','/bin','/etc'):
                 if Path(path).exists():argv+=['--ro-bind',path,path]
             argv+=['--proc','/proc','--dev','/dev','--tmpfs','/tmp','--bind',str(out),'/work','--chdir','/work','--clearenv',
-                   '--setenv','PATH','/usr/bin:/bin','--setenv','LC_ALL','C.UTF-8','/usr/bin/python3','/work/installed_consumer.py',
+                   '--setenv','PATH','/usr/bin:/bin','--setenv','LC_ALL','C.UTF-8']
+            if tracer := os.environ.get('ENGINE_SIM_STRACE'):
+                argv+=['--ro-bind',str(Path(tracer).resolve(strict=True)),'/strace','--setenv','ENGINE_SIM_STRACE','/strace']
+            argv+=['/usr/bin/python3','/work/installed_consumer.py',
                    '--inside','--prefix',str(Path('/work')/moved.name),'--variant',args.variant,'--out','/work','--fixture',str(Path('/work')/fixture.relative_to(out))]
             command(argv,out,report)
             result=json.loads((out/'inside-result.json').read_text());assert result['status']=='pass',result
