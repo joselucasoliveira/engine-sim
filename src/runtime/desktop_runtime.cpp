@@ -14,8 +14,9 @@ RuntimeHost::~RuntimeHost() {
 std::unique_ptr<RuntimeHost> RuntimeHost::fromPrepared(engine_sim::PreparedEngine prepared) {
     auto result = std::unique_ptr<RuntimeHost>(new RuntimeHost);
     auto &simulator = *prepared.session->simulator;
-    result->m_views = std::make_unique<EngineViews>(simulator);
-    result->m_commands = std::make_unique<EngineCommands>(simulator, *result->m_views);
+    auto &synthesis = prepared.session->synthesis;
+    result->m_views = std::make_unique<EngineViews>(simulator, synthesis);
+    result->m_commands = std::make_unique<EngineCommands>(simulator, synthesis, *result->m_views);
     auto *commands = result->m_commands.get();
     result->m_runtime.adoptPrepared(std::move(prepared), [commands] { commands->latch(); });
     result->pull().setTickCommands([commands] { commands->apply(commands->applied, false); },

@@ -2,6 +2,7 @@
 #define ENGINE_SIM_DESKTOP_ENGINE_VIEWS_H
 
 #include "simulator.h"
+#include "synthesizer.h"
 #include <array>
 #include <cstdint>
 #include <memory>
@@ -73,7 +74,7 @@ struct ScopeObservation {
 class EngineViews {
 public:
     static constexpr std::size_t ScopeCapacity = 8192;
-    explicit EngineViews(const Simulator &simulator);
+    EngineViews(const Simulator &simulator, const Synthesizer &synthesis);
     ~EngineViews() { invalidate(); }
     EngineViews(const EngineViews &) = delete;
     EngineViews &operator=(const EngineViews &) = delete;
@@ -111,7 +112,7 @@ public:
         bool ignition = false, starter = false, dyno = false, hold = false;
         int frequency = 10000;
     } pending, applied;
-    explicit EngineCommands(Simulator &simulator, EngineViews &views);
+    EngineCommands(Simulator &simulator, Synthesizer &synthesis, EngineViews &views);
     void setDemand(double value) { pending.demand = value; }
     void setClutch(double value) { pending.clutch = value; }
     void setIgnition(bool value) { pending.ignition = value; }
@@ -132,6 +133,7 @@ public:
     void apply(const Values &values, bool frequency);
 private:
     Simulator &m_simulator;
+    Synthesizer &m_synthesis;
     EngineViews &m_views;
     int m_gear;
     bool m_mixerDirty = false;

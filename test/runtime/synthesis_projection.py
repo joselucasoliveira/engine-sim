@@ -8,15 +8,15 @@ import tempfile
 from pathlib import Path
 
 SOURCES = (
-    "convolution_filter", "derivative_filter", "filter", "jitter_filter", "leveling_filter",
+    "convolution_filter", "derivative_filter", "jitter_filter", "leveling_filter",
     "low_pass_filter", "synthesizer",
 )
-HEADERS = (*SOURCES, "acoustic_excitation", "butterworth_low_pass_filter", "constants",
+HEADERS = (*SOURCES, "acoustic_excitation", "butterworth_low_pass_filter", "constants", "filter",
            "random_stream", "ring_buffer", "simulation_fault", "utilities")
 CONSUMER = ("synthesis_consumer.cpp", "synthesis_scenario.hpp", "synthesis_trace.hpp")
 
 
-def verify(args, work, evidence):
+def verify(args, work, evidence, *, deny=()):
     root = work / "source"
     build = work / "build"
     root.mkdir(parents=True)
@@ -28,8 +28,7 @@ def verify(args, work, evidence):
         target = root / name
         target.parent.mkdir(exist_ok=True, parents=True)
         shutil.copyfile(args.source / name, target)
-    (root / "CMakeLists.txt").write_text(
-        """cmake_minimum_required(VERSION 3.25)
+    project = """cmake_minimum_required(VERSION 3.25)
 project(synthesis_consumer LANGUAGES CXX)
 set(CMAKE_CXX_EXTENSIONS OFF)
 enable_testing()
@@ -37,7 +36,12 @@ add_subdirectory(modules/synthesis)
 add_executable(synthesis-consumer test/runtime/synthesis_consumer.cpp)
 target_link_libraries(synthesis-consumer PRIVATE engine-sim-synthesis)
 add_test(NAME SynthesisConsumer COMMAND synthesis-consumer ${SYNTHESIS_EVIDENCE})
-""", encoding="utf-8")
+"""
+    for i, header in enumerate(deny):
+        (root / f"forbidden-{i}.cpp").write_text(f'#include "{header}"\n', encoding="utf-8")
+        project += (f"add_executable(forbidden-{i} EXCLUDE_FROM_ALL forbidden-{i}.cpp)\n"
+                    f"target_link_libraries(forbidden-{i} PRIVATE engine-sim-synthesis)\n")
+    (root / "CMakeLists.txt").write_text(project, encoding="utf-8")
     commands = []
     configure = [args.cmake, "-S", root, "-B", build, "-G", args.generator,
                  "-DCMAKE_BUILD_TYPE=Release", "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
@@ -47,8 +51,7 @@ add_test(NAME SynthesisConsumer COMMAND synthesis-consumer ${SYNTHESIS_EVIDENCE}
     if evidence:
         configure.append(f"-DSYNTHESIS_EVIDENCE={evidence}")
 
-    for argv in (configure, [args.cmake, "--build", build, "--config", "Release", "--verbose"],
-                 [args.ctest, "--test-dir", build, "-C", "Release", "--no-tests=error", "--verbose"]):
+    def invoke(argv, missing=None):
         argv = list(map(str, argv))
         executed = subprocess.run(argv, cwd=work, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         log = work / f"{len(commands) + 1:02}.log"
@@ -56,7 +59,18 @@ add_test(NAME SynthesisConsumer COMMAND synthesis-consumer ${SYNTHESIS_EVIDENCE}
         commands.append(dict(argv=argv, cwd=str(work), exit=executed.returncode, log=log.name))
         (work / "commands.json").write_text(json.dumps(commands, indent=2) + "\n", encoding="utf-8")
         print(executed.stdout.decode(errors="replace"), end="")
-        executed.check_returncode()
+        if missing:
+            output = executed.stdout.decode(errors="replace").lower()
+            if executed.returncode == 0 or missing.lower() not in output or "fatal error" not in output:
+                raise RuntimeError(f"Unexpected compile result for forbidden include {missing}")
+        else:
+            executed.check_returncode()
+
+    invoke(configure)
+    invoke([args.cmake, "--build", build, "--config", "Release", "--parallel", "3", "--verbose"])
+    invoke([args.ctest, "--test-dir", build, "-C", "Release", "--no-tests=error", "--verbose"])
+    for i, header in enumerate(deny):
+        invoke([args.cmake, "--build", build, "--config", "Release", "--target", f"forbidden-{i}"], missing=header)
     return 0
 
 

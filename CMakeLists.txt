@@ -103,46 +103,16 @@ endif ()
 
 add_subdirectory(dependencies)
 add_subdirectory(modules/synthesis)
+add_subdirectory(modules/physics)
 
 add_library(engine-sim STATIC
     $<TARGET_OBJECTS:engine-sim-synthesis-objects>
+    $<TARGET_OBJECTS:engine-sim-physics-objects>
     # Source files
     src/audio_buffer.cpp
-    src/camshaft.cpp
-    src/crankshaft.cpp
-    src/combustion_chamber.cpp
-    src/connecting_rod.cpp
-    src/cylinder_bank.cpp
-    src/cylinder_head.cpp
-    src/delay_filter.cpp
-    src/direct_throttle_linkage.cpp
-    src/dynamometer.cpp
-    src/engine.cpp
-    src/exhaust_system.cpp
     src/feedback_comb_filter.cpp
-    src/fuel.cpp
-    src/function.cpp
-    src/gas_system.cpp
-    src/gaussian_filter.cpp
-    src/governor.cpp
-    src/ignition_module.cpp
-    src/impulse_response.cpp
-    src/intake.cpp
-    src/part.cpp
-    src/piston.cpp
-    src/piston_engine_simulator.cpp
-    src/simulator.cpp
     src/sample_clock.cpp
     src/pull_engine.cpp
-    src/standard_valvetrain.cpp
-    src/starter_motor.cpp
-    src/throttle.cpp
-    src/transmission.cpp
-    src/utilities.cpp
-    src/valvetrain.cpp
-    src/vehicle.cpp
-    src/vehicle_drag_constraint.cpp
-    src/vtec_valvetrain.cpp
     src/wave_reader.cpp
 
     # Include files

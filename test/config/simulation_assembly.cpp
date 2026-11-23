@@ -1,4 +1,5 @@
 #include "definition.hpp"
+#include "engine_session.h"
 
 #include "piston_engine_simulator.h"
 

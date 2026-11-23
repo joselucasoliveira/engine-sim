@@ -106,6 +106,7 @@ namespace engine_sim {
 struct RuntimeTestAccess {
     static PullEngine &pull(es_runtime &handle) { return *handle.implementation.m_session->pull; }
     static const Simulator &simulator(const es_runtime &handle) { return *handle.implementation.m_session->prepared.session->simulator; }
+    static const Synthesizer &synthesis(const es_runtime &handle) { return handle.implementation.m_session->prepared.session->synthesis; }
     static atg_scs::RigidBodySystem &system(es_runtime &handle) { return *handle.implementation.m_session->prepared.session->simulator->getSystem(); }
 };
 struct ClockTestAccess {
@@ -247,7 +248,7 @@ public:
         if (stats.after.frames != total || stats.after.nativeFrames != (total * 44100 + m_options.rate - 1) / m_options.rate ||
             stats.after.ticks != total * m_frequency / m_options.rate) throw std::runtime_error("Measured runtime counters differ from rational duration");
         const auto &simulator = engine_sim::RuntimeTestAccess::simulator(*m_handle);
-        const auto queues = simulator.synthesizer().getBufferStatistics();
+        const auto queues = engine_sim::RuntimeTestAccess::synthesis(*m_handle).getBufferStatistics();
         if (queues.droppedInput || queues.droppedOutput || queues.zeroFilledOutput || queues.stagedInput || queues.pendingInput || queues.activeInput || queues.queuedOutput)
             throw std::runtime_error("Benchmark used, padded or dropped queued audio");
         stats.speed = simulator.getEngine()->getOutputCrankshaft()->m_body.v_theta;

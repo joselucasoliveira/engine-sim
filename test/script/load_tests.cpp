@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include "../runtime/legacy_access.h"
 #include "compiler.h"
 
 #include <algorithm>
@@ -177,16 +178,17 @@ TEST_F(Load, FailedCandidatePreservesRunningSession) {
     auto *original = active.get();
     auto *engine = active->definition.engine.get();
     active->simulator->setSimulationFrequency(12345);
-    active->simulator->startAudioRenderingThread();
-    auto &synth = active->simulator->synthesizer();
+    auto &synth = active->synthesis;
+    synth.startAudioRenderingThread();
+    engine_sim_test::LegacyFrame legacy(*active->simulator, synth);
     const auto publish = [&] {
         for (int i = 0; i < 32; ++i) { const double value = i * 100; synth.writeInput(&value); }
         synth.endInputBlock();
         synth.waitProcessed();
     };
-    active->simulator->startFrame(0.001);
-    while (active->simulator->simulateStep()) {}
-    active->simulator->endFrame();
+    legacy.startFrame(0.001);
+    while (legacy.simulateStep()) {}
+    legacy.endFrame();
     synth.waitProcessed();
     ASSERT_GT(active->simulator->getFrameIterationCount(), 0);
     const auto oldIteration = active->simulator->getCurrentIteration();
@@ -238,14 +240,15 @@ TEST_F(Load, RepeatedModelsKeepPcmAndTopology) {
             engine.getIgnitionModule()->m_enabled = true;
             simulator.m_starterMotor.m_enabled = true;
             engine.setSpeedControl(0.2);
+            auto &synth = session->synthesis;
+            engine_sim_test::LegacyFrame legacy(simulator, synth);
             std::vector<int16_t> pcm;
             std::vector<int> steps;
             for (int block = 0; block < 20; ++block) {
-                simulator.startFrame(0.01);
-                while (simulator.simulateStep()) {}
+                legacy.startFrame(0.01);
+                while (legacy.simulateStep()) {}
                 steps.push_back(simulator.getFrameIterationCount());
-                simulator.endFrame();
-                auto &synth = simulator.synthesizer();
+                legacy.endFrame();
                 synth.renderAudio();
                 const auto available = synth.getBufferStatistics().queuedOutput;
                 std::vector<int16_t> buffer(available);
@@ -287,10 +290,10 @@ TEST_F(Load, RepeatedReplacementRetainsSignalAndCleanup) {
     auto active = validSession();
     for (int repeat = 0; repeat < 10; ++repeat) {
         auto candidate = validSession();
-        candidate->simulator->startAudioRenderingThread();
-        active->simulator->endAudioRenderingThread();
+        candidate->synthesis.startAudioRenderingThread();
+        active->synthesis.endAudioRenderingThread();
         active.swap(candidate);
-        auto &synth = active->simulator->synthesizer();
+        auto &synth = active->synthesis;
         for (int i = 0; i < 100; ++i) { const double value = i == 20 ? 8192 : 0; synth.writeInput(&value); }
         synth.endInputBlock();
         synth.waitProcessed();

@@ -5,7 +5,6 @@ add_library(engine-sim-synthesis-objects OBJECT
     "${synthesis_root}/src/synthesizer.cpp"
     "${synthesis_root}/src/convolution_filter.cpp"
     "${synthesis_root}/src/derivative_filter.cpp"
-    "${synthesis_root}/src/filter.cpp"
     "${synthesis_root}/src/jitter_filter.cpp"
     "${synthesis_root}/src/leveling_filter.cpp"
     "${synthesis_root}/src/low_pass_filter.cpp")

@@ -149,14 +149,14 @@ TEST(Lifecycle, RepeatedKohlerAndNineCylinderStartStop) {
         synthesisParams.inputSampleRate = static_cast<float>(simulator->getSimulationFrequency());
         synthesisParams.inputBufferSize = synthesisParams.audioBufferSize = 44100;
         synthesis.initialize(synthesisParams);
-        engine_sim_test::LegacyAccess::attach(*simulator, synthesis);
+        engine_sim_test::LegacyFrame legacy(*simulator, synthesis);
         simulator->setSimulationFrequency(static_cast<int>(engine->getSimulationFrequency()));
         constexpr std::int16_t impulse[]{32767};
         for (int i = 0; i < engine->getExhaustSystemCount(); ++i) {
-            simulator->synthesizer().initializeImpulseResponse(impulse, 1, 1, i);
+            synthesis.initializeImpulseResponse(impulse, 1, 1, i);
         }
-        simulator->startFrame(0);
-        simulator->endFrame();
+        legacy.startFrame(0);
+        legacy.endFrame();
         for (int i = 0; i < engine->getIntakeCount(); ++i) {
             EXPECT_EQ(engine->getIntake(i)->m_flowRate, 0);
         }
@@ -165,13 +165,13 @@ TEST(Lifecycle, RepeatedKohlerAndNineCylinderStartStop) {
         engine->setSpeedControl(0.1);
         int totalTicks = 0;
         for (int block = 0; block < 50; ++block) {
-            simulator->setTargetSynthesizerLatency(simulator->getSynthesizerInputLatency());
-            simulator->startFrame(0.01);
-            while (simulator->simulateStep()) ++totalTicks;
-            simulator->endFrame();
-            simulator->synthesizer().renderAudio();
+            legacy.setTargetLatency(synthesis.getLatency());
+            legacy.startFrame(0.01);
+            while (legacy.simulateStep()) ++totalTicks;
+            legacy.endFrame();
+            synthesis.renderAudio();
             std::array<std::int16_t, 2048> audio{};
-            EXPECT_GT(simulator->readAudioOutput(audio.size(), audio.data()), 0);
+            EXPECT_GT(synthesis.readAudioOutput(audio.size(), audio.data()), 0);
             ASSERT_TRUE(std::isfinite(engine->getRpm()));
             for (int i = 0; i < engine->getCylinderCount(); ++i) {
                 const auto &gas = engine->getChamber(i)->m_system;

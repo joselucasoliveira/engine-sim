@@ -983,7 +983,7 @@ EngineSimApplication::prepareUserInterface(desktop::EngineViews &views) {
     candidate->oscilloscope->setDynoMaxRange(units::toRpm(engine->getRedline()));
     candidate->performance->setSimulator(simulator);
     candidate->load->setSimulator(simulator);
-    candidate->mixer->setSimulator(simulator);
+    candidate->mixer->setSynthesis(views.at<Synthesizer>());
     return candidate;
 }
 

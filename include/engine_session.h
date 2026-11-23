@@ -1,12 +1,8 @@
 #ifndef ATG_ENGINE_SIM_ENGINE_SESSION_H
 #define ATG_ENGINE_SIM_ENGINE_SESSION_H
 
-#include "engine.h"
-#include "simulator.h"
+#include "engine_definition.h"
 #include "synthesizer.h"
-#include "vehicle.h"
-#include "transmission.h"
-#include "application_settings.h"
 #include "impulse_response.h"
 #include "units.h"
 
@@ -25,18 +21,6 @@ public:
     explicit EngineLoadError(const EngineLoadDiagnostic &diagnostic)
         : std::runtime_error(diagnostic.format()), diagnostic(diagnostic) {}
     EngineLoadDiagnostic diagnostic;
-};
-
-// One execution produces one transferable definition. Shared curves and IR
-// metadata live with the engine, while the other two model owners are independent.
-struct EngineDefinition {
-    std::unique_ptr<Engine> engine;
-    std::unique_ptr<Vehicle> vehicle;
-    std::unique_ptr<Transmission> transmission;
-    Simulator::Parameters simulatorParameters;
-    ApplicationSettings applicationSettings;
-    std::vector<Function *> functions;
-    std::string sourcePath;
 };
 
 struct EngineSessionOptions {
@@ -102,7 +86,6 @@ public:
             params.inputChannelCount = engine->getExhaustSystemCount();
             params.inputSampleRate = static_cast<float>(candidate->simulator->getSimulationFrequency());
             synth.initialize(params);
-            candidate->simulator->m_legacySynthesis = &synth;
             if (legacyStartup) {
                 candidate->simulator->setSimulationFrequency(options.simulationFrequency == 0
                     ? static_cast<int>(engine->getSimulationFrequency()) : options.simulationFrequency);

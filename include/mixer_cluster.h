@@ -23,10 +23,10 @@ class MixerCluster : public UiElement {
         virtual void update(float dt);
         virtual void render();
 
-        void setSimulator(desktop::ViewHandle<Simulator> simulator) { m_simulator = simulator; }
+        void setSynthesis(desktop::ViewHandle<Synthesizer> synthesis) { m_synthesis = synthesis; }
 
     protected:
-        desktop::ViewHandle<Simulator> m_simulator;
+        desktop::ViewHandle<Synthesizer> m_synthesis;
 
     protected:
         LabeledGauge

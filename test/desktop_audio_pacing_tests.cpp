@@ -268,8 +268,8 @@ TEST(DesktopPacing, RealPullPcmMatchesItsContinuousControlTimeline) {
     EXPECT_EQ(first.counts().ticks, second.counts().ticks);
     EXPECT_EQ(a.session->definition.engine->getCrankshaft(0)->m_body.theta,
               b.session->definition.engine->getCrankshaft(0)->m_body.theta);
-    EXPECT_EQ(a.session->simulator->synthesizer().getDroppedInputSamples(), 0u);
-    EXPECT_EQ(a.session->simulator->synthesizer().getBufferStatistics().droppedOutput, 0u);
+    EXPECT_EQ(a.session->synthesis.getDroppedInputSamples(), 0u);
+    EXPECT_EQ(a.session->synthesis.getBufferStatistics().droppedOutput, 0u);
 }
 
 namespace fs = std::filesystem;
@@ -308,8 +308,12 @@ TEST(RuntimeDesktop, StoppedPartialAndWrappedDeviceRequestsUseOnlyCommittedRunti
     ASSERT_LE(device.submitted.size(),expected.size());EXPECT_TRUE(std::equal(device.submitted.begin(),device.submitted.end(),expected.begin()));
     EXPECT_EQ(device.silence,0u);EXPECT_EQ(pacer.statistics().discarded,0u);EXPECT_EQ(pacer.statistics().sourceFaults,0u);
     EXPECT_LE(pacer.statistics().maximumQueued,AudioPacer::Target);
-    EXPECT_EQ(host->simulator()->synthesizer().getDroppedInputSamples(),0u);
-    EXPECT_EQ(host->simulator()->synthesizer().getDroppedOutputSamples(),0u);
+    const auto queues = [&] {
+        auto lease = host->views().present();
+        return host->views().at<Synthesizer>()->getBufferStatistics();
+    }();
+    EXPECT_EQ(queues.droppedInput, 0u);
+    EXPECT_EQ(queues.droppedOutput, 0u);
 }
 
 TEST(RuntimeDesktop, PartitionsRateChangesAndNamedCommandsPreservePcmAndPhysicalPhase) {

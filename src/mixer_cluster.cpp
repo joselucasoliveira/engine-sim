@@ -14,7 +14,6 @@ MixerCluster::MixerCluster() {
     m_levelerGauge = nullptr;
     m_noise0Gauge = nullptr;
     m_noise1Gauge = nullptr;
-    m_simulator = nullptr;
 }
 
 MixerCluster::~MixerCluster() {
@@ -148,7 +147,7 @@ void MixerCluster::render() {
     grid.h_cells = 6;
     grid.v_cells = 1;
 
-    Synthesizer::AudioParameters parameters = m_simulator->synthesizer().getAudioParameters();
+    Synthesizer::AudioParameters parameters = m_synthesis->getAudioParameters();
 
     m_volumeGauge->m_bounds = grid.get(m_bounds, 0, 0);
     m_volumeGauge->m_gauge->m_value = (float)parameters.volume * 100.0f;
@@ -165,7 +164,7 @@ void MixerCluster::render() {
     m_noise1Gauge->m_bounds = grid.get(m_bounds, 4, 0);
     m_noise1Gauge->m_gauge->m_value = (float)parameters.inputSampleNoise * 100.0f;
 
-    const double gain = m_simulator->synthesizer().getLevelerGain();
+    const double gain = m_synthesis->getLevelerGain();
     m_levelerGauge->m_bounds = grid.get(m_bounds, 5, 0);
     m_levelerGauge->m_gauge->m_value =
         100.0f * (float)((gain - parameters.levelerMinGain) / parameters.levelerMaxGain);

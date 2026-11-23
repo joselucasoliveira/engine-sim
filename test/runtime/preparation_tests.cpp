@@ -53,12 +53,13 @@ protected:
     }
     int step(PreparedEngine &prepared, int ticks, std::vector<std::int16_t> *capture = nullptr) {
         auto &sim = *prepared.session->simulator;
-        engine_sim_test::LegacyAccess::begin(sim, ticks);
+        auto &synth = prepared.session->synthesis;
+        engine_sim_test::LegacyFrame legacy(sim, synth);
+        legacy.startFixedFrame(ticks);
         int completed = 0;
-        while (sim.simulateStep()) ++completed;
+        while (legacy.simulateStep()) ++completed;
         EXPECT_EQ(completed, ticks);
-        sim.endFrame();
-        auto &synth = sim.synthesizer();
+        legacy.endFrame();
         synth.renderAudio();
         const auto available = static_cast<int>(synth.getBufferStatistics().queuedOutput);
         std::vector<std::int16_t> samples(available);
@@ -79,7 +80,7 @@ TEST_F(Preparation, OriginalFixtureFiresAfterStarterRelease) {
     EXPECT_EQ(engine.getCylinderCount(), 1);
     EXPECT_EQ(engine.getName(), "Runtime Single");
     EXPECT_EQ(sim.getSimulationFrequency(), 10000);
-    EXPECT_DOUBLE_EQ(sim.synthesizer().getInputSampleRate(), 10000);
+    EXPECT_DOUBLE_EQ(prepared.session->synthesis.getInputSampleRate(), 10000);
     EXPECT_NEAR(engine.getDisplacement(), 0.0004021238596594936, 1e-12);
     EXPECT_GT(prepared.session->definition.vehicle->getMass(), 0);
     EXPECT_EQ(prepared.inputs.size(), 10u); // entry, API wrapper, seven library files and impulse
@@ -183,7 +184,7 @@ TEST_F(Preparation, ValidatesFrequencyBeforeSimulatorInitialization) {
     reject([&] { (void)prepareEngine(recipe); }, "model", "integer");
     auto overridden = prepareEngine(recipe, {48000, ES_FREE, 0});
     EXPECT_EQ(overridden.session->simulator->getSimulationFrequency(), 48000);
-    EXPECT_DOUBLE_EQ(overridden.session->simulator->synthesizer().getInputSampleRate(), 48000);
+    EXPECT_DOUBLE_EQ(overridden.session->synthesis.getInputSampleRate(), 48000);
     for (const double torque : {-1.0, 10001.0, std::numeric_limits<double>::infinity(),
                                std::numeric_limits<double>::quiet_NaN()}) {
         reject([&] { (void)prepareEngine(recipe, {0, ES_FREE, torque}); }, "configuration");

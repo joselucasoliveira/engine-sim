@@ -74,10 +74,11 @@ protected:
         engine.getIgnitionModule()->m_enabled = true;
         sim.m_starterMotor.m_enabled = index < 100;
         const int ticks = sim.getSimulationFrequency() / 100;
-        engine_sim_test::LegacyAccess::begin(sim, ticks);
-        while (sim.simulateStep()) {}
-        sim.endFrame();
-        auto &synth = sim.synthesizer();
+        auto &synth = prepared.session->synthesis;
+        engine_sim_test::LegacyFrame legacy(sim, synth);
+        legacy.startFixedFrame(ticks);
+        while (legacy.simulateStep()) {}
+        legacy.endFrame();
         synth.renderAudio();
         const auto frames = static_cast<int>(synth.getBufferStatistics().queuedOutput);
         std::vector<std::int16_t> pcm(frames);

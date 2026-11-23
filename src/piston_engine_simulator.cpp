@@ -5,7 +5,6 @@
 
 #include <cmath>
 #include <assert.h>
-#include <chrono>
 #include <set>
 #include <stdexcept>
 
@@ -23,7 +22,6 @@ PistonEngineSimulator::PistonEngineSimulator() {
 
     m_exhaustFlowStagingBuffer = nullptr;
 
-    m_derivativeFilter.m_dt = 1.0;
     m_fluidSimulationSteps = 8;
 }
 
@@ -342,22 +340,7 @@ double PistonEngineSimulator::getTotalExhaustFlow() const {
     return totalFlow;
 }
 
-void PistonEngineSimulator::endFrame() {
-    Simulator::endFrame();
-
-    if (m_engine == nullptr) {
-        return;
-    }
-
-    const double frameTimestep = simulationSteps() * getTimestep();
-    for (int i = 0; i < m_engine->getIntakeCount(); ++i) {
-        auto &flow = m_engine->getIntake(i)->m_flowRate;
-        flow = frameTimestep > 0 ? flow / frameTimestep : 0;
-    }
-}
-
 void PistonEngineSimulator::destroy() {
-    endAudioRenderingThread();
     if (m_system != nullptr) m_system->reset();
 
     if (m_crankConstraints != nullptr) delete[] m_crankConstraints;

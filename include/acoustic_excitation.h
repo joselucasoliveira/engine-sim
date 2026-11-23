@@ -8,8 +8,8 @@ namespace engine_sim {
 // exhaust index order. Prepared rest is zero. Consume the values within the
 // call that exposes them, before the producer reuses its storage.
 struct AcousticExcitation {
-    const double *data;
-    std::size_t count;
+    const double *data = nullptr;
+    std::size_t count = 0;
 };
 }
 

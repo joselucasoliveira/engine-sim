@@ -2,8 +2,6 @@
 #include "../include/checked_solver.h"
 
 #include <cmath>
-#include <stdexcept>
-#include <utility>
 
 namespace {
 class OwnedOptimizedSystem : public atg_scs::OptimizedNsvRigidBodySystem {
@@ -49,10 +47,7 @@ Simulator::Simulator() {
     m_transmission = nullptr;
     m_system = nullptr;
 
-    m_physicsProcessingTime = 0;
-
     m_simulationSpeed = 1.0;
-    m_targetSynthesizerLatency = 0.1;
     m_simulationFrequency = 10000;
     m_steps = 0;
 
@@ -71,7 +66,6 @@ void Simulator::initialize(const Parameters &params) {
     destroy();
     m_lastDynoTorqueSample = 0;
     m_filteredEngineSpeed = 0;
-    m_physicsProcessingTime = 0;
     if (params.systemType == SystemType::NsvOptimized) {
         m_system = new OwnedOptimizedSystem;
     }
@@ -89,71 +83,16 @@ void Simulator::loadSimulation(Engine *engine, Vehicle *vehicle, Transmission *t
     m_engine = engine;
     m_vehicle = vehicle;
     m_transmission = transmission;
-    m_frameIntakeFlows.assign(engine->getIntakeCount(), 0.0);
 }
 
 void Simulator::releaseSimulation() {
-    endAudioRenderingThread();
     if (m_system != nullptr) m_system->reset();
 
     destroy();
 }
 
-bool Simulator::beginFrame() {
-    if (m_engine == nullptr) {
-        m_steps = 0;
-        return false;
-    }
-    m_simulationStart = std::chrono::steady_clock::now();
-    m_currentIteration = 0;
-    synthesizer().setInputSampleRate(m_simulationFrequency * m_simulationSpeed);
-    return true;
-}
-
-void Simulator::resetFrameFlows() {
-    if (m_steps > 0) {
-        for (int i = 0; i < m_engine->getIntakeCount(); ++i) {
-            m_engine->getIntake(i)->m_flowRate = 0;
-            m_frameIntakeFlows[i] = 0;
-        }
-    }
-}
-
-void Simulator::startFrame(double dt) {
-    if (!beginFrame()) return;
-
-    const double timestep = getTimestep();
-    m_steps = (int)std::round((dt * m_simulationSpeed) / timestep);
-
-    const double targetLatency = getSynthesizerInputLatencyTarget();
-    const auto &synth = synthesizer();
-    if (synth.getLatency() < targetLatency) {
-        m_steps = static_cast<int>((m_steps + 1) * 1.1);
-    }
-    else if (synth.getLatency() > targetLatency) {
-        m_steps = static_cast<int>((m_steps - 1) * 0.9);
-        if (m_steps < 0) {
-            m_steps = 0;
-        }
-    }
-    resetFrameFlows();
-}
-
-bool Simulator::simulateStep() {
-    if (getCurrentIteration() >= simulationSteps()) {
-        auto s1 = std::chrono::steady_clock::now();
-
-        const long long lastFrame =
-            std::chrono::duration_cast<std::chrono::microseconds>(s1 - m_simulationStart).count();
-        m_physicsProcessingTime = m_physicsProcessingTime * 0.98 + 0.02 * lastFrame;
-
-        return false;
-    }
-
-    const auto endpoint = advanceTick(true);
-    synthesizer().writeInput(endpoint.data);
-    ++m_currentIteration;
-    return true;
+std::size_t Simulator::acousticChannelCount() const {
+    return m_engine == nullptr ? 0 : static_cast<std::size_t>(m_engine->getExhaustSystemCount());
 }
 
 void Simulator::validateBodies() const {
@@ -167,7 +106,10 @@ void Simulator::validateBodies() const {
     }
 }
 
-engine_sim::AcousticExcitation Simulator::advanceTick(bool legacyFrame) {
+engine_sim::AcousticExcitation Simulator::advanceTick(std::size_t channelCapacity) {
+    const auto channels = acousticChannelCount();
+    if (channels == 0 || channelCapacity < channels) return {};
+
     const double timestep = getTimestep();
     validateBodies();
     m_system->process(timestep, 1);
@@ -218,33 +160,14 @@ engine_sim::AcousticExcitation Simulator::advanceTick(bool legacyFrame) {
     }
 
     simulateStep_();
-    const auto endpoint = produceExhaustEndpoint();
-    for (int i = 0; i < m_engine->getIntakeCount(); ++i) {
-        auto &flow = m_engine->getIntake(i)->m_flowRate;
-        if (legacyFrame) {
-            m_frameIntakeFlows[i] += flow;
-            flow = m_frameIntakeFlows[i];
-        }
-        else flow /= timestep;
-    }
-    return endpoint;
+    return produceExhaustEndpoint();
 }
 
 double Simulator::getTotalExhaustFlow() const {
     return 0.0;
 }
 
-int Simulator::readAudioOutput(int samples, int16_t *target) {
-    return synthesizer().readAudioOutput(samples, target);
-}
-
-void Simulator::endFrame() {
-    if (m_legacySynthesis != nullptr) m_legacySynthesis->endInputBlock();
-}
-
 void Simulator::destroy() {
-    endAudioRenderingThread();
-    m_legacySynthesis = nullptr;
     if (m_system != nullptr) m_system->reset();
     delete m_system;
     m_system = nullptr;
@@ -254,28 +177,6 @@ void Simulator::destroy() {
     m_vehicle = nullptr;
     m_transmission = nullptr;
     m_steps = m_currentIteration = 0;
-    m_frameIntakeFlows.clear();
-}
-
-void Simulator::startAudioRenderingThread() {
-    synthesizer().startAudioRenderingThread();
-}
-
-void Simulator::endAudioRenderingThread() {
-    if (m_legacySynthesis != nullptr) m_legacySynthesis->endAudioRenderingThread();
-}
-
-Synthesizer &Simulator::synthesizer() {
-    return const_cast<Synthesizer &>(std::as_const(*this).synthesizer());
-}
-
-const Synthesizer &Simulator::synthesizer() const {
-    if (m_legacySynthesis == nullptr) throw std::logic_error("Legacy simulation audio requires a prepared session");
-    return *m_legacySynthesis;
-}
-
-double Simulator::getSynthesizerInputLatencyTarget() const {
-    return m_targetSynthesizerLatency;
 }
 
 double Simulator::getFilteredDynoTorque() const {

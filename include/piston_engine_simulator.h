@@ -7,16 +7,12 @@
 #include "transmission.h"
 #include "combustion_chamber.h"
 #include "vehicle.h"
-#include "synthesizer.h"
 #include "dynamometer.h"
 #include "starter_motor.h"
-#include "derivative_filter.h"
 #include "vehicle_drag_constraint.h"
 #include "delay_filter.h"
 
 #include "scs.h"
-
-#include <chrono>
 
 class PistonEngineSimulator : public Simulator {
     public:
@@ -26,7 +22,6 @@ class PistonEngineSimulator : public Simulator {
         void loadSimulation(Engine *engine, Vehicle *vehicle, Transmission *transmission);
 
         virtual double getTotalExhaustFlow() const;
-        void endFrame();
         virtual void destroy() override;
 
         void setFluidSimulationSteps(int steps) { m_fluidSimulationSteps = steps; }
@@ -40,8 +35,6 @@ class PistonEngineSimulator : public Simulator {
         void enableExternalLoad();
         void setExternalLoadNm(double torque) noexcept;
         double getExternalLoadReactionNm() const noexcept;
-
-        DerivativeFilter m_derivativeFilter;
 
     protected:
         virtual void simulateStep_() override;
@@ -65,9 +58,6 @@ class PistonEngineSimulator : public Simulator {
         atg_scs::LinkConstraint *m_linkConstraints;
         atg_scs::RigidBody m_vehicleMass;
         VehicleDragConstraint m_vehicleDrag;
-
-        std::chrono::steady_clock::time_point m_simulationStart;
-        std::chrono::steady_clock::time_point m_simulationEnd;
 
         Engine *m_engine;
         Transmission *m_transmission;

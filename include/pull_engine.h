@@ -3,6 +3,7 @@
 
 #include "sample_clock.h"
 #include "simulator.h"
+#include "synthesizer.h"
 
 #include <functional>
 

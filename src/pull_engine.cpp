@@ -28,15 +28,18 @@ void PullEngine::latch() {
 }
 
 bool PullEngine::tick(double *endpoint, std::size_t capacity) {
-    const auto count = static_cast<std::size_t>(m_simulator.getEngine()->getExhaustSystemCount());
+    const auto count = m_simulator.acousticChannelCount();
     if (endpoint == nullptr || capacity < count) return false;
     m_simulator.setSimulationFrequency(static_cast<int>(m_clock.tickFrequency()));
     if (m_beforeTick) m_beforeTick();
-    const auto excitation = m_simulator.advanceTick(false);
+    const auto excitation = m_simulator.advanceTick(capacity);
     if (excitation.data == nullptr || excitation.count != count) return false;
+    const auto dt = m_simulator.getTimestep();
+    for (std::size_t i = 0; i < m_flowTotals.size(); ++i) {
+        m_simulator.getEngine()->getIntake(static_cast<int>(i))->m_flowRate /= dt;
+    }
     if (m_presenting) {
         ++m_simulator.m_steps; ++m_simulator.m_currentIteration;
-        const auto dt = m_simulator.getTimestep();
         m_presentationSeconds += dt;
         for (std::size_t i = 0; i < m_flowTotals.size(); ++i) {
             m_flowTotals[i] += m_simulator.getEngine()->getIntake(static_cast<int>(i))->m_flowRate * dt;

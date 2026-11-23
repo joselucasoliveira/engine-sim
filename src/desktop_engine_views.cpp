@@ -4,10 +4,12 @@
 #include <cmath>
 
 namespace desktop {
-EngineViews::EngineViews(const Simulator &simulator) : m_epoch(std::make_shared<ViewEpoch>()) {
+EngineViews::EngineViews(const Simulator &simulator, const Synthesizer &synthesis)
+    : m_epoch(std::make_shared<ViewEpoch>()) {
     static std::atomic<std::uint64_t> next{1};
     m_epoch->generation = next.fetch_add(1, std::memory_order_relaxed);
     add(&simulator);
+    add(&synthesis);
     const auto *engine = simulator.getEngine();
     add(engine);
     for (int i = 0; i < engine->getCylinderCount(); ++i) {
@@ -54,9 +56,9 @@ bool EngineViews::popScope(ScopeObservation &point) {
     point = m_scopes[m_head]; m_head = (m_head + 1) % ScopeCapacity; --m_size;
     return true;
 }
-EngineCommands::EngineCommands(Simulator &simulator, EngineViews &views)
-    : m_simulator(simulator), m_views(views), m_gear(simulator.getTransmission()->getGear()),
-      m_mixer(simulator.synthesizer().getAudioParameters()) {
+EngineCommands::EngineCommands(Simulator &simulator, Synthesizer &synthesis, EngineViews &views)
+    : m_simulator(simulator), m_synthesis(synthesis), m_views(views),
+      m_gear(simulator.getTransmission()->getGear()), m_mixer(synthesis.getAudioParameters()) {
     pending = {simulator.getEngine()->getSpeedControl(), simulator.getTransmission()->getClutchPressure(),
         simulator.m_dyno.m_rotationSpeed, simulator.getEngine()->getIgnitionModule()->m_enabled,
         simulator.m_starterMotor.m_enabled, simulator.m_dyno.m_enabled, simulator.m_dyno.m_hold,
@@ -76,7 +78,7 @@ void EngineCommands::apply(const Values &value, bool frequency) {
 void EngineCommands::flush() {
     m_views.requireQuiescent();
     if (m_simulator.getTransmission()->getGear() != m_gear) m_simulator.getTransmission()->changeGear(m_gear);
-    if (m_mixerDirty) { m_simulator.synthesizer().setAudioParameters(m_mixer); m_mixerDirty = false; }
+    if (m_mixerDirty) { m_synthesis.setAudioParameters(m_mixer); m_mixerDirty = false; }
     apply(pending, true);
 }
 }

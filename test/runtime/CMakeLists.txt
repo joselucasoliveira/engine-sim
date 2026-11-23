@@ -163,6 +163,14 @@ if (TARGET engine-sim-runtime)
     add_test(NAME SynthesisStreamParity COMMAND engine-sim-synthesis-stream-test)
     set_tests_properties(StandaloneSynthesisConsumer SynthesisStreamParity PROPERTIES LABELS r25-synthesis TIMEOUT 120)
 
+    set(physics_projection "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/physics_projection.py"
+        --source "${PROJECT_SOURCE_DIR}" --generator "${CMAKE_GENERATOR}"
+        "--platform=${CMAKE_GENERATOR_PLATFORM}" --compiler "${CMAKE_CXX_COMPILER}"
+        --cmake "${CMAKE_COMMAND}" --ctest "${CMAKE_CTEST_COMMAND}")
+    add_test(NAME StandalonePhysicsConsumer COMMAND ${physics_projection})
+    add_test(NAME ModuleDependencyDirection COMMAND ${physics_projection} --direction)
+    set_tests_properties(StandalonePhysicsConsumer ModuleDependencyDirection PROPERTIES LABELS r25-physics TIMEOUT 180)
+
     foreach(variant IN ITEMS static shared)
         add_test(NAME RuntimeSdk_${variant} COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/sdk_gate.py"
             --source "${PROJECT_SOURCE_DIR}" --root "${ENGINE_SIM_PRESET_ROOT}"

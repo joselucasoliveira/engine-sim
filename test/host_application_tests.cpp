@@ -25,6 +25,14 @@ public:
     bool failViews=false;
     void viewHeight(float height) { m_engineView->setBounds(Bounds(1280,height,{0,height})); }
     desktop::EngineViews &views() { return *m_engineViews; }
+    Synthesizer::AudioParameters audioParameters() {
+        auto lease = views().present();
+        return views().at<Synthesizer>()->getAudioParameters();
+    }
+    Synthesizer::BufferStatistics audioStatistics() {
+        auto lease = views().present();
+        return views().at<Synthesizer>()->getBufferStatistics();
+    }
     desktop::EngineCommands &commands() { return *m_desktopControls; }
     engine_sim::PullEngine &pull() { return *m_pullEngine; }
     int processed=0;
@@ -154,7 +162,7 @@ TEST_F(HostApplication, ControlsPreserveEdgesHoldsClutchThrottleAndFineWheel) {
     backend->inputs[6].hold(Key::Z); backend->inputs[6].wheel=120;
     backend->inputs[7].hold(Key::Z).hold(Key::Space); backend->inputs[7].wheel=240;
     app.initialize(std::move(backend),{resources,{}});
-    auto parameters=app.getSimulator()->synthesizer().getAudioParameters(); parameters.volume=0.25;
+    auto parameters=app.audioParameters(); parameters.volume=0.25;
     app.setMixer(parameters);
     const auto layer=app.getViewParameters().Layer0; ASSERT_GT(app.getSimulator()->getEngine()->getMaxDepth(),1);
     struct Snapshot { bool starter,ignition,dyno,hold; int gear,layer; double throttle,clutch; };
@@ -171,7 +179,7 @@ TEST_F(HostApplication, ControlsPreserveEdgesHoldsClutchThrottleAndFineWheel) {
     EXPECT_TRUE(snapshots[1].ignition); EXPECT_TRUE(snapshots[1].dyno); EXPECT_EQ(snapshots[1].gear,0);
     EXPECT_FALSE(snapshots[2].starter); EXPECT_FALSE(snapshots[3].ignition); EXPECT_EQ(snapshots[3].gear,-1);
     EXPECT_EQ(snapshots[4].layer,layer+1); EXPECT_EQ(snapshots[5].layer,layer);
-    EXPECT_NEAR(app.getSimulator()->synthesizer().getAudioParameters().volume,0.272,1e-6);
+    EXPECT_NEAR(app.audioParameters().volume,0.272,1e-6);
     app.destroy();
 }
 
@@ -259,7 +267,11 @@ TEST_F(ViewsApplication, HandlesRequireOwnerPhaseAndRetireBeforeTheirGraph) {
         other.join(); EXPECT_TRUE(rejected);
     }
     EXPECT_THROW(piston->getCylinderIndex(),std::logic_error);
-    desktop::EngineViews replacement(*app.getSimulator());
+    auto replacement = [&] {
+        auto lease = app.presentation();
+        const auto *synthesis = app.views().at<Synthesizer>().operator->();
+        return desktop::EngineViews(*app.getSimulator(), *synthesis);
+    }();
     app.views().invalidate();
     auto fresh=replacement.at<Engine>();
     EXPECT_NE(old.generation(),fresh.generation());
@@ -337,8 +349,9 @@ TEST_F(ViewsApplication, TickObservationsMatchModelAndEvictOnlyOldDisplayPoints)
         EXPECT_DOUBLE_EQ(point.volume,reference.volume); EXPECT_DOUBLE_EQ(point.staticPressure,reference.staticPressure);
     }
     EXPECT_EQ(i,expected.size()); EXPECT_EQ(app.sourceCounts().frames,400U*257);
-    EXPECT_EQ(app.getSimulator()->synthesizer().getDroppedInputSamples(),0U);
-    EXPECT_EQ(app.getSimulator()->synthesizer().getDroppedOutputSamples(),0U);
+    const auto audio = app.audioStatistics();
+    EXPECT_EQ(audio.droppedInput, 0U);
+    EXPECT_EQ(audio.droppedOutput, 0U);
     app.destroy();
 }
 

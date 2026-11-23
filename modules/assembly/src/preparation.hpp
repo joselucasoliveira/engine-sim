@@ -2,6 +2,7 @@
 #define ENGINE_SIM_ASSEMBLY_PREPARATION_HPP
 
 #include "definition.hpp"
+#include "engine_session.h"
 
 #include <filesystem>
 #include <functional>

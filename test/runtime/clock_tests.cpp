@@ -324,9 +324,10 @@ TEST(Clock, RealMechanicsMatchLegacyTicksAndPartitionedPulls) {
     };
     control(a);
     std::vector<std::array<double, 5>> expected, actual;
-    engine_sim_test::LegacyAccess::begin(a, a.getSimulationFrequency());
-    while (a.simulateStep()) expected.push_back(physical(a));
-    a.endFrame();
+    engine_sim_test::LegacyFrame legacy(a, old.session->synthesis);
+    legacy.startFixedFrame(a.getSimulationFrequency());
+    while (legacy.simulateStep()) expected.push_back(physical(a));
+    legacy.endFrame();
     PullEngine pull(b, fresh.session->synthesis, [&] { control(b); });
     pull.setTickObserver([&](const Simulator &) { actual.push_back(physical(b)); });
     std::vector<float> pcm(44100);
@@ -344,7 +345,7 @@ TEST(Clock, RealMechanicsMatchLegacyTicksAndPartitionedPulls) {
     }
     EXPECT_EQ(split, pcm);
     EXPECT_EQ(physical(c), physical(b));
-    EXPECT_EQ(b.synthesizer().getBufferStatistics().queuedOutput, 0u);
+    EXPECT_EQ(fresh.session->synthesis.getBufferStatistics().queuedOutput, 0u);
 }
 
 TEST(Clock, CheckedSolverAndInvalidBodyFaultBeforeUnsafeUse) {

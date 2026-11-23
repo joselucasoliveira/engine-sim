@@ -298,7 +298,7 @@ void runEngine(const fs::path &resources, const fs::path &out, std::string_view 
         runtime->endBlock();
         const auto &counts = runtime->telemetry();
         const auto &ranges = runtime->diagnostics();
-        const auto stats = simulator.synthesizer().getBufferStatistics();
+        const auto stats = runtime->synthesisStatistics();
         if (stats.stagedInput || stats.pendingInput || stats.activeInput || stats.queuedOutput
             || stats.droppedInput || stats.droppedOutput || stats.zeroFilledOutput)
             throw std::runtime_error("runtime capture unexpectedly used or lost legacy queued audio");

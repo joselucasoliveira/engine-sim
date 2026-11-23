@@ -1,7 +1,7 @@
 #ifndef ENGINE_SIM_ASSEMBLY_DEFINITION_HPP
 #define ENGINE_SIM_ASSEMBLY_DEFINITION_HPP
 
-#include "engine_session.h"
+#include "engine_definition.h"
 
 #include <engine_sim/config-validation.hpp>
 

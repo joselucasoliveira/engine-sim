@@ -162,7 +162,7 @@ void resource_cases(const fs::path &fixture) {
         }
         if (phase == Phase::decode) ++decodes;
     }));
-    auto &synth = one_read.session->simulator->synthesizer();
+    auto &synth = one_read.session->synthesis;
     require(reads == 1 && decodes == 1 && one_read.inputs.files.size() == 1 &&
             one_read.inputs.files.front().bytes == good && one_read.inputs.bindings.size() == 2,
             "Shared impulse bytes were reopened, duplicated or not retained");
@@ -174,12 +174,12 @@ void resource_cases(const fs::path &fixture) {
     check_channel(0, 0.375f);
     check_channel(1, 0.01f);
     auto trimmed = prepared(assembly::prepare_session(authored, bundle, {}));
-    require(trimmed.session->simulator->synthesizer().m_filters[0].convolution.getSampleCount() == 0,
+    require(trimmed.session->synthesis.m_filters[0].convolution.getSampleCount() == 0,
             "A real response below the threshold was not trimmed to zero taps");
 
     write(bundle/"impulse.wav", wave({101, -100, 100, 3}));
     auto single_tap = prepared(assembly::prepare_session(authored, bundle, {}));
-    require(single_tap.session->simulator->synthesizer().m_filters[0].convolution.getSampleCount() == 1,
+    require(single_tap.session->synthesis.m_filters[0].convolution.getSampleCount() == 1,
             "The legacy threshold requires strictly greater than 100");
 
     reject(assembly::prepare_session(authored, fs::path("relative"), {}), "CFG_RESOURCE_PATH", "");
@@ -253,11 +253,11 @@ void lifetime_cases(const fs::path &fixture) {
     auto active = prepared(assembly::prepare_session(dual, root, free));
     auto *prior = active.session.get();
     auto &simulator = *prior->simulator;
-    require(simulator.getSimulationFrequency() == 14321 && simulator.synthesizer().getInputSampleRate() == 14321 &&
+    require(simulator.getSimulationFrequency() == 14321 && prior->synthesis.getInputSampleRate() == 14321 &&
             simulator.m_starterMotor.m_maxTorque == 23.75 &&
             simulator.m_starterMotor.m_rotationSpeed == -dual.values().engine.starter_speed.value,
             "Public frequency or starter override reached the wrong stage");
-    const auto saved_curve_value = simulator.synthesizer().m_filters[0].convolution.getImpulseResponse()[0];
+    const auto saved_curve_value = prior->synthesis.m_filters[0].convolution.getImpulseResponse()[0];
 
     using Stop = std::pair<Phase, std::size_t>;
     const std::vector<Stop> expected{{Phase::definition, 0}, {Phase::pin, 0}, {Phase::pin, 1},
@@ -276,7 +276,7 @@ void lifetime_cases(const fs::path &fixture) {
             escaped = true;
         }
         require(escaped && active.session.get() == prior && prior->definition.engine->getRandomSeed() == 403 &&
-                simulator.synthesizer().m_filters[0].convolution.getImpulseResponse()[0] == saved_curve_value,
+                prior->synthesis.m_filters[0].convolution.getImpulseResponse()[0] == saved_curve_value,
                 "Failed candidate damaged the previously prepared session");
     }
     int decodes = 0;
@@ -296,7 +296,7 @@ void lifetime_cases(const fs::path &fixture) {
     reject(assembly::prepare_session(model, root, {assembly::Mode::driven, 12000, 1, 403}), "CFG_INITIALIZE", "");
     const auto desktop = prepared(assembly::prepare_session(model, root, {assembly::Mode::desktop, 0, 0, 403}));
     const auto &desk = *desktop.session->simulator;
-    require(desk.getSimulationFrequency() == 6789 && desk.synthesizer().getInputSampleRate() == 10000 &&
+    require(desk.getSimulationFrequency() == 6789 && desktop.session->synthesis.getInputSampleRate() == 10000 &&
             desk.m_starterMotor.m_rotationSpeed == 37.625, "Private desktop startup ordering or starter sign differs");
     auto invalid = base.values();
     invalid.engine.hf_gain = {std::numeric_limits<double>::max()};
