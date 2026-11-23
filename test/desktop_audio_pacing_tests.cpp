@@ -245,8 +245,8 @@ TEST(DesktopPacing, RealPullPcmMatchesItsContinuousControlTimeline) {
         sim.m_starterMotor.m_enabled = n < 55125;
     };
     std::size_t left = 0, right = 0;
-    engine_sim::PullEngine first(*a.session->simulator, [&] { controls(*a.session->simulator, left); });
-    engine_sim::PullEngine second(*b.session->simulator, [&] { controls(*b.session->simulator, right); });
+    engine_sim::PullEngine first(*a.session->simulator, a.session->synthesis, [&] { controls(*a.session->simulator, left); });
+    engine_sim::PullEngine second(*b.session->simulator, b.session->synthesis, [&] { controls(*b.session->simulator, right); });
     AudioPacer pacer([&] { float value; first.render(&value, 1); ++left; return value; });
     Device device;
     std::vector<std::int16_t> expected;

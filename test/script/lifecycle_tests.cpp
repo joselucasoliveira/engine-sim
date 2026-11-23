@@ -2,6 +2,7 @@
 #include "compiler.h"
 #include "piston_engine_simulator.h"
 #include "standard_valvetrain.h"
+#include "../runtime/legacy_access.h"
 
 #include <array>
 #include <cmath>
@@ -140,7 +141,15 @@ TEST(Lifecycle, RepeatedKohlerAndNineCylinderStartStop) {
         ASSERT_NE(transmission, nullptr);
         ASSERT_EQ(engine->getCylinderCount(), radial ? 9 : 2);
         engine->calculateDisplacement();
+        Synthesizer synthesis;
         std::unique_ptr<Simulator> simulator(engine->createSimulator(vehicle.get(), transmission.get()));
+        Synthesizer::Parameters synthesisParams;
+        synthesisParams.seed = engine->getRandomSeed();
+        synthesisParams.inputChannelCount = engine->getExhaustSystemCount();
+        synthesisParams.inputSampleRate = static_cast<float>(simulator->getSimulationFrequency());
+        synthesisParams.inputBufferSize = synthesisParams.audioBufferSize = 44100;
+        synthesis.initialize(synthesisParams);
+        engine_sim_test::LegacyAccess::attach(*simulator, synthesis);
         simulator->setSimulationFrequency(static_cast<int>(engine->getSimulationFrequency()));
         constexpr std::int16_t impulse[]{32767};
         for (int i = 0; i < engine->getExhaustSystemCount(); ++i) {

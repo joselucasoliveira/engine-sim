@@ -33,7 +33,7 @@ if a.variant=='static':
     # Configure a private source copy, then change one locked install input at a time.
     # Rejection must precede copying even the first SDK binary.
     projection=run/'input-check-source';projection.mkdir()
-    for directory in ('cmake','include','modules/config','modules/json','schemas','src','scripting'):
+    for directory in ('cmake','include','modules/config','modules/json','modules/synthesis','schemas','src','scripting'):
         shutil.copytree(a.source/directory,projection/directory)
     for name in ('CMakeLists.txt','LICENSE','THIRD_PARTY_NOTICES.md'):
         shutil.copyfile(a.source/name,projection/name)

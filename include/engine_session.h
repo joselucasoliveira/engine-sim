@@ -3,6 +3,7 @@
 
 #include "engine.h"
 #include "simulator.h"
+#include "synthesizer.h"
 #include "vehicle.h"
 #include "transmission.h"
 #include "application_settings.h"
@@ -84,17 +85,29 @@ public:
                 throw EngineLoadError({"graph", path, "Engine topology is incomplete"});
             }
             engine->calculateDisplacement();
-            if (options.simulationFrequency == 0 || options.startAtLegacyDesktopRate) {
+            const bool legacyStartup = options.simulationFrequency == 0 || options.startAtLegacyDesktopRate;
+            if (legacyStartup) {
                 candidate->simulator.reset(engine->createSimulator(model.vehicle.get(), model.transmission.get()));
-                candidate->simulator->setSimulationFrequency(options.simulationFrequency == 0
-                    ? static_cast<int>(engine->getSimulationFrequency()) : options.simulationFrequency);
             }
             else {
                 candidate->simulator.reset(engine->createSimulator(
                     model.vehicle.get(), model.transmission.get(), options.simulationFrequency));
             }
+            auto &synth = candidate->synthesis;
+            Synthesizer::Parameters params;
+            params.seed = engine->getRandomSeed();
+            params.audioBufferSize = 44100;
+            params.audioSampleRate = 44100;
+            params.inputBufferSize = 44100;
+            params.inputChannelCount = engine->getExhaustSystemCount();
+            params.inputSampleRate = static_cast<float>(candidate->simulator->getSimulationFrequency());
+            synth.initialize(params);
+            candidate->simulator->m_legacySynthesis = &synth;
+            if (legacyStartup) {
+                candidate->simulator->setSimulationFrequency(options.simulationFrequency == 0
+                    ? static_cast<int>(engine->getSimulationFrequency()) : options.simulationFrequency);
+            }
             if (options.starterTorque > 0) candidate->simulator->m_starterMotor.m_maxTorque = options.starterTorque;
-            auto &synth = candidate->simulator->synthesizer();
             auto audio = synth.getAudioParameters();
             audio.inputSampleNoise = static_cast<float>(engine->getInitialJitter());
             audio.airNoise = static_cast<float>(engine->getInitialNoise());
@@ -115,6 +128,7 @@ public:
     }
 
     EngineDefinition definition;
+    Synthesizer synthesis;
     std::unique_ptr<Simulator, SimulatorRelease> simulator;
 };
 

@@ -12,7 +12,8 @@ class PullEngine final : private ClockSource {
 public:
     using ControlLatch = std::function<void()>;
     using TickObserver = std::function<void(const Simulator &)>;
-    PullEngine(Simulator &simulator, ControlLatch controls, SampleClock::Profile profile = SampleClock::Profile::Public,
+    PullEngine(Simulator &simulator, Synthesizer &synthesis, ControlLatch controls,
+        SampleClock::Profile profile = SampleClock::Profile::Public,
         std::uint32_t outputRate = SampleClock::NativeRate);
     PullEngine(const PullEngine &) = delete;
     PullEngine &operator=(const PullEngine &) = delete;
@@ -30,8 +31,9 @@ private:
     friend struct ClockTestAccess;
     void latch() override;
     bool tick(double *endpoint, std::size_t capacity) override;
-    bool native(const double *input, std::int16_t &sample) override;
+    bool native(AcousticExcitation input, std::int16_t &sample) override;
     Simulator &m_simulator;
+    Synthesizer &m_synthesis;
     ControlLatch m_controls;
     TickObserver m_observer;
     ControlLatch m_beforeTick, m_afterTick;

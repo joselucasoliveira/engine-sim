@@ -44,8 +44,8 @@ struct Source:ClockSource {
         if (record) events.emplace_back('T',ticks);
         return ticks != failTick;
     }
-    bool native(const double *in,std::int16_t &out) override {
-        const auto n=samples++;if(record){inputs.push_back(in[0]);events.emplace_back('N',n);}out=signal(n);return n!=failSample;
+    bool native(AcousticExcitation input,std::int16_t &out) override {
+        const auto n=samples++;if(record){inputs.push_back(input.data[0]);events.emplace_back('N',n);}out=signal(n);return n!=failSample;
     }
 };
 float expected(std::uint64_t n,const std::function<std::int16_t(std::uint64_t)> &signal) {

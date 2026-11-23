@@ -460,11 +460,14 @@ void Synthesizer::beginSynchronous() {
     applyAudioParameters();
 }
 
-int16_t Synthesizer::renderNativeFrame(const double *data) {
-    if (!m_direct || data == nullptr) throw std::logic_error("Synchronous synthesis is not prepared");
+int16_t Synthesizer::renderNativeFrame(engine_sim::AcousticExcitation input) {
+    if (!m_direct) throw std::logic_error("Synchronous synthesis is not prepared");
+    if (input.data == nullptr || input.count != static_cast<std::size_t>(m_inputChannelCount)) {
+        throw std::invalid_argument("Native synthesis requires one input per prepared channel");
+    }
     float signal = 0;
     for (int i = 0; i < m_inputChannelCount; ++i) {
-        const float value = static_cast<float>(data[i]);
+        const float value = static_cast<float>(input.data[i]);
         if (!std::isfinite(value)) throw engine_sim::SimulationFault("nonfinite native synthesis input");
         const float filtered = m_filters[i].antialiasing.fast_f(value);
         if (!std::isfinite(filtered)) throw engine_sim::SimulationFault("nonfinite interpolated synthesis input");

@@ -1,6 +1,7 @@
 #ifndef ATG_ENGINE_SIM_ENGINE_SYNTHESIZER_H
 #define ATG_ENGINE_SIM_ENGINE_SYNTHESIZER_H
 
+#include "acoustic_excitation.h"
 #include "convolution_filter.h"
 #include "leveling_filter.h"
 #include "derivative_filter.h"
@@ -17,8 +18,6 @@
 #include <vector>
 
 namespace engine_sim_capture { struct PrimitiveAccess; }
-namespace engine_sim_test { struct LegacyAccess; }
-namespace engine_sim { class PullEngine; }
 
 class Synthesizer {
     public:
@@ -71,6 +70,13 @@ class Synthesizer {
             unsigned int samples,
             float volume,
             int index);
+
+        // Synchronous rendering borrows one value per prepared channel for
+        // the duration of the call and returns the native signed PCM sample.
+        void beginSynchronous();
+        int16_t renderNativeFrame(engine_sim::AcousticExcitation input);
+
+        // Queued synthesis is retained for the independent legacy adapter.
         void startAudioRenderingThread();
         void endAudioRenderingThread();
         void destroy();
@@ -136,10 +142,6 @@ class Synthesizer {
 
     private:
         friend struct engine_sim_capture::PrimitiveAccess;
-        friend struct engine_sim_test::LegacyAccess;
-        friend class engine_sim::PullEngine;
-        void beginSynchronous();
-        int16_t renderNativeFrame(const double *data);
         float renderChannel(int channel, float input);
         int16_t finishSample(float signal, bool rejectNonfinite);
         void applyAudioParameters();

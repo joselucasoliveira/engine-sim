@@ -72,7 +72,7 @@ std::int16_t SampleClock::nativeFrame(double fraction) {
         m_interpolated[i] = value;
     }
     std::int16_t sample;
-    if (!m_source.native(m_interpolated.data(), sample)) {
+    if (!m_source.native({m_interpolated.data(), m_interpolated.size()}, sample)) {
         throw SimulationFault("native synthesis made no progress");
     }
     return sample;

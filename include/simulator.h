@@ -18,6 +18,7 @@
 
 namespace engine_sim_test { struct LegacyAccess; }
 namespace engine_sim { class PullEngine; }
+class EngineSession;
 
 class Simulator {
 public:
@@ -52,8 +53,9 @@ public:
 
     int getFrameIterationCount() const { return m_steps; }
 
-    Synthesizer &synthesizer() { return m_synthesizer; }
-    const Synthesizer &synthesizer() const { return m_synthesizer; }
+    // Temporary legacy host/test forwarding. The session owns synthesis.
+    Synthesizer &synthesizer();
+    const Synthesizer &synthesizer() const;
 
     Engine *getEngine() { return m_engine; }
     const Engine *getEngine() const { return m_engine; }
@@ -70,7 +72,7 @@ public:
 
     void setTargetSynthesizerLatency(double latency) { m_targetSynthesizerLatency = latency; }
     double getTargetSynthesizerLatency() const { return m_targetSynthesizerLatency; }
-    double getSynthesizerInputLatency() const { return m_synthesizer.getLatency(); }
+    double getSynthesizerInputLatency() const { return synthesizer().getLatency(); }
     double getSynthesizerInputLatencyTarget() const;
 
     void setSimulationSpeed(double simSpeed) { m_simulationSpeed = simSpeed; }
@@ -90,7 +92,6 @@ public:
     StarterMotor m_starterMotor;
 
 protected:
-    void initializeSynthesizer();
     virtual void simulateStep_();
     virtual engine_sim::AcousticExcitation produceExhaustEndpoint() = 0;
 
@@ -99,6 +100,7 @@ protected:
 private:
     friend struct engine_sim_test::LegacyAccess;
     friend class engine_sim::PullEngine;
+    friend class EngineSession;
     engine_sim::AcousticExcitation advanceTick(bool legacyFrame);
     void validateBodies() const;
     bool beginFrame();
@@ -109,7 +111,7 @@ private:
     atg_scs::RigidBody m_vehicleMass;
     VehicleDragConstraint m_vehicleDrag;
 
-    Synthesizer m_synthesizer;
+    Synthesizer *m_legacySynthesis = nullptr;
 
     std::chrono::steady_clock::time_point m_simulationStart;
     std::chrono::steady_clock::time_point m_simulationEnd;

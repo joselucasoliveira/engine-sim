@@ -172,7 +172,7 @@ public:
         ++m_stages.ticks;
         return result;
     }
-    bool native(const double *input, std::int16_t &sample) override {
+    bool native(engine_sim::AcousticExcitation input, std::int16_t &sample) override {
         if (!m_stages.enabled) return m_source.native(input, sample);
         const auto start = Clock::now(); const bool result = m_source.native(input, sample); m_stages.synthesis += elapsed(start); ++m_stages.native; return result;
     }

@@ -15,11 +15,12 @@ std::vector<double> preparedRest(Simulator &simulator) {
 }
 }
 
-PullEngine::PullEngine(Simulator &simulator, ControlLatch controls, SampleClock::Profile profile, std::uint32_t outputRate)
-    : m_simulator(simulator), m_controls(std::move(controls)),
+PullEngine::PullEngine(Simulator &simulator, Synthesizer &synthesis, ControlLatch controls,
+        SampleClock::Profile profile, std::uint32_t outputRate)
+    : m_simulator(simulator), m_synthesis(synthesis), m_controls(std::move(controls)),
       m_clock(simulator.getSimulationFrequency(), preparedRest(simulator), *this, profile, outputRate),
       m_flowTotals(simulator.getEngine()->getIntakeCount()) {
-    m_simulator.synthesizer().beginSynchronous();
+    m_synthesis.beginSynchronous();
 }
 
 void PullEngine::latch() {
@@ -47,8 +48,8 @@ bool PullEngine::tick(double *endpoint, std::size_t capacity) {
     return true;
 }
 
-bool PullEngine::native(const double *input, std::int16_t &sample) {
-    sample = m_simulator.synthesizer().renderNativeFrame(input);
+bool PullEngine::native(AcousticExcitation input, std::int16_t &sample) {
+    sample = m_synthesis.renderNativeFrame(input);
     return true;
 }
 

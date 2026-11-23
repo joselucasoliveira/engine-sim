@@ -11,8 +11,7 @@ struct LegacyAccess {
         simulator.m_steps = ticks;
         simulator.resetFrameFlows();
     }
-    static void direct(Synthesizer &synth) { synth.beginSynchronous(); }
-    static std::int16_t sample(Synthesizer &synth, const double *data) { return synth.renderNativeFrame(data); }
+    static void attach(Simulator &simulator, Synthesizer &synthesis) { simulator.m_legacySynthesis = &synthesis; }
 };
 }
 #endif

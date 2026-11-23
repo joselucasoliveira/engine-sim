@@ -195,7 +195,6 @@ void PistonEngineSimulator::loadSimulation(Engine *engine, Vehicle *vehicle, Tra
     m_system->addConstraint(&m_starterMotor);
 
     placeAndInitialize();
-    initializeSynthesizer();
 }
 
 double PistonEngineSimulator::getAverageOutputSignal() const {

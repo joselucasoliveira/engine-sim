@@ -20,7 +20,7 @@ endfunction()
 install(SCRIPT "${PROJECT_BINARY_DIR}/InstallSdkPreflight.cmake" COMPONENT RuntimeSDK)
 engine_sim_sdk_verify("${PROJECT_SOURCE_DIR}/include/engine_sim/runtime.h")
 
-foreach(target IN ITEMS engine-sim-runtime engine-sim-runtime-backend engine-sim engine-sim-script-interpreter simple-2d-constraint-solver piranha)
+foreach(target IN ITEMS engine-sim-runtime engine-sim-runtime-backend engine-sim engine-sim-synthesis-objects engine-sim-script-interpreter simple-2d-constraint-solver piranha)
     set_target_properties(${target} PROPERTIES POSITION_INDEPENDENT_CODE ON
         CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN YES)
     if (MSVC)

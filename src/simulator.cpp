@@ -2,6 +2,8 @@
 #include "../include/checked_solver.h"
 
 #include <cmath>
+#include <stdexcept>
+#include <utility>
 
 namespace {
 class OwnedOptimizedSystem : public atg_scs::OptimizedNsvRigidBodySystem {
@@ -91,7 +93,7 @@ void Simulator::loadSimulation(Engine *engine, Vehicle *vehicle, Transmission *t
 }
 
 void Simulator::releaseSimulation() {
-    m_synthesizer.endAudioRenderingThread();
+    endAudioRenderingThread();
     if (m_system != nullptr) m_system->reset();
 
     destroy();
@@ -104,7 +106,7 @@ bool Simulator::beginFrame() {
     }
     m_simulationStart = std::chrono::steady_clock::now();
     m_currentIteration = 0;
-    m_synthesizer.setInputSampleRate(m_simulationFrequency * m_simulationSpeed);
+    synthesizer().setInputSampleRate(m_simulationFrequency * m_simulationSpeed);
     return true;
 }
 
@@ -124,10 +126,11 @@ void Simulator::startFrame(double dt) {
     m_steps = (int)std::round((dt * m_simulationSpeed) / timestep);
 
     const double targetLatency = getSynthesizerInputLatencyTarget();
-    if (m_synthesizer.getLatency() < targetLatency) {
+    const auto &synth = synthesizer();
+    if (synth.getLatency() < targetLatency) {
         m_steps = static_cast<int>((m_steps + 1) * 1.1);
     }
-    else if (m_synthesizer.getLatency() > targetLatency) {
+    else if (synth.getLatency() > targetLatency) {
         m_steps = static_cast<int>((m_steps - 1) * 0.9);
         if (m_steps < 0) {
             m_steps = 0;
@@ -148,7 +151,7 @@ bool Simulator::simulateStep() {
     }
 
     const auto endpoint = advanceTick(true);
-    m_synthesizer.writeInput(endpoint.data);
+    synthesizer().writeInput(endpoint.data);
     ++m_currentIteration;
     return true;
 }
@@ -232,15 +235,16 @@ double Simulator::getTotalExhaustFlow() const {
 }
 
 int Simulator::readAudioOutput(int samples, int16_t *target) {
-    return m_synthesizer.readAudioOutput(samples, target);
+    return synthesizer().readAudioOutput(samples, target);
 }
 
 void Simulator::endFrame() {
-    m_synthesizer.endInputBlock();
+    if (m_legacySynthesis != nullptr) m_legacySynthesis->endInputBlock();
 }
 
 void Simulator::destroy() {
-    m_synthesizer.destroy();
+    endAudioRenderingThread();
+    m_legacySynthesis = nullptr;
     if (m_system != nullptr) m_system->reset();
     delete m_system;
     m_system = nullptr;
@@ -254,11 +258,20 @@ void Simulator::destroy() {
 }
 
 void Simulator::startAudioRenderingThread() {
-    m_synthesizer.startAudioRenderingThread();
+    synthesizer().startAudioRenderingThread();
 }
 
 void Simulator::endAudioRenderingThread() {
-    m_synthesizer.endAudioRenderingThread();
+    if (m_legacySynthesis != nullptr) m_legacySynthesis->endAudioRenderingThread();
+}
+
+Synthesizer &Simulator::synthesizer() {
+    return const_cast<Synthesizer &>(std::as_const(*this).synthesizer());
+}
+
+const Synthesizer &Simulator::synthesizer() const {
+    if (m_legacySynthesis == nullptr) throw std::logic_error("Legacy simulation audio requires a prepared session");
+    return *m_legacySynthesis;
 }
 
 double Simulator::getSynthesizerInputLatencyTarget() const {
@@ -284,17 +297,6 @@ double Simulator::getDynoPower() const {
 
 double Simulator::getAverageOutputSignal() const {
     return 0.0;
-}
-
-void Simulator::initializeSynthesizer() {
-    Synthesizer::Parameters synthParams;
-    synthParams.seed = m_engine->getRandomSeed();
-    synthParams.audioBufferSize = 44100;
-    synthParams.audioSampleRate = 44100;
-    synthParams.inputBufferSize = 44100;
-    synthParams.inputChannelCount = m_engine->getExhaustSystemCount();
-    synthParams.inputSampleRate = static_cast<float>(getSimulationFrequency());
-    m_synthesizer.initialize(synthParams);
 }
 
 void Simulator::simulateStep_() {

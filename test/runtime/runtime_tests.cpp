@@ -247,7 +247,7 @@ TEST_F(RuntimeApi, FacadeMatchesPreparedPullAcrossFrequenciesAndControlEdges) {
         auto direct=engine_sim::prepareEngine({root/"main.mr",root/"library",root},{frequency,ES_FREE,25,UINT64_MAX});
         es_controls requested{sizeof(es_controls),ES_ABI_V1,1,1,.25,0,0};
         auto &sim=*direct.session->simulator;
-        engine_sim::PullEngine pull(sim,[&]{sim.getEngine()->setSpeedControl(requested.demand);sim.getEngine()->getIgnitionModule()->m_enabled=requested.ignition!=0;sim.m_starterMotor.m_enabled=requested.starter!=0;});
+        engine_sim::PullEngine pull(sim,direct.session->synthesis,[&]{sim.getEngine()->setSpeedControl(requested.demand);sim.getEngine()->getIgnitionModule()->m_enabled=requested.ignition!=0;sim.m_starterMotor.m_enabled=requested.starter!=0;});
         const std::array<std::size_t,5> edges{0,147,257,441,44101};
         for(std::size_t i=0;i+1<edges.size();++i) {
             requested.demand=i%2?.4:.25;

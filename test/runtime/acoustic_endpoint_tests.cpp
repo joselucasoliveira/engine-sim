@@ -156,9 +156,10 @@ struct BoundaryProbe : ClockSource {
         return true;
     }
 
-    bool native(const double *input, std::int16_t &output) override {
+    bool native(AcousticExcitation input, std::int16_t &output) override {
         events.emplace_back(inputs.size() * Frequency, Edge::Native);
-        inputs.push_back({input[0], input[1]});
+        if (input.count != Channels) throw std::runtime_error("Unexpected native channel count");
+        inputs.push_back({input.data[0], input.data[1]});
         return source.native(input, output);
     }
 
@@ -231,7 +232,7 @@ std::vector<float> observedRender(es_runtime &handle, std::uint32_t rate, Blocks
     auto &simulator = *session.prepared.session->simulator;
     auto &pull = *session.pull;
     PressureOracle oracle(*simulator.getEngine());
-    const auto audio = simulator.synthesizer().getAudioParameters();
+    const auto audio = session.prepared.session->synthesis.getAudioParameters();
     EXPECT_GT(audio.airNoise, 0.0f);
     EXPECT_GT(audio.inputSampleNoise, 0.0f);
     EXPECT_GT(audio.convolution, 0.0f);

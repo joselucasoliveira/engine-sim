@@ -51,9 +51,9 @@ struct Source : ClockSource {
         output[0] = ticks == nonfiniteTick ? std::numeric_limits<double>::quiet_NaN() : endpoint(ticks);
         return ticks != failTick;
     }
-    bool native(const double *input, std::int16_t &output) override {
-        if (record) { inputs.push_back(input[0]); events.emplace_back('N', samples); }
-        output = static_cast<std::int16_t>(std::lround(input[0]));
+    bool native(AcousticExcitation input, std::int16_t &output) override {
+        if (record) { inputs.push_back(input.data[0]); events.emplace_back('N', samples); }
+        output = static_cast<std::int16_t>(std::lround(input.data[0]));
         return samples++ != failSample;
     }
 };
@@ -149,8 +149,10 @@ TEST(Clock, DesktopRetimingPreservesPartialTicksAndPartitionedTimeline) {
             out[0] = static_cast<double>(++ticks % 257);
             return true;
         }
-        bool native(const double *in, std::int16_t &out) override {
-            inputs.push_back(in[0]); out = static_cast<std::int16_t>(std::lround(in[0])); return true;
+        bool native(AcousticExcitation input, std::int16_t &out) override {
+            inputs.push_back(input.data[0]);
+            out = static_cast<std::int16_t>(std::lround(input.data[0]));
+            return true;
         }
     };
     const std::vector<std::pair<std::size_t, std::uint32_t>> edges{
@@ -267,14 +269,14 @@ TEST(Clock, NativeDspMatchesLegacyKernelAndRejectsNonfiniteInput) {
         legacy.initializeImpulseResponse(impulse, 3, channel == 0 ? 1.0f : .75f, channel);
         direct.initializeImpulseResponse(impulse, 3, channel == 0 ? 1.0f : .75f, channel);
     }
-    engine_sim_test::LegacyAccess::direct(direct);
+    direct.beginSynchronous();
     std::array<double, 2> input{0, 0};
     std::vector<std::int16_t> expected;
-    expected.push_back(engine_sim_test::LegacyAccess::sample(direct, input.data()));
+    expected.push_back(direct.renderNativeFrame({input.data(), input.size()}));
     for (int i = 0; i < 4096; ++i) {
         input = {1000 * std::sin(i * .03125), 500 * std::cos(i * .125)};
         legacy.writeInput(input.data());
-        expected.push_back(engine_sim_test::LegacyAccess::sample(direct, input.data()));
+        expected.push_back(direct.renderNativeFrame({input.data(), input.size()}));
     }
     legacy.endInputBlock();
     legacy.renderAudio();
@@ -286,14 +288,14 @@ TEST(Clock, NativeDspMatchesLegacyKernelAndRejectsNonfiniteInput) {
     std::sort(distinct.begin(), distinct.end());
     EXPECT_GT(std::distance(distinct.begin(), std::unique(distinct.begin(), distinct.end())), 128);
     input[0] = std::numeric_limits<double>::infinity();
-    EXPECT_THROW(engine_sim_test::LegacyAccess::sample(direct, input.data()), SimulationFault);
+    EXPECT_THROW(direct.renderNativeFrame({input.data(), input.size()}), SimulationFault);
     EXPECT_THROW(direct.writeInput(input.data()), std::logic_error);
     EXPECT_THROW(direct.startAudioRenderingThread(), std::logic_error);
     auto parameters = direct.getAudioParameters();
     parameters.volume = std::numeric_limits<float>::infinity();
     direct.setAudioParameters(parameters);
     input[0] = 0;
-    EXPECT_THROW(engine_sim_test::LegacyAccess::sample(direct, input.data()), SimulationFault);
+    EXPECT_THROW(direct.renderNativeFrame({input.data(), input.size()}), SimulationFault);
 }
 
 PreparedEngine fixture() {
@@ -325,7 +327,7 @@ TEST(Clock, RealMechanicsMatchLegacyTicksAndPartitionedPulls) {
     engine_sim_test::LegacyAccess::begin(a, a.getSimulationFrequency());
     while (a.simulateStep()) expected.push_back(physical(a));
     a.endFrame();
-    PullEngine pull(b, [&] { control(b); });
+    PullEngine pull(b, fresh.session->synthesis, [&] { control(b); });
     pull.setTickObserver([&](const Simulator &) { actual.push_back(physical(b)); });
     std::vector<float> pcm(44100);
     pull.render(pcm.data(), pcm.size());
@@ -333,7 +335,7 @@ TEST(Clock, RealMechanicsMatchLegacyTicksAndPartitionedPulls) {
     EXPECT_EQ(pull.counts().ticks, expected.size());
     auto other = fixture();
     auto &c = *other.session->simulator;
-    PullEngine partitioned(c, [&] { control(c); });
+    PullEngine partitioned(c, other.session->synthesis, [&] { control(c); });
     std::vector<float> split(pcm.size());
     for (std::size_t i = 0; i < split.size();) {
         const auto count = std::min<std::size_t>(257, split.size() - i);
@@ -353,13 +355,13 @@ TEST(Clock, CheckedSolverAndInvalidBodyFaultBeforeUnsafeUse) {
     auto *system = dynamic_cast<atg_scs::OptimizedNsvRigidBodySystem *>(sim.getSystem());
     ASSERT_NE(system, nullptr);
     system->initialize(&solver);
-    PullEngine pull(sim, {});
+    PullEngine pull(sim, prepared.session->synthesis, {});
     std::array<float, 32> pcm;
     pcm.fill(42);
     EXPECT_THROW(pull.render(pcm.data(), pcm.size()), SimulationFault);
     for (std::size_t i = pull.lastWritten(); i < pcm.size(); ++i) EXPECT_EQ(pcm[i], 42);
     auto invalid = fixture();
-    PullEngine bad(*invalid.session->simulator, {});
+    PullEngine bad(*invalid.session->simulator, invalid.session->synthesis, {});
     invalid.session->definition.engine->getCrankshaft(0)->m_body.theta = std::numeric_limits<double>::infinity();
     EXPECT_THROW(bad.render(pcm.data(), pcm.size()), SimulationFault);
 }

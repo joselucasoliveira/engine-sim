@@ -151,6 +151,18 @@ if (TARGET engine-sim-runtime)
             --compile-database "${CMAKE_BINARY_DIR}/compile_commands.json")
         set_tests_properties(RuntimeBenchmark PROPERTIES LABELS "runtime-bench" TIMEOUT 300)
     endif ()
+    add_test(NAME StandaloneSynthesisConsumer COMMAND "${Python3_EXECUTABLE}" -B
+        "${CMAKE_CURRENT_SOURCE_DIR}/synthesis_projection.py"
+        --source "${PROJECT_SOURCE_DIR}" --generator "${CMAKE_GENERATOR}"
+        "--platform=${CMAKE_GENERATOR_PLATFORM}" --compiler "${CMAKE_CXX_COMPILER}"
+        --cmake "${CMAKE_COMMAND}" --ctest "${CMAKE_CTEST_COMMAND}")
+    add_executable(engine-sim-synthesis-stream-test synthesis_stream_test.cpp
+        "${PROJECT_SOURCE_DIR}/src/sample_clock.cpp")
+    target_link_libraries(engine-sim-synthesis-stream-test PRIVATE engine-sim-synthesis)
+    engine_sim_diagnose(engine-sim-synthesis-stream-test TRUE)
+    add_test(NAME SynthesisStreamParity COMMAND engine-sim-synthesis-stream-test)
+    set_tests_properties(StandaloneSynthesisConsumer SynthesisStreamParity PROPERTIES LABELS r25-synthesis TIMEOUT 120)
+
     foreach(variant IN ITEMS static shared)
         add_test(NAME RuntimeSdk_${variant} COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/sdk_gate.py"
             --source "${PROJECT_SOURCE_DIR}" --root "${ENGINE_SIM_PRESET_ROOT}"

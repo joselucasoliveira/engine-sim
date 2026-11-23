@@ -1,6 +1,8 @@
 #ifndef ENGINE_SIM_SAMPLE_CLOCK_H
 #define ENGINE_SIM_SAMPLE_CLOCK_H
 
+#include "acoustic_excitation.h"
+
 #include <cstddef>
 #include <cstdint>
 #include <vector>
@@ -21,7 +23,7 @@ public:
     // Reject a null or undersized destination before stepping. Any caller
     // storage beyond the configured channel count is left untouched.
     virtual bool tick(double *endpoint, std::size_t capacity) = 0;
-    virtual bool native(const double *input, std::int16_t &sample) = 0;
+    virtual bool native(AcousticExcitation input, std::int16_t &sample) = 0;
 };
 
 // Private C++ backend. A source tick and a native sample each run exactly once.

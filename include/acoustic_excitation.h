@@ -4,9 +4,9 @@
 #include <cstddef>
 
 namespace engine_sim {
-// Legacy pressure-derived excitation in first-encounter exhaust index order.
-// At prepared rest all channels are zero. The simulator owns the values until
-// its next physics tick or teardown. Copy them during the current tick.
+// A borrowed extent of legacy pressure-derived excitation in first-encounter
+// exhaust index order. Prepared rest is zero. Consume the values within the
+// call that exposes them, before the producer reuses its storage.
 struct AcousticExcitation {
     const double *data;
     std::size_t count;

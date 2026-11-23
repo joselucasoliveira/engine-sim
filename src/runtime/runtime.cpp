@@ -30,7 +30,7 @@ Runtime::Session::Session(std::unique_ptr<EngineSession> value, Recipe source, s
         throw std::logic_error("Desktop session requires detached owner commands");
     }
     if (!controls) controls = [this] { latch(); };
-    pull = std::make_unique<PullEngine>(sim, std::move(controls), profile, outputHz);
+    pull = std::make_unique<PullEngine>(sim, prepared.session->synthesis, std::move(controls), profile, outputHz);
     if (drive) pull->setTickCommands([this] { drive->beginTick(); }, [this] { drive->finishTick(); });
 }
 Runtime::Session::~Session() = default;

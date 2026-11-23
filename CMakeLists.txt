@@ -102,25 +102,24 @@ if (BUILD_TESTING)
 endif ()
 
 add_subdirectory(dependencies)
+add_subdirectory(modules/synthesis)
 
 add_library(engine-sim STATIC
+    $<TARGET_OBJECTS:engine-sim-synthesis-objects>
     # Source files
     src/audio_buffer.cpp
     src/camshaft.cpp
     src/crankshaft.cpp
     src/combustion_chamber.cpp
     src/connecting_rod.cpp
-    src/convolution_filter.cpp
     src/cylinder_bank.cpp
     src/cylinder_head.cpp
     src/delay_filter.cpp
-    src/derivative_filter.cpp
     src/direct_throttle_linkage.cpp
     src/dynamometer.cpp
     src/engine.cpp
     src/exhaust_system.cpp
     src/feedback_comb_filter.cpp
-    src/filter.cpp
     src/fuel.cpp
     src/function.cpp
     src/gas_system.cpp
@@ -129,9 +128,6 @@ add_library(engine-sim STATIC
     src/ignition_module.cpp
     src/impulse_response.cpp
     src/intake.cpp
-    src/jitter_filter.cpp
-    src/leveling_filter.cpp
-    src/low_pass_filter.cpp
     src/part.cpp
     src/piston.cpp
     src/piston_engine_simulator.cpp
@@ -140,7 +136,6 @@ add_library(engine-sim STATIC
     src/pull_engine.cpp
     src/standard_valvetrain.cpp
     src/starter_motor.cpp
-    src/synthesizer.cpp
     src/throttle.cpp
     src/transmission.cpp
     src/utilities.cpp
