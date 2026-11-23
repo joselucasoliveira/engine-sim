@@ -20,3 +20,16 @@ endforeach ()
 add_test(NAME ConfigValueOwnership COMMAND engine-sim-config-values-test)
 add_test(NAME ConfigPublicHeader COMMAND engine-sim-config-header-test)
 set_tests_properties(ConfigValueOwnership ConfigPublicHeader PROPERTIES LABELS r25-config TIMEOUT 60)
+
+add_executable(engine-sim-config-normalization-test normalization.cpp)
+target_link_libraries(engine-sim-config-normalization-test PRIVATE EngineSim::Config)
+target_include_directories(engine-sim-config-normalization-test PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../modules/config/src")
+set_target_properties(engine-sim-config-normalization-test PROPERTIES
+    CXX_STANDARD 17 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO)
+if (COMMAND engine_sim_diagnose)
+    engine_sim_diagnose(engine-sim-config-normalization-test TRUE)
+endif ()
+add_test(NAME ConfigDefaults COMMAND engine-sim-config-normalization-test defaults)
+add_test(NAME ConfigUnitBoundaries COMMAND engine-sim-config-normalization-test units)
+set_tests_properties(ConfigDefaults ConfigUnitBoundaries PROPERTIES LABELS r25-config TIMEOUT 60)
