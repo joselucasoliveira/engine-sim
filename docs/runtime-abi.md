@@ -1,9 +1,9 @@
-# Runtime C ABI version 1
+# Runtime C ABI version 2
 
-The [runtime header](../include/engine_sim/runtime.h) defines the version 1
+The [runtime header](../include/engine_sim/runtime.h) defines the version 2
 contract for C11 and C++17 hosts. Static and shared SDK installations both
 provide `EngineSim::Runtime`, with relative installed dependencies and only
-the eleven C exports in the shared library. Start with the
+the thirteen C exports in the shared library. Start with the
 [integration guide](runtime-guide.md) for complete build and usage commands.
 
 ## Platform and compatibility
@@ -14,8 +14,9 @@ Windows x64 with MSVC and Darwin arm64. Windows uses cdecl. Static Windows
 consumers define `ES_RUNTIME_STATIC`. Shared consumers use the header's import
 declarations, and the library build supplies its own export definition.
 
-Version 1.0 packs its version as `0x00010000`. A library accepts requests with
-the same major and a minor version up to its own. Field offsets, status values
+Version 2.0 packs its version as `0x00020000`. A library accepts requests with
+the same major and a minor version up to its own. An existing v1 client needs its
+v1 header and library. Install v1 and v2 into separate prefixes. Field offsets, status values
 and function signatures are stable across compatible versions. A later minor
 may append fields whose absence has defined defaults. Check the capability
 bits for features used by the host.
@@ -23,9 +24,9 @@ bits for features used by the host.
 ## Records and caller storage
 
 Initialize the `size` and `abi` fields before passing an extensible record. The
-size is the capacity in bytes, including any tail beyond the v1 prefix.
-The minimum v1 sizes for configuration, controls and telemetry are 40, 40 and
-136 bytes, respectively. A v1 call ignores an unknown input tail and preserves
+size is the capacity in bytes, including any tail beyond the v2 prefix.
+Configuration, controls, telemetry and diagnostics use prefixes of 40, 40,
+136 and 2,888 bytes respectively. Each call ignores an unknown input tail and preserves
 the caller's output tail. Keep natural alignment and supply accessible,
 nonoverlapping storage.
 
@@ -41,8 +42,8 @@ single handle, including destruction.
 Status values are signed 32-bit integers. `ES_OK` reports success.
 `ES_INVALID`, `ES_VERSION`, `ES_UNSUPPORTED` and `ES_CAPACITY` identify input
 and contract failures. `ES_STATE` identifies a call invalid in the current
-handle state. `ES_SCRIPT`, `ES_RESOURCE` and `ES_MODEL` identify failures in
-script execution, input resources and model preparation. `ES_RENDER_FAULT`
+handle state. `ES_CONFIG`, `ES_RESOURCE` and `ES_MODEL` identify failures in
+document validation, input resources and model preparation. `ES_RENDER_FAULT`
 identifies a rendering fault. `ES_NO_MEMORY` and `ES_INTERNAL` cover allocation
 failure and unexpected library errors.
 
@@ -51,9 +52,19 @@ exists. Each call that accepts an error record clears the message on success
 or writes a bounded, NUL-terminated UTF-8 diagnostic on failure. Retain a
 diagnostic by using different error storage for subsequent calls.
 
-The constants are nonnegative signed `es_status` values: OK=0, INVALID=1,
-VERSION=2, UNSUPPORTED=3, STATE=4, SCRIPT=5, RESOURCE=6, MODEL=7, CAPACITY=8,
-NO_MEMORY=9, RENDER_FAULT=10 and INTERNAL=11. Check against `ES_OK`, not a
+Load and detailed reset also accept a versioned caller-owned
+`es_diagnostic` record. Initialize `size` and `abi` before calling. An
+undersized record or unsupported ABI rejects the operation and leaves the detail
+record untouched. Success clears the known detail fields and sets stage to
+`ES_DIAG_NONE`. Failure returns the first error, a stable code, a JSON Pointer
+and the source path when available. A byte offset is zero-based. Line and
+Unicode-scalar column are one-based. Unavailable positions are
+`ES_DIAG_NO_LOCATION`. Strings are NUL-terminated UTF-8. The `truncated`
+bits identify fields that lost content at a UTF-8 character boundary.
+
+The signed `es_status` values are OK=0, INVALID=1, VERSION=2, UNSUPPORTED=3,
+STATE=4, RESOURCE=6, MODEL=7, CAPACITY=8, NO_MEMORY=9, RENDER_FAULT=10,
+INTERNAL=11 and CONFIG=12. Value 5 is reserved. Check against `ES_OK`, not a
 negative-error convention. Exceptions stay inside the library. Allocation
 failure and unexpected exceptions during rendering still obey the completed
 prefix rule. A diagnostic may be truncated at a UTF-8 boundary; it is not a
@@ -62,7 +73,7 @@ process-global last error.
 ## Configuration and controls
 
 Configuration is fixed for the handle's lifetime. Initialize it with
-`es_config_init(ES_ABI_V1, sizeof config, &config, &error)` before editing fields.
+`es_config_init(ES_ABI_V2, sizeof config, &config, &error)` before editing fields.
 No packing pragma or foreign allocation ownership is part of this ABI.
 
 | Configuration field | Default | Accepted value |
@@ -70,11 +81,11 @@ No packing pragma or foreign allocation ownership is part of this ABI.
 | `output_hz` | 44100 | 44100 or 48000 Hz, mono float32 |
 | `mode` | `ES_FREE` (0) | FREE or `ES_DRIVEN` (1) |
 | `seed` | 1 | Every unsigned 64-bit value |
-| `simulation_hz` | 0 | Script's rate, or integer override 4000–96000 Hz |
+| `simulation_hz` | 0 | Model's rate, or integer override 4000–96000 Hz |
 | `flags` | 0 | Zero; unknown bits return `ES_UNSUPPORTED` |
 | `starter_torque_nm` | 0 | Inherit the model, or finite (0,10000] N·m in FREE; zero only in DRIVEN |
 
-A script's selected numerical rate must also be a finite integer in
+A model's selected numerical rate must also be a finite integer in
 4000–96000 Hz unless a supported creation override supplies the rate. Changing
 configuration requires a fresh handle. The starter keeps the model's signed
 speed and rotation direction; a torque override changes its ceiling only.
@@ -105,15 +116,17 @@ optional caller-owned `es_error *`; queries and destruction do not need one.
 
 | Function | Result and storage contract |
 | --- | --- |
-| `es_api_version` | Immutable packed major/minor, currently `ES_ABI_V1` |
-| `es_capabilities` | Independent feature bits for FREE, both rates, LOAD, DRIVEN, RESET and parallel prepared rendering |
+| `es_api_version` | Immutable packed major/minor, currently `ES_ABI_V2` |
+| `es_capabilities` | Independent feature bits for FREE, both rates, LOAD, DRIVEN, RESET parallel prepared rendering, file and byte JSON loads, and structured diagnostics |
 | `es_config_init` | Write the known default prefix only on success; retain supplied compatible ABI and capacity |
 | `es_create` | Validate configuration; clear a valid output slot on entry, then return an EMPTY handle on success |
-| `es_load` | Borrow three absolute UTF-8 paths during preparation; transactionally replace the session |
+| `es_load_json_file` | Load one JSON document from an absolute UTF-8 entry with an explicit absolute asset directory |
+| `es_load_json_bytes` | Copy one length-delimited document from caller storage and load using the explicit asset directory |
 | `es_set_controls` | Accept or reject one whole requested vector |
 | `es_render` | Zero required `written` on entry; fill at most the requested/capacity extent; return only completed frames |
 | `es_get_telemetry` | Copy a coherent snapshot without advancing; preserve caller size/ABI/tail and leave the record unchanged on error |
 | `es_reset` | Reprepare the original input identity/configuration/seed and replace only on success |
+| `es_reset_detailed` | Perform the same reset with optional structured diagnostics |
 | `es_unload` | Discard without filesystem reads; idempotent |
 | `es_destroy` | Release through the library; NULL accepted; no call may subsequently use the handle |
 
@@ -160,13 +173,25 @@ the corresponding actual reaction can still describe the preceding tick.
 
 The C interface in `engine_sim/runtime.h` uses library-owned opaque handles and caller-owned records, PCM and error storage. Query `es_capabilities()` for the features provided by a binary. A version number describes the ABI; it does not replace feature negotiation.
 
-Each successful load owns the resolved scripts and impulse-response bytes actually consumed during preparation. The three absolute UTF-8 path arguments are borrowed only for the call. The runtime retains its own recipe and input identities. Loading a replacement is transactional: a preparation failure preserves the active engine, time, pending controls and previous fault state.
+File loading retains the canonical entry and asset-root identities, the exact
+JSON bytes and the full bytes of each consumed impulse. Byte loading copies the
+document and has no source entry path. The API reads one complete format-v1
+document of at most 16 MiB. Asset locators resolve beneath the explicit
+directory. Relative API paths are invalid. Replace a model through a fresh
+load. Failed preparation preserves the engine, time, pending controls and
+fault status.
 
-`es_reset` prepares a fresh candidate using the original configuration, seed and saved recipe. Each opened script and impulse response must resolve to the same canonical path and contain exactly the original bytes. Verification precedes parsing or decoding, and the complete input set must match before replacement. Missing, changed or unexpectedly resolved inputs return `ES_RESOURCE`, including changed malformed files. Restore the inputs to reset the existing definition, or call `es_load` explicitly to accept a new definition.
+`es_reset` and `es_reset_detailed` rebuild from the saved recipe, original
+configuration and seed. File reset checks the entry's canonical path and full
+bytes. Both recipes verify the asset root, locator mappings and recorded
+resource bytes. A missing, changed or unexpectedly resolved input returns
+`ES_RESOURCE`, including a modified file whose new bytes are malformed. A
+byte-identical rewrite at the same canonical path is equivalent. A byte-loaded
+model remains independent of any former file holding the document.
 
 A successful reset reproduces a fresh load on the same binary and floating-point environment: prepared phase, filters, random streams, zero counters and default controls. Reset discards the former timeline and returns a faulted engine to READY. An EMPTY handle has no recipe to reset and returns `ES_STATE`. Unload releases the prepared session and recipe without filesystem reads; repeated unload and destroying NULL are valid.
 
-Serialize every operation on one handle, including telemetry, reset and destruction. Transfer an instance between threads only at a synchronized quiescent boundary. When `ES_CAP_PARALLEL_RENDER` is present, distinct handles can render concurrently while other independent handles are prepared or destroyed. Parser preparation is serialized internally; rendering has no process-wide render lock. Never race calls on one handle or reuse a handle after destruction.
+Serialize every operation on one handle, including telemetry, reset and destruction. Transfer an instance between threads only at a synchronized quiescent boundary. When `ES_CAP_PARALLEL_RENDER` is present, distinct handles can render concurrently while other independent handles are prepared or destroyed. Rendering has no process-wide render lock. Never race calls on one handle or reuse a handle after destruction.
 
 Each call accepts optional independent `es_error` storage. Successful calls clear only the supplied error message. Other handles and calls using different storage do not modify it. A rendering fault publishes only completed frames and preserves the rest of the caller's PCM buffer. Telemetry retains the last completed-frame snapshot with FAULTED state until successful load/reset or unload.
 

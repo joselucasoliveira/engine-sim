@@ -1,3 +1,4 @@
+#include "legacy_runtime.hpp"
 #include "runtime.hpp"
 #include "piston_engine_simulator.h"
 #include "checked_solver.h"
@@ -42,8 +43,8 @@ TEST(Load, AnalyticRotorObeysImpulseBudgetAndStaticFrictionInBothDirections) {
 }
 using Handle=std::unique_ptr<es_runtime,decltype(&es_destroy)>;
 void checked(es_status s,const es_error &e) {if(s!=ES_OK)throw std::runtime_error(e.message);}
-es_telemetry telemetry(es_runtime *r) {es_telemetry t{};t.size=sizeof(t);t.abi=ES_ABI_V1;es_error e{};checked(es_get_telemetry(r,&t,&e),e);return t;}
-es_controls vector(double load=0,double demand=.25,bool ignition=false,bool starter=false) {return {sizeof(es_controls),ES_ABI_V1,static_cast<std::uint32_t>(ignition),static_cast<std::uint32_t>(starter),demand,load,0};}
+es_telemetry telemetry(es_runtime *r) {es_telemetry t{};t.size=sizeof(t);t.abi=ES_ABI_V2;es_error e{};checked(es_get_telemetry(r,&t,&e),e);return t;}
+es_controls vector(double load=0,double demand=.25,bool ignition=false,bool starter=false) {return {sizeof(es_controls),ES_ABI_V2,static_cast<std::uint32_t>(ignition),static_cast<std::uint32_t>(starter),demand,load,0};}
 void controls(es_runtime *r,const es_controls &c) {es_error e{};checked(es_set_controls(r,&c,&e),e);}
 std::vector<float> render(es_runtime *r,std::size_t count,std::size_t part=257) {
     std::vector<float> pcm(count);es_error e{};
@@ -54,9 +55,9 @@ protected:
     fs::path root;
     void SetUp() override {const auto *s=std::getenv("ENGINE_SIM_TEST_SOURCE");ASSERT_NE(s,nullptr);root=fs::u8path(s)/"examples/runtime/fixture";}
     Handle prepare(std::uint32_t rate=44100,std::uint32_t frequency=10000,fs::path path={}) {
-        if(path.empty())path=root;es_config c{};es_error e{};checked(es_config_init(ES_ABI_V1,sizeof(c),&c,&e),e);c.output_hz=rate;c.simulation_hz=frequency;
+        if(path.empty())path=root;es_config c{};es_error e{};checked(es_config_init(ES_ABI_V2,sizeof(c),&c,&e),e);c.output_hz=rate;c.simulation_hz=frequency;
         es_runtime *raw=nullptr;checked(es_create(&c,&raw,&e),e);Handle r(raw,es_destroy);
-        checked(es_load(raw,(path/"main.mr").u8string().c_str(),(path/"library").u8string().c_str(),path.u8string().c_str(),&e),e);return r;
+        checked(engine_sim::legacy_runtime::load(raw,(path/"main.mr").u8string().c_str(),(path/"library").u8string().c_str(),path.u8string().c_str(),&e),e);return r;
     }
 };
 TEST_F(LoadEngine, RequestedValueIsImmediateButReactionUsesTheEligibleCompletedTick) {
@@ -126,7 +127,7 @@ TEST_F(LoadEngine, LoadedTimelineResetAndEveryPartitionReturnIdenticalPcmAndTele
             for(std::size_t i=0;i+1<edges.size();++i) {controls(r,vector(i%3?1.:0.,i%2?.3:.2,true,i<6));auto pcm=render(r,edges[i+1]-edges[i],part);all.insert(all.end(),pcm.begin(),pcm.end());}return all;
         };
         const auto expected=run(a.get(),65536);EXPECT_EQ(run(b.get(),1),expected);const auto ta=telemetry(a.get()),tb=telemetry(b.get());EXPECT_EQ(std::memcmp(&ta,&tb,sizeof(ta)),0);
-        es_error e{};checked(es_reset(b.get(),&e),e);EXPECT_EQ(telemetry(b.get()).requested_load_nm,0);EXPECT_EQ(telemetry(b.get()).load_reaction_nm,0);EXPECT_EQ(run(b.get(),503),expected);
+        es_error e{};checked(engine_sim::legacy_runtime::reset(b.get(),&e),e);EXPECT_EQ(telemetry(b.get()).requested_load_nm,0);EXPECT_EQ(telemetry(b.get()).load_reaction_nm,0);EXPECT_EQ(run(b.get(),503),expected);
     }
 }
 TEST_F(LoadEngine, DemandPlateAndGovernorKeepTheirModelSemanticsWithAndWithoutLoad) {

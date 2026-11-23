@@ -8,16 +8,16 @@ int main(int argc,char **argv) {
     es_runtime *runtime=NULL;
     es_error error;
     es_config config;
-    es_controls controls={sizeof(es_controls),ES_ABI_V1,1,1,.25,0,0};
+    es_controls controls={sizeof(es_controls),ES_ABI_V2,1,1,.25,0,0};
     es_telemetry telemetry;
     float samples[443];
     double energy=0,peak=0;
     unsigned nonzero=0;
-    if(argc!=4) return 2;
-    if(es_api_version()!=ES_ABI_V1 || (es_capabilities()&(ES_CAP_FREE|ES_CAP_44100|ES_CAP_RESET|ES_CAP_PARALLEL_RENDER))!=(ES_CAP_FREE|ES_CAP_44100|ES_CAP_RESET|ES_CAP_PARALLEL_RENDER)) return 3;
-    CHECK(es_config_init(ES_ABI_V1,sizeof(config),&config,&error));
+    if(argc!=3) return 2;
+    if(es_api_version()!=ES_ABI_V2 || (es_capabilities()&(ES_CAP_FREE|ES_CAP_44100|ES_CAP_RESET|ES_CAP_PARALLEL_RENDER))!=(ES_CAP_FREE|ES_CAP_44100|ES_CAP_RESET|ES_CAP_PARALLEL_RENDER)) return 3;
+    CHECK(es_config_init(ES_ABI_V2,sizeof(config),&config,&error));
     CHECK(es_create(&config,&runtime,&error));
-    CHECK(es_load(runtime,argv[1],argv[2],argv[3],&error));
+    CHECK(es_load_json_file(runtime,argv[1],argv[2],NULL,&error));
     CHECK(es_set_controls(runtime,&controls,&error));
     for(unsigned block=0;block<1000;++block) {
         uint32_t written=99;
@@ -31,7 +31,7 @@ int main(int argc,char **argv) {
             if(block>110) { energy+=value*value; if(value!=0) ++nonzero; if(fabs(value)>peak) peak=fabs(value); }
         }
     }
-    memset(&telemetry,0,sizeof(telemetry));telemetry.size=sizeof(telemetry);telemetry.abi=ES_ABI_V1;
+    memset(&telemetry,0,sizeof(telemetry));telemetry.size=sizeof(telemetry);telemetry.abi=ES_ABI_V2;
     CHECK(es_get_telemetry(runtime,&telemetry,&error));
     printf("frames=%llu ticks=%llu native=%llu rpm=%.9f energy=%.9f peak=%.9f nonzero=%u\n",
         (unsigned long long)telemetry.frames,(unsigned long long)telemetry.ticks,

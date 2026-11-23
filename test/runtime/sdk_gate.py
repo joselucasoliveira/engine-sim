@@ -34,7 +34,7 @@ if a.variant=='static':
     # Rejection must precede copying even the first SDK binary.
     projection=run/'input-check-source';projection.mkdir()
     for directory in ('cmake','include','modules/config','modules/json','modules/synthesis','modules/physics',
-                      'modules/assembly','schemas','src','scripting'):
+                      'modules/assembly','schemas','src'):
         shutil.copytree(a.source/directory,projection/directory)
     for name in ('CMakeLists.txt','LICENSE','THIRD_PARTY_NOTICES.md'):
         shutil.copyfile(a.source/name,projection/name)
@@ -43,16 +43,16 @@ if a.variant=='static':
     (projection/'dependencies/submodules').mkdir(parents=True)
     shutil.copyfile(a.source/'dependencies/CMakeLists.txt',projection/'dependencies/CMakeLists.txt')
     shutil.copyfile(a.source/'dependencies/submodules/CMakeLists.txt',projection/'dependencies/submodules/CMakeLists.txt')
-    for name in ('simple-2d-constraint-solver','piranha'):
+    for name in ('simple-2d-constraint-solver',):
         shutil.copytree(a.source/'dependencies/submodules'/name,projection/'dependencies/submodules'/name,ignore=shutil.ignore_patterns('.git'))
         # Locked-source inspection remains bound to the exact producer gitlink.
         gitdir=subprocess.check_output(['git','-C',a.source/'dependencies/submodules'/name,'rev-parse','--absolute-git-dir'],text=True).strip()
         (projection/'dependencies/submodules'/name/'.git').write_text('gitdir: '+gitdir+'\n')
     execute(['cmake','-S',projection,'-B',run/'input-check-build','-DCMAKE_BUILD_TYPE=Release',
-             '-DENGINE_SIM_BUILD_RUNTIME=ON','-DENGINE_SIM_BUILD_DESKTOP=OFF','-DENGINE_SIM_BUILD_CAPTURE=OFF',
+             '-DENGINE_SIM_BUILD_RUNTIME=ON','-DPIRANHA_ENABLED=OFF','-DENGINE_SIM_BUILD_DESKTOP=OFF','-DENGINE_SIM_BUILD_CAPTURE=OFF',
              '-DBUILD_TESTING=OFF','-DENGINE_SIM_BUILD_HOST_TESTS=OFF','-DENGINE_SIM_INSTALL_RUNTIME_EXAMPLE=ON',
              f'-DENGINE_SIM_DEPS_FILE={a.root}/deps.cmake'])
-    inputs = (projection/'examples/runtime/fixture/main.mr',
+    inputs = (projection/'examples/runtime/fixture/main.json',
               projection/'schemas/engine-config-v1.schema.json')
     for fixture in inputs:
         original = fixture.read_bytes()

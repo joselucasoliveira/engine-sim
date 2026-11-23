@@ -10,7 +10,7 @@ void Range::add(double value) {
     min = std::min(min, value); max = std::max(max, value);
 }
 RuntimeHost::RuntimeHost()
-    : m_runtime(es_config{sizeof(es_config), ES_ABI_V1, 44100, ES_FREE, 1, 0, 0, 0},
+    : m_runtime(es_config{sizeof(es_config), ES_ABI_V2, 44100, ES_FREE, 1, 0, 0, 0},
           engine_sim::SampleClock::Profile::Desktop) {}
 std::unique_ptr<RuntimeHost> RuntimeHost::prepare(const es_script::PreparationContext &recipe,
         std::uint64_t seed, bool mechanics) {
@@ -23,7 +23,7 @@ std::unique_ptr<RuntimeHost> RuntimeHost::prepare(const es_script::PreparationCo
     auto result = std::unique_ptr<RuntimeHost>(new RuntimeHost);
     result->m_mechanics = mechanics;
     auto *owner = result.get();
-    result->m_runtime.adoptPrepared(std::move(prepared), [owner] { owner->latch(); });
+    engine_sim::legacy_runtime::Access::adopt(result->m_runtime, std::move(prepared), [owner] { owner->latch(); });
     result->m_runtime.m_session->pull->setTickObserver([owner](const Simulator &sim) { owner->observe(sim); });
     return result;
 }

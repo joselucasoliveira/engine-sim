@@ -152,7 +152,7 @@
         "ENGINE_SIM_BUILD_HOST_TESTS": false,
         "ENGINE_SIM_BUILD_DESKTOP": false,
         "ENGINE_SIM_BUILD_CAPTURE": false,
-        "PIRANHA_ENABLED": true
+        "PIRANHA_ENABLED": false
       }
     },
     {
@@ -175,6 +175,7 @@
       "cacheVariables": {
         "BUILD_TESTING": true,
         "ENGINE_SIM_BUILD_RUNTIME_EXAMPLES": true,
+        "PIRANHA_ENABLED": true,
         "CMAKE_EXPORT_COMPILE_COMMANDS": true
       }
     },

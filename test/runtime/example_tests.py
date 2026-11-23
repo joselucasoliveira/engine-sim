@@ -31,26 +31,28 @@ def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--cli',type=Path,required=True);p.add_argument('--reference',type=Path,required=True);p.add_argument('--fixture',type=Path,required=True);p.add_argument('--out',type=Path,required=True);p.add_argument('--ffi',type=Path);a=p.parse_args()
     a.out.mkdir(parents=True,exist_ok=True);work=Path(tempfile.mkdtemp(prefix='render espaço 試験-',dir=a.out));commands=[];measurements=[]
     active=a.fixture
-    def invocation(rate,mode,seed,frames,schedule,output):return [a.cli,'--entry',active/'main.mr','--library-root',active/'library','--asset-root',active,'--rate',rate,'--mode','driven' if mode else 'free','--seed',seed,'--frames',frames,'--schedule',schedule,'--out',output]
+    def invocation(rate,mode,seed,frames,schedule,output):return [a.cli,'--entry',active/'main.json','--asset-root',active,'--rate',rate,'--mode','driven' if mode else 'free','--seed',seed,'--frames',frames,'--schedule',schedule,'--out',output]
     try:
         for rate,mode,seed in [(44100,0,1),(48000,0,2**64-1),(48000,1,17)]:
             active=a.fixture
             if seed==2**64-1:
                 active=work/'Stochastic modelo 試験';shutil.copytree(a.fixture,active)
-                model=active/'main.mr';text=model.read_text();assert 'noise: 0.0, jitter: 0.0' in text
-                model.write_text(text.replace('noise: 0.0, jitter: 0.0','noise: 0.25, jitter: 0.2').replace('burning_efficiency_randomness: 0.0','burning_efficiency_randomness: 0.15'))
+                model=active/'main.json';document=json.loads(model.read_bytes())
+                document['engine'].update(noise=0.25,jitter=0.2)
+                document['components']['fuels'][0]['burning_efficiency_randomness']=0.15
+                model.write_text(json.dumps(document),encoding='utf-8')
             frames=rate*2+17;rows=events(rate,mode);schedule=work/f'{rate}-{mode}.tsv';schedule.write_text(table(rows),encoding='utf-8');output=work/f'音声-{rate}-{mode}.wav';raw=work/f'参考-{rate}-{mode}.f32'
             execute(invocation(rate,mode,seed,frames,schedule,output),commands)
             pcm=wave(output,rate,frames)
-            execute([a.reference,active/'main.mr',active/'library',active,rate,mode,seed,frames,raw],commands)
+            execute([a.reference,active/'main.json',active,rate,mode,seed,frames,raw],commands)
             assert pcm==raw.read_bytes(),'CLI PCM differs from independent public C renderer'
             if seed==2**64-1:
                 low=work/'truncated-seed.f32'
-                execute([a.reference,active/'main.mr',active/'library',active,rate,mode,2**32-1,frames,low],commands)
+                execute([a.reference,active/'main.json',active,rate,mode,2**32-1,frames,low],commands)
                 assert pcm!=low.read_bytes(),'Seed fixture must distinguish the high32bits'
             if a.ffi:
                 from ffi_smoke import render
-                direct,telemetry=render(a.ffi,active/'main.mr',(active/'library',active),rate,mode,seed,frames,rows)
+                direct,telemetry=render(a.ffi,active/'main.json',active,rate,mode,seed,frames,rows)
                 assert direct==pcm,'ctypes PCM differs from native CLI'
             measurements.append({'rate':rate,'mode':mode,'frames':frames,'data_bytes':len(pcm),'sha256':hashlib.sha256(pcm).hexdigest(),'ffi_compared':bool(a.ffi)})
         active=a.fixture
@@ -84,7 +86,23 @@ def main():
         # Runtime fault after a valid prefix must still discard the whole temp WAV.
         s=work/'saturate.tsv';s.write_text(table([(0,.25,100,1,0,5000)]));o=work/'fault.wav';message=execute(invocation(48000,1,1,48000,s,o),commands,1);assert 'saturat' in message;assert not o.exists() and not list(work.glob(o.name+'.tmp-*'))
         s=work/'driven-starter.tsv';s.write_text(table([(0,.25,0,1,1,0)]));o=work/'bad-mode.wav';execute(invocation(48000,1,1,48000,s,o),commands,1);assert not o.exists()
-        result={'status':'pass','measurements':measurements,'negative_cases':len(bad)+6,'commands':commands}
+        migration = work/'legacy-option.wav'
+        message = execute(invocation(44100,0,1,44100,valid,migration)+['--library-root',active],commands,1)
+        assert 'engine-sim-convert' in message and not migration.exists()
+        raced = work/'shared-output.wav'
+        contention_schedule = work/'contention.tsv'
+        contention_schedule.write_text(table([(0,.25,0,1,1,0)]),encoding='utf-8')
+        contenders = [invocation(44100,0,1,length,contention_schedule,raced) for length in (44100,22050)]
+        processes = [subprocess.Popen(list(map(str,args)),stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
+                     for args in contenders]
+        results = []
+        for args, process in zip(contenders,processes):
+            stdout, _ = process.communicate(timeout=30)
+            results.append(process.returncode)
+            commands.append({'argv':list(map(str,args)),'exit':process.returncode,'output':stdout})
+        assert sorted(results)==[0,1] and not list(work.glob(raced.name+'.tmp-*'))
+        wave(raced,44100,(44100,22050)[results.index(0)])
+        result={'status':'pass','measurements':measurements,'negative_cases':len(bad)+8,'commands':commands}
     except Exception as error:
         result={'status':'fail','error':repr(error),'commands':commands}
     (work/'result.json').write_text(json.dumps(result,indent=2)+'\n');print(json.dumps({k:v for k,v in result.items() if k!='commands'},indent=2));return 0 if result['status']=='pass' else 1

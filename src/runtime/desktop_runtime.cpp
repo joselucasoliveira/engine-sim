@@ -1,5 +1,6 @@
 #include "desktop_runtime.hpp"
 #include "json_session.hpp"
+#include "legacy_runtime.hpp"
 #include "../../include/simulation_fault.h"
 #include <chrono>
 
@@ -20,7 +21,7 @@ engine_sim::json_runtime::PreparedModel requireModel(engine_sim::json_runtime::P
 }
 }
 RuntimeHost::RuntimeHost()
-    : m_runtime(es_config{sizeof(es_config), ES_ABI_V1, 44100, ES_FREE, desktopSeed, 0, 0, 0},
+    : m_runtime(es_config{sizeof(es_config), ES_ABI_V2, 44100, ES_FREE, desktopSeed, 0, 0, 0},
         engine_sim::SampleClock::Profile::Desktop) {}
 RuntimeHost::~RuntimeHost() {
     if (m_views) m_views->invalidate();
@@ -29,7 +30,8 @@ RuntimeHost::~RuntimeHost() {
 }
 std::unique_ptr<RuntimeHost> RuntimeHost::fromPrepared(engine_sim::PreparedEngine prepared) {
     return fromSession(std::move(prepared.session),
-        engine_sim::Runtime::LegacyRecipe{std::move(prepared.recipe), prepared.config, std::move(prepared.inputs)});
+        std::make_shared<const engine_sim::legacy_runtime::Recipe>(engine_sim::legacy_runtime::Recipe{
+            std::move(prepared.recipe), prepared.config, std::move(prepared.inputs)}));
 }
 std::unique_ptr<RuntimeHost> RuntimeHost::fromSession(std::unique_ptr<EngineSession> session,
                                                        engine_sim::Runtime::Recipe recipe) {
@@ -66,9 +68,10 @@ std::unique_ptr<RuntimeHost> RuntimeHost::resetCandidate() const {
         auto prepared = requireModel(engine_sim::json_runtime::reset_desktop(**saved, desktopSeed));
         return fromSession(std::move(prepared.session), std::move(prepared.recipe));
     }
-    const auto &saved = std::get<engine_sim::Runtime::LegacyRecipe>(m_runtime.m_session->prepared.recipe);
-    if (saved.paths.entry.empty() || saved.paths.libraryRoot.empty() || saved.paths.assetRoot.empty()) throw EngineLoadError({"unsupported", "", "Reset needs an owned script recipe"});
-    return fromPrepared(engine_sim::prepareEngine(saved.paths, saved.config, &saved.inputs));
+    const auto *saved = engine_sim::legacy_runtime::Access::saved(m_runtime);
+    if (!saved || saved->paths.entry.empty() || saved->paths.libraryRoot.empty() || saved->paths.assetRoot.empty())
+        throw EngineLoadError({"unsupported", "", "Reset needs an owned script recipe"});
+    return fromPrepared(engine_sim::prepareEngine(saved->paths, saved->config, &saved->inputs));
 }
 void RuntimeHost::render(float *output, std::uint32_t frames, std::uint32_t &written) {
     m_views->requireQuiescent();

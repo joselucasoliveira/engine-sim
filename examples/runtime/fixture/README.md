@@ -18,8 +18,7 @@ python3 /absolute/fixture/generate_impulse.py /absolute/external/impulse.wav
 ```
 
 The response consists of eight explicitly specified PCM16 samples at 44.1 kHz.
-Supply this directory as the asset root, `main.mr` as the entry and `library`
-as the script library root. The library closure contains only the script
+For the historical converter fixture, use `main.mr` with the local `library` directory. The library closure contains only the script
 types, units, operations, actions and model objects used to prepare engines.
 
 `main.json` is the deterministic format-v1 conversion of this fixture's

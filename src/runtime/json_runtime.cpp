@@ -1,4 +1,5 @@
 #include "json_runtime.hpp"
+#include "api_text.hpp"
 #include "json_session.hpp"
 #include "runtime.hpp"
 #include "preparation.hpp"
@@ -68,20 +69,8 @@ es_status result_status(const cfg::Diagnostic &problem) {
     if (problem.code == "API_STATE") return ES_STATE;
     if (problem.code == "CFG_VERSION") return ES_VERSION;
     if (problem.stage == "resources") return ES_RESOURCE;
-    if (problem.code == "CFG_REF" || problem.code == "CFG_TOPOLOGY" || problem.code == "CFG_CURVE" ||
-        problem.code == "CFG_DUPLICATE_ID" || problem.stage == "initialize") return ES_MODEL;
-    return configuration_error;
-}
-
-void copy_error(es_error *error, std::string_view text) noexcept {
-    if (!error) return;
-    auto length = std::min(text.size(), sizeof(error->message) - 1);
-    if (length < text.size()) {
-        // Bounded prose preserves whole UTF-8 characters.
-        while (length != 0 && (static_cast<unsigned char>(text[length]) & 0xc0) == 0x80) --length;
-    }
-    if (length != 0) std::memcpy(error->message, text.data(), length);
-    error->message[length] = '\0';
+    if (problem.stage == "graph" || problem.stage == "initialize") return ES_MODEL;
+    return ES_CONFIG;
 }
 
 using Outcome = std::optional<cfg::Diagnostic>;
@@ -89,23 +78,20 @@ using Outcome = std::optional<cfg::Diagnostic>;
 template<class Operation>
 es_status boundary(cfg::Diagnostic *detail, es_error *error, const Operation &run) noexcept {
     if (detail) *detail = {};
-    copy_error(error, {});
+    api::fail(error, ES_OK, {});
     try {
         auto failure = run();
         if (!failure) return ES_OK;
         const auto status = result_status(*failure);
-        if (error) copy_error(error, failure->code + ": " + failure->message);
+        if (error) api::fail(error, status, failure->message);
         if (detail) *detail = std::move(*failure);
         return status;
     } catch (const std::bad_alloc &) {
-        copy_error(error, "CFG_MEMORY: allocation failed");
-        return ES_NO_MEMORY;
+        return api::fail(error, ES_NO_MEMORY, "CFG_MEMORY: allocation failed");
     } catch (const fs::filesystem_error &) {
-        copy_error(error, "CFG_RESOURCE_PATH: filesystem operation failed");
-        return ES_RESOURCE;
+        return api::fail(error, ES_RESOURCE, "CFG_RESOURCE_PATH: filesystem operation failed");
     } catch (...) {
-        copy_error(error, "API_INTERNAL: unexpected runtime exception");
-        return ES_INTERNAL;
+        return api::fail(error, ES_INTERNAL, "API_INTERNAL: unexpected runtime exception");
     }
 }
 

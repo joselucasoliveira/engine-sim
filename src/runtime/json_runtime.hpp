@@ -9,8 +9,6 @@
 
 namespace engine_sim::json_runtime {
 
-inline constexpr es_status configuration_error = 12;
-
 enum class Phase { document, normalized, prepared, snapshot };
 using Checkpoint = std::function<void(Phase)>;
 

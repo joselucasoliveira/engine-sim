@@ -2,7 +2,7 @@
 #define ENGINE_SIM_PRIVATE_RUNTIME_HPP
 
 #include "engine_sim/runtime.h"
-#include "prepared_engine.h"
+#include "engine_session.h"
 #include "pull_engine.h"
 #include <memory>
 #include <variant>
@@ -14,12 +14,14 @@ namespace engine_sim {
 struct RuntimeTestAccess;
 struct JsonRuntimeAccess;
 struct JsonRecipe;
+namespace legacy_runtime {
+struct Access;
+struct Recipe;
+}
 class DrivenShaft;
 class Runtime {
 public:
     explicit Runtime(es_config config, SampleClock::Profile profile = SampleClock::Profile::Public) noexcept;
-    void load(const es_script::PreparationContext &recipe);
-    void reset();
     void setControls(const es_controls &controls) noexcept;
     void render(float *output, std::uint32_t frames, std::uint32_t &written);
     void unload() noexcept;
@@ -29,13 +31,8 @@ private:
     friend struct JsonRuntimeAccess;
     friend class desktop::RuntimeHost;
     friend class engine_sim_capture::RuntimeHost;
-    void adoptPrepared(PreparedEngine prepared, PullEngine::ControlLatch controls = {});
-    struct LegacyRecipe {
-        es_script::PreparationContext paths;
-        PreparationConfig config;
-        std::vector<es_script::ScriptInput> inputs;
-    };
-    using Recipe = std::variant<LegacyRecipe, std::shared_ptr<const JsonRecipe>>;
+    friend struct legacy_runtime::Access;
+    using Recipe = std::variant<std::shared_ptr<const JsonRecipe>, std::shared_ptr<const legacy_runtime::Recipe>>;
     struct PreparedGraph {
         Recipe recipe;
         std::unique_ptr<EngineSession> session;
@@ -48,7 +45,7 @@ private:
         ~Session();
         void latch();
         PreparedGraph prepared;
-        es_controls requested{sizeof(es_controls), ES_ABI_V1, 0, 0, 0, 0, 0};
+        es_controls requested{sizeof(es_controls), ES_ABI_V2, 0, 0, 0, 0, 0};
         std::unique_ptr<DrivenShaft> drive;
         std::unique_ptr<PullEngine> pull;
     };

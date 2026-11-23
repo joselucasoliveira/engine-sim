@@ -48,7 +48,7 @@ fs::path fixturePath(const char *variable) {
 RuntimeOwner load(std::uint32_t rate) {
     es_error error{};
     es_config config{};
-    check(es_config_init(ES_ABI_V1, sizeof(config), &config, &error), error);
+    check(es_config_init(ES_ABI_V2, sizeof(config), &config, &error), error);
     config.output_hz = rate;
     config.seed = 403;
     es_runtime *handle = nullptr;
@@ -61,7 +61,7 @@ RuntimeOwner load(std::uint32_t rate) {
 
 es_telemetry telemetry(const es_runtime &handle) {
     es_telemetry state{};
-    state.abi = ES_ABI_V1;
+    state.abi = ES_ABI_V2;
     state.size = sizeof(state);
     es_error error{};
     check(es_get_telemetry(&handle, &state, &error), error);
@@ -190,7 +190,7 @@ std::vector<float> render(es_runtime &handle, Blocks blocks, Render output) {
     es_error error{};
     for (std::size_t i = 0; i < commands.size(); ++i) {
         const auto command = commands[i];
-        const es_controls settings{sizeof(settings), ES_ABI_V1, command.ignition, command.starter,
+        const es_controls settings{sizeof(settings), ES_ABI_V2, command.ignition, command.starter,
                                    command.demand, 0.0, 0.0};
         check(es_set_controls(&handle, &settings, &error), error);
         const auto end = i + 1 < commands.size() ? commands[i + 1].frame : Frames;

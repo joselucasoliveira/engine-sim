@@ -8,7 +8,6 @@
 #include <cmath>
 #include <cstddef>
 #include <cstring>
-#include <filesystem>
 #include <limits>
 #include <new>
 #include <stdexcept>
@@ -48,7 +47,7 @@ es_telemetry Runtime::snapshot(const Session &session) const {
     auto *crank = engine->getCrankshaft(0);
     const auto &counts = session.pull->counts();
     es_telemetry value{};
-    value.size = sizeof(value); value.abi = ES_ABI_V1; value.state = ES_READY; value.mode = m_config.mode;
+    value.size = sizeof(value); value.abi = ES_ABI_V2; value.state = ES_READY; value.mode = m_config.mode;
     value.output_hz = m_config.output_hz; value.simulation_hz = sim.getSimulationFrequency();
     value.cylinders = static_cast<std::uint32_t>(engine->getCylinderCount());
     value.frames = counts.frames; value.ticks = counts.ticks; value.native_frames = counts.nativeFrames;
@@ -67,10 +66,6 @@ es_telemetry Runtime::snapshot(const Session &session) const {
     }
     return value;
 }
-void Runtime::adoptPrepared(PreparedEngine prepared, PullEngine::ControlLatch controls) {
-    adoptSession(std::move(prepared.session), LegacyRecipe{std::move(prepared.recipe), prepared.config, std::move(prepared.inputs)},
-                 prepared.config.mode, prepared.config.desktop, std::move(controls));
-}
 void Runtime::adoptSession(std::unique_ptr<EngineSession> engine, Recipe recipe, std::uint32_t mode, bool desktop,
         PullEngine::ControlLatch controls, const std::function<void()> &beforeCommit) {
     auto candidate = std::make_unique<Session>(std::move(engine), std::move(recipe), mode, desktop,
@@ -79,17 +74,6 @@ void Runtime::adoptSession(std::unique_ptr<EngineSession> engine, Recipe recipe,
     if (beforeCommit) beforeCommit();
     m_session.swap(candidate);
     m_snapshot = initial;
-}
-void Runtime::load(const es_script::PreparationContext &recipe) {
-    if (m_profile != SampleClock::Profile::Public) throw std::logic_error("Desktop load requires staged bindings");
-    adoptPrepared(prepareEngine(recipe,
-        {m_config.simulation_hz, m_config.mode, m_config.starter_torque_nm, m_config.seed}));
-}
-void Runtime::reset() {
-    if (m_profile != SampleClock::Profile::Public) throw std::logic_error("Desktop reset requires staged bindings");
-    const auto &saved = std::get<LegacyRecipe>(m_session->prepared.recipe);
-    adoptPrepared(prepareEngine(saved.paths,
-        {m_config.simulation_hz, m_config.mode, m_config.starter_torque_nm, m_config.seed}, &saved.inputs));
 }
 void Runtime::setControls(const es_controls &controls) noexcept {
     m_session->requested = controls;
@@ -123,7 +107,7 @@ void Runtime::render(float *output, std::uint32_t frames, std::uint32_t &written
 }
 void Runtime::unload() noexcept {
     m_session.reset(); m_snapshot = {};
-    m_snapshot.size = sizeof(m_snapshot); m_snapshot.abi = ES_ABI_V1;
+    m_snapshot.size = sizeof(m_snapshot); m_snapshot.abi = ES_ABI_V2;
     m_snapshot.state = ES_EMPTY; m_snapshot.mode = m_config.mode; m_snapshot.output_hz = m_config.output_hz;
 }
 }

@@ -1,3 +1,4 @@
+#include "legacy_runtime.hpp"
 #include "mechanical_observation.hpp"
 #include "runtime.hpp"
 #include "json_runtime.hpp"
@@ -106,7 +107,7 @@ public:
         : m_handle(nullptr, es_destroy), m_source(source) {
         es_error error{};
         es_config config{};
-        check(es_config_init(ES_ABI_V1, sizeof(config), &config, &error), error);
+        check(es_config_init(ES_ABI_V2, sizeof(config), &config, &error), error);
         config.mode = mode;
         config.output_hz = rate;
         config.seed = 403;
@@ -114,7 +115,7 @@ public:
         check(es_create(&config, &handle, &error), error);
         m_handle.reset(handle);
         if (source == Source::legacy)
-            check(es_load(handle, (assets/"main.mr").u8string().c_str(), library.u8string().c_str(),
+            check(engine_sim::legacy_runtime::load(handle, (assets/"main.mr").u8string().c_str(), library.u8string().c_str(),
                           assets.u8string().c_str(), &error), error);
         else if (source == Source::file)
             check(json::load_file(handle, assets/"main.json", assets, nullptr, &error), error);
@@ -127,7 +128,7 @@ public:
 
     void reset() {
         es_error error{};
-        const auto result = m_source == Source::legacy ? es_reset(m_handle.get(), &error)
+        const auto result = m_source == Source::legacy ? engine_sim::legacy_runtime::reset(m_handle.get(), &error)
             : json::reset(m_handle.get(), nullptr, &error);
         check(result, error);
         m_observation.reset();
@@ -154,7 +155,7 @@ public:
         es_error error{};
         es_telemetry t{};
         t.size = sizeof(t);
-        t.abi = ES_ABI_V1;
+        t.abi = ES_ABI_V2;
         check(es_get_telemetry(m_handle.get(), &t, &error), error);
         return t;
     }
@@ -235,7 +236,7 @@ TEST_F(MechanicalObservationTest, Isolation) {
             EXPECT_GT(binding.initialVolumeM3, 0);
             for (std::uint64_t i = 0; i < count; ++i) {
                 if (i == 0 || i == 8000) {
-                    const es_controls next{sizeof(next), ES_ABI_V1, 1, mode == ES_FREE && i == 0,
+                    const es_controls next{sizeof(next), ES_ABI_V2, 1, mode == ES_FREE && i == 0,
                         i == 0 ? .2 : .5, 0, mode == ES_DRIVEN ? (i == 0 ? 900. : 1700.) : 0.};
                     baseline.set(next);
                     candidate.set(next);
@@ -349,7 +350,7 @@ Playback play_fixture(PreparedRuntime &runtime, bool driven, const std::vector<s
     const std::array<std::uint32_t, 4> edges{0, 8000, 24000, ReplayedFrames};
     std::size_t part = 0;
     for (std::size_t event = 0; event+1 < edges.size(); ++event) {
-        const es_controls next{sizeof(next), ES_ABI_V1, 1, !driven && event == 0,
+        const es_controls next{sizeof(next), ES_ABI_V2, 1, !driven && event == 0,
             event == 0 ? .2 : event == 1 ? .5 : .35, event == 2 ? 1.0 : 0.0,
             driven ? (event == 0 ? 900. : event == 1 ? 1700. : 1100.) : 0.};
         runtime.set(next);
@@ -433,7 +434,7 @@ TEST_F(MechanicalObservationTest, Torque) {
     EXPECT_NE(a.ignitionAngleRad, b.ignitionAngleRad);
     for (unsigned event = 0; event < 85; ++event) {
         const double rpm = std::min(1500., 450. + 15 * event);
-        engine.set({sizeof(es_controls), ES_ABI_V1, 1, 0, .45, event < 50 ? 0. : 4., rpm});
+        engine.set({sizeof(es_controls), ES_ABI_V2, 1, 0, .45, event < 50 ? 0. : 4., rpm});
         for (unsigned i = 0; i < 441; ++i) engine.frame();
     }
     double min = 0, max = 0, peakDrive = 0;

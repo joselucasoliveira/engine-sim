@@ -1,3 +1,4 @@
+#include "legacy_runtime.hpp"
 #include "json_runtime.hpp"
 #include "runtime.hpp"
 #include "piston_engine_simulator.h"
@@ -53,7 +54,7 @@ using RuntimeOwner = std::unique_ptr<es_runtime, decltype(&es_destroy)>;
 RuntimeOwner load(const fs::path &root, const fs::path &entry, bool canonical) {
     es_error error{};
     es_config config{};
-    check(es_config_init(ES_ABI_V1, sizeof(config), &config, &error), error);
+    check(es_config_init(ES_ABI_V2, sizeof(config), &config, &error), error);
     config.seed = 403;
     es_runtime *handle = nullptr;
     check(es_create(&config, &handle, &error), error);
@@ -61,7 +62,7 @@ RuntimeOwner load(const fs::path &root, const fs::path &entry, bool canonical) {
     if (canonical) {
         check(engine_sim::json_runtime::load_file(handle, entry, root, nullptr, &error), error);
     } else {
-        check(es_load(handle, entry.u8string().c_str(), (root / "es").u8string().c_str(),
+        check(engine_sim::legacy_runtime::load(handle, entry.u8string().c_str(), (root / "es").u8string().c_str(),
                       (root / "assets").u8string().c_str(), &error), error);
     }
     return owner;
@@ -129,7 +130,7 @@ Trace measure(const fs::path &root, const fs::path &entry, bool canonical) {
 
     std::vector<float> pcm(16000);
     for (unsigned part = 0; part < 2; ++part) {
-        const es_controls controls{sizeof(controls), ES_ABI_V1, 1, part == 0, part == 0 ? 0.2 : 0.5, part == 0 ? 0.0 : 1.0, 0};
+        const es_controls controls{sizeof(controls), ES_ABI_V2, 1, part == 0, part == 0 ? 0.2 : 0.5, part == 0 ? 0.0 : 1.0, 0};
         check(es_set_controls(handle, &controls, &error), error);
         const std::uint32_t frames = part == 0 ? 8000 : 16000;
         std::uint32_t written = 0;

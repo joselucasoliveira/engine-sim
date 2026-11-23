@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 project(RuntimeInstalledMatrix LANGUAGES C CXX)
-find_package(EngineSimRuntime 1.0 CONFIG REQUIRED)
+find_package(EngineSimRuntime 2.0 CONFIG REQUIRED)
 add_executable(runtime-matrix-c matrix.c)
 set_target_properties(runtime-matrix-c PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO LINKER_LANGUAGE CXX)
 add_executable(runtime-matrix-cxx matrix.cpp)

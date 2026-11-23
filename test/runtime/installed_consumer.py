@@ -5,11 +5,12 @@ import json
 import os
 from pathlib import Path
 import platform
+import re
 import shutil
 import subprocess
 import sys
 
-PUBLIC = {'es_api_version','es_capabilities','es_config_init','es_create','es_load','es_set_controls','es_render','es_get_telemetry','es_reset','es_unload','es_destroy'}
+PUBLIC = {'es_api_version','es_capabilities','es_config_init','es_create','es_load_json_file','es_load_json_bytes','es_set_controls','es_render','es_get_telemetry','es_reset','es_reset_detailed','es_unload','es_destroy'}
 
 def file_sha256(path):
     digest = hashlib.sha256()
@@ -73,14 +74,14 @@ def inside(prefix, fixture, work, variant, report):
         env['PATH'] = str(location.parent)+os.pathsep+env.get('PATH','')
     extension = '.exe' if platform.system()=='Windows' else ''
     for name in ('runtime-c-consumer','runtime-cxx-consumer'):
-        command([executable(build,name),fixture/'main.mr',fixture/'library',fixture],work,report,env)
+        command([executable(build,name),fixture/'main.json',fixture],work,report,env)
     matrix_build = work / 'matrix-build'
     command([cmake,'-S',work/'matrix-source','-B',matrix_build,'-DCMAKE_BUILD_TYPE=Release',f'-DCMAKE_PREFIX_PATH={prefix}',
              '-DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF','-DCMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY=OFF'],work,report)
     command([cmake,'--build',matrix_build,'--config','Release','--parallel','2','--verbose'],work,report)
     matrices = []
     for name in ('runtime-matrix-c','runtime-matrix-cxx'):
-        output = command([executable(matrix_build,name),fixture/'main.mr',fixture/'library',fixture],work,report,env)
+        output = command([executable(matrix_build,name),fixture/'main.json',fixture],work,report,env)
         rows = [json.loads(line) for line in output.splitlines()]
         assert {(row['rate'],row['mode']) for row in rows} == {(rate,mode) for rate in (44100,48000) for mode in (0,1)}
         assert len(rows) == 4
@@ -102,7 +103,7 @@ def inside(prefix, fixture, work, variant, report):
     if offline:
         companion=list(prefix.rglob('engine-sim-runtime-consumer'+extension))
         assert len(companion)==1
-        command([companion[0],fixture/'main.mr',fixture/'library',fixture],work,report,env)
+        command([companion[0],fixture/'main.json',fixture],work,report,env)
         offline_build=work/'offline-build'
         command([cmake,'-S',work/'offline-source','-B',offline_build,'-DCMAKE_BUILD_TYPE=Release',f'-DCMAKE_PREFIX_PATH={prefix}',
                  '-DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF','-DCMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY=OFF'],work,report)
@@ -120,8 +121,8 @@ def inside(prefix, fixture, work, variant, report):
         standalone_arguments[standalone_arguments.index('--out')+1]=work/'standalone-admission'
         command(standalone_arguments,work,report,env)
         if variant=='shared':
-            command([sys.executable,'-B',work/'ffi_smoke.py','--library',location,'--entry',fixture/'main.mr',
-                     '--library-root',fixture/'library','--asset-root',fixture],work,report,env)
+            command([sys.executable,'-B',work/'ffi_smoke.py','--library',location,'--entry',fixture/'main.json',
+                     '--asset-root',fixture],work,report,env)
     if platform.system() == 'Linux':
         for name in ('runtime-c-consumer','runtime-cxx-consumer'):
             binary_path=executable(build,name)
@@ -132,20 +133,33 @@ def inside(prefix, fixture, work, variant, report):
             exported=command(['nm','-D','--defined-only',library],work,report)
             assert {line.split()[-1] for line in exported.splitlines()}==PUBLIC
             dynamic=command(['readelf','-d',library],work,report)
-            assert 'libengine-sim-runtime.so.1' in dynamic
+            assert 'libengine-sim-runtime.so.2' in dynamic
             assert not any(x in dynamic.lower() for x in ('libsdl','libvulkan','libx11','libasound','libpulse'))
     elif platform.system() == 'Darwin':
         if variant=='shared':
             library=location.resolve()
             symbols=command(['nm','-gU',library],work,report)
             assert {line.split()[-1].removeprefix('_') for line in symbols.splitlines() if line.strip()}==PUBLIC
+            identity=command(['otool','-D',library],work,report)
+            assert '@rpath/libengine-sim-runtime.2.dylib' in identity
             command(['otool','-L',library],work,report)
     elif platform.system() == 'Windows':
         if variant=='shared':
             exported=command(['dumpbin','/exports',location],work,report)
-            actual={line.split()[-1] for line in exported.splitlines() if line.split() and line.split()[-1].startswith('es_')}
+            assert location.name == 'engine-sim-runtime-2.dll'
+            actual=set(re.findall(r'^\s*\d+\s+[0-9A-Fa-f]+\s+[0-9A-Fa-f]+\s+(\S+)', exported, re.MULTILINE))
             assert actual==PUBLIC
             command(['dumpbin','/dependents',location],work,report)
+    unavailable = work/'v1-package-test'
+    unavailable.mkdir()
+    (unavailable/'CMakeLists.txt').write_text(
+        'cmake_minimum_required(VERSION 3.25)\n'
+        'project(RejectV1 LANGUAGES C CXX)\n'
+        'find_package(EngineSimRuntime 1.0 CONFIG QUIET PATHS "${CMAKE_PREFIX_PATH}" NO_DEFAULT_PATH)\n'
+        'if (EngineSimRuntime_FOUND OR TARGET EngineSim::Runtime)\n'
+        '    message(FATAL_ERROR "ABI v1 accidentally selected the v2 SDK")\n'
+        'endif ()\n', encoding='utf-8')
+    command([cmake,'-S',unavailable,'-B',work/'v1-package-build',f'-DCMAKE_PREFIX_PATH={prefix}'],work,report)
     return properties
 
 def main():
@@ -206,7 +220,7 @@ def main():
     fixture=moved/'share/engine-sim-runtime/example'
     if args.fixture:
         fixture=out/'User fixture Ω';shutil.copytree(args.fixture.resolve(),fixture)
-    if not (fixture/'main.mr').is_file():
+    if not (fixture/'main.json').is_file():
         parser.error('Install the optional lawful example or pass --fixture to a caller-supplied fixture')
     try:
         if platform.system()=='Linux':

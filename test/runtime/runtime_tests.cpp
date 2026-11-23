@@ -1,4 +1,5 @@
 #include "runtime.hpp"
+#include "prepared_engine.h"
 #include "simulation_fault.h"
 #include <gtest/gtest.h>
 #include <algorithm>
@@ -46,23 +47,23 @@ protected:
     void SetUp() override {
         const auto *source=std::getenv("ENGINE_SIM_TEST_SOURCE");ASSERT_NE(source,nullptr);
         root=fs::u8path(source)/"examples/runtime/fixture";
-        ASSERT_EQ(es_config_init(ES_ABI_V1,sizeof(config),&config,&error),ES_OK);
+        ASSERT_EQ(es_config_init(ES_ABI_V2,sizeof(config),&config,&error),ES_OK);
     }
     Handle create(bool load=true) {
         es_runtime *rt=nullptr;
         if(es_create(&config,&rt,&error)!=ES_OK) throw std::runtime_error(error.message);
         Handle owned(rt,es_destroy);
-        if(load && es_load(rt,(root/"main.mr").u8string().c_str(),(root/"library").u8string().c_str(),root.u8string().c_str(),&error)!=ES_OK)
+        if(load && es_load_json_file(rt,(root/"main.json").u8string().c_str(),root.u8string().c_str(),nullptr,&error)!=ES_OK)
             throw std::runtime_error(error.message);
         return owned;
     }
     es_telemetry telemetry(es_runtime *rt) {
-        es_telemetry t{};t.size=sizeof(t);t.abi=ES_ABI_V1;
+        es_telemetry t{};t.size=sizeof(t);t.abi=ES_ABI_V2;
         if(es_get_telemetry(rt,&t,&error)!=ES_OK) throw std::runtime_error(error.message);
         return t;
     }
     void controls(es_runtime *rt,double demand=.25,bool starter=true) {
-        es_controls c{sizeof(c),ES_ABI_V1,1,static_cast<std::uint32_t>(starter),demand,0,0};
+        es_controls c{sizeof(c),ES_ABI_V2,1,static_cast<std::uint32_t>(starter),demand,0,0};
         ASSERT_EQ(es_set_controls(rt,&c,&error),ES_OK)<<error.message;
     }
     std::vector<float> render(es_runtime *rt,std::size_t count) {
@@ -78,18 +79,18 @@ protected:
 TEST_F(RuntimeApi, ExtensiblePrefixesVersionsAndDefaultsKeepTailsUntouched) {
     struct Large { es_config config; std::array<unsigned char,16> tail; } large;
     std::memset(&large,0xa5,sizeof(large));
-    ASSERT_EQ(es_config_init(ES_ABI_V1,sizeof(large),&large.config,&error),ES_OK);
+    ASSERT_EQ(es_config_init(ES_ABI_V2,sizeof(large),&large.config,&error),ES_OK);
     EXPECT_EQ(large.config.size,sizeof(large));EXPECT_EQ(large.config.seed,1u);EXPECT_EQ(large.config.output_hz,44100u);
     EXPECT_TRUE(std::all_of(large.tail.begin(),large.tail.end(),[](auto b){return b==0xa5;}));
     const auto saved=large;
-    EXPECT_EQ(es_config_init(ES_ABI_V1,sizeof(es_config)-1,&large.config,&error),ES_CAPACITY);
+    EXPECT_EQ(es_config_init(ES_ABI_V2,sizeof(es_config)-1,&large.config,&error),ES_CAPACITY);
     EXPECT_EQ(std::memcmp(&large,&saved,sizeof(large)),0);
-    EXPECT_EQ(es_config_init(0x00020000,sizeof(large),&large.config,&error),ES_VERSION);
-    EXPECT_EQ(es_config_init(0x00010001,sizeof(large),&large.config,&error),ES_VERSION);
+    EXPECT_EQ(es_config_init(0x00010000,sizeof(large),&large.config,&error),ES_VERSION);
+    EXPECT_EQ(es_config_init(0x00020001,sizeof(large),&large.config,&error),ES_VERSION);
     EXPECT_EQ(std::memcmp(&large,&saved,sizeof(large)),0);
     auto rt=create(false);
     struct LargeTelemetry { es_telemetry value; std::array<unsigned char,16> tail; } out;
-    std::memset(&out,0xcc,sizeof(out));out.value.size=sizeof(out);out.value.abi=ES_ABI_V1;
+    std::memset(&out,0xcc,sizeof(out));out.value.size=sizeof(out);out.value.abi=ES_ABI_V2;
     ASSERT_EQ(es_get_telemetry(rt.get(),&out.value,&error),ES_OK);
     EXPECT_EQ(out.value.size,sizeof(out));EXPECT_EQ(out.value.state,ES_EMPTY);EXPECT_EQ(out.value.output_hz,44100u);EXPECT_EQ(out.value.simulation_hz,0u);
     EXPECT_TRUE(std::all_of(out.tail.begin(),out.tail.end(),[](auto b){return b==0xcc;}));
@@ -108,15 +109,15 @@ TEST_F(RuntimeApi, InvalidCreateAndUnsupportedCapabilitiesNeverReturnAHandle) {
     config.simulation_hz=3999;reject(ES_INVALID);config.simulation_hz=96001;reject(ES_INVALID);config.simulation_hz=0;
     for(auto value:{-1.,10001.,std::numeric_limits<double>::infinity(),std::numeric_limits<double>::quiet_NaN()}) { config.starter_torque_nm=value;reject(ES_INVALID); }
     config.starter_torque_nm=0;config.size=8;reject(ES_CAPACITY);config.size=sizeof(config);config.abi=0;reject(ES_VERSION);
-    EXPECT_EQ(es_config_init(ES_ABI_V1,sizeof(config),nullptr,&error),ES_INVALID);
+    EXPECT_EQ(es_config_init(ES_ABI_V2,sizeof(config),nullptr,&error),ES_INVALID);
     EXPECT_EQ(es_create(nullptr,nullptr,nullptr),ES_INVALID);es_destroy(nullptr);
 }
 TEST_F(RuntimeApi, StateAndSpanValidationNeverWritesPcmOrAdvances) {
     auto rt=create(false);std::uint32_t written=99;std::array<float,8> pcm;pcm.fill(42);
     EXPECT_EQ(es_render(rt.get(),0,nullptr,0,&written,&error),ES_STATE);EXPECT_EQ(written,0u);
-    es_controls c{sizeof(c),ES_ABI_V1,0,0,0,0,0};EXPECT_EQ(es_set_controls(rt.get(),&c,&error),ES_STATE);
+    es_controls c{sizeof(c),ES_ABI_V2,0,0,0,0,0};EXPECT_EQ(es_set_controls(rt.get(),&c,&error),ES_STATE);
     EXPECT_EQ(es_reset(rt.get(),&error),ES_STATE);
-    ASSERT_EQ(es_load(rt.get(),(root/"main.mr").u8string().c_str(),(root/"library").u8string().c_str(),root.u8string().c_str(),&error),ES_OK);
+    ASSERT_EQ(es_load_json_file(rt.get(),(root/"main.json").u8string().c_str(),root.u8string().c_str(),nullptr,&error),ES_OK);
     EXPECT_EQ(es_render(rt.get(),0,nullptr,0,&written,&error),ES_OK);EXPECT_EQ(telemetry(rt.get()).frames,0u);
     EXPECT_EQ(es_render(rt.get(),8,pcm.data(),7,&written,&error),ES_CAPACITY);EXPECT_EQ(written,0u);
     EXPECT_EQ(es_render(rt.get(),ES_MAX_FRAMES+1,pcm.data(),UINT32_MAX,&written,&error),ES_CAPACITY);
@@ -129,7 +130,7 @@ TEST_F(RuntimeApi, StateAndSpanValidationNeverWritesPcmOrAdvances) {
 }
 TEST_F(RuntimeApi, RejectedControlsPreserveFullVectorAndErrorStorageIsIndependent) {
     auto a=create(),b=create();controls(a.get());controls(b.get());
-    const es_controls valid{sizeof(es_controls),ES_ABI_V1,1,1,.25,0,0};
+    const es_controls valid{sizeof(es_controls),ES_ABI_V2,1,1,.25,0,0};
     auto c=valid;es_error first{};
     c.ignition=2;EXPECT_EQ(es_set_controls(a.get(),&c,&first),ES_INVALID);const auto previous=first;
     c=valid;c.demand=std::numeric_limits<double>::quiet_NaN();EXPECT_EQ(es_set_controls(a.get(),&c,&error),ES_INVALID);
@@ -163,14 +164,15 @@ TEST_F(RuntimeApi, SameControlTimelineMatchesEveryPartitionAndTelemetryFormula) 
 }
 TEST_F(RuntimeApi, FailedReplacementAndInvalidPathsPreserveContinuation) {
     auto a=create(),b=create();controls(a.get());controls(b.get());EXPECT_EQ(render(a.get(),735),render(b.get(),735));
-    EXPECT_EQ(es_load(a.get(),"relative.mr",root.u8string().c_str(),root.u8string().c_str(),&error),ES_INVALID);
+    EXPECT_EQ(es_load_json_file(a.get(),"relative.json",root.u8string().c_str(),nullptr,&error),ES_INVALID);
     const char invalid[]{static_cast<char>(0xc0),static_cast<char>(0x80),0};
-    EXPECT_EQ(es_load(a.get(),invalid,root.u8string().c_str(),root.u8string().c_str(),&error),ES_INVALID);
-    EXPECT_EQ(es_load(a.get(),(root/"absent.mr").u8string().c_str(),root.u8string().c_str(),root.u8string().c_str(),&error),ES_RESOURCE);
-    const auto path=fs::absolute("broken.mr");{std::ofstream out(path);out<<"import \"absent_import_for_runtime_test.mr\"\n";}
-    EXPECT_EQ(es_load(a.get(),path.u8string().c_str(),(root/"library").u8string().c_str(),root.u8string().c_str(),&error),ES_RESOURCE);
-    {std::ofstream out(path);out<<"this is broken (";}
-    EXPECT_EQ(es_load(a.get(),path.u8string().c_str(),(root/"library").u8string().c_str(),root.u8string().c_str(),&error),ES_SCRIPT);
+    EXPECT_EQ(es_load_json_file(a.get(),invalid,root.u8string().c_str(),nullptr,&error),ES_INVALID);
+    EXPECT_EQ(es_load_json_file(a.get(),(root/"absent.json").u8string().c_str(),root.u8string().c_str(),nullptr,&error),ES_RESOURCE);
+    const auto model = (root/"main.json").u8string();
+    const auto noAssets = (root/"absent-assets").u8string();
+    EXPECT_EQ(es_load_json_file(a.get(),model.c_str(),noAssets.c_str(),nullptr,&error),ES_RESOURCE);
+    const auto path=fs::absolute("broken.json");{std::ofstream out(path);out<<"this is broken (";}
+    EXPECT_EQ(es_load_json_file(a.get(),path.u8string().c_str(),root.u8string().c_str(),nullptr,&error),ES_CONFIG);
     EXPECT_EQ(render(a.get(),4410),render(b.get(),4410));EXPECT_EQ(telemetry(a.get()).state,ES_READY);
 }
 TEST_F(RuntimeApi, ComputationFaultPublishesExactPrefixAndLastCoherentSnapshot) {
@@ -183,7 +185,7 @@ TEST_F(RuntimeApi, ComputationFaultPublishesExactPrefixAndLastCoherentSnapshot) 
     EXPECT_TRUE(std::all_of(pcm.begin()+38,pcm.end(),[](auto v){return v==42;}));
     const auto faulted=telemetry(a.get());EXPECT_EQ(faulted.state,ES_FAULTED);EXPECT_EQ(faulted.frames,37u);EXPECT_EQ(faulted.ticks,coherent.ticks);EXPECT_DOUBLE_EQ(faulted.crank_rad_s,coherent.crank_rad_s);EXPECT_DOUBLE_EQ(faulted.cycle_rad,coherent.cycle_rad);
     EXPECT_EQ(es_render(a.get(),0,nullptr,0,&written,&error),ES_STATE);EXPECT_EQ(written,0u);
-    es_controls c{sizeof(c),ES_ABI_V1,0,0,0,0,0};EXPECT_EQ(es_set_controls(a.get(),&c,&error),ES_STATE);
+    es_controls c{sizeof(c),ES_ABI_V2,0,0,0,0,0};EXPECT_EQ(es_set_controls(a.get(),&c,&error),ES_STATE);
     EXPECT_EQ(es_unload(a.get(),&error),ES_OK);EXPECT_EQ(telemetry(a.get()).frames,0u);
 }
 TEST_F(RuntimeApi, CounterCapacityIsRejectedBeforeAnySourceWork) {
@@ -221,8 +223,8 @@ TEST_F(RuntimeApi, DiagnosticTruncationKeepsCompleteUtf8AndNoGlobalLastError) {
     std::string name;for(int i=0;i<400;++i) name+=u8"é";
     const auto missing=(root/fs::u8path(name)).u8string();
     std::memset(&error,0xcc,sizeof(error));
-    EXPECT_EQ(es_load(rt.get(),missing.c_str(),root.u8string().c_str(),root.u8string().c_str(),&error),ES_RESOURCE);
-    EXPECT_NE(std::strstr(error.message,"resources:"),nullptr);
+    EXPECT_EQ(es_load_json_file(rt.get(),missing.c_str(),root.u8string().c_str(),nullptr,&error),ES_RESOURCE);
+    EXPECT_NE(std::strstr(error.message,"regular file"),nullptr);
     ASSERT_NE(std::memchr(error.message,0,sizeof(error.message)),nullptr);
     std::wstring_convert<std::codecvt_utf8<char32_t>,char32_t> decoder;
     EXPECT_NO_THROW(decoder.from_bytes(error.message));EXPECT_EQ(decoder.converted(),std::strlen(error.message));
@@ -245,7 +247,7 @@ TEST_F(RuntimeApi, FacadeMatchesPreparedPullAcrossFrequenciesAndControlEdges) {
         config.seed=UINT64_MAX;
         auto rt=create();
         auto direct=engine_sim::prepareEngine({root/"main.mr",root/"library",root},{frequency,ES_FREE,25,UINT64_MAX});
-        es_controls requested{sizeof(es_controls),ES_ABI_V1,1,1,.25,0,0};
+        es_controls requested{sizeof(es_controls),ES_ABI_V2,1,1,.25,0,0};
         auto &sim=*direct.session->simulator;
         engine_sim::PullEngine pull(sim,direct.session->synthesis,[&]{sim.getEngine()->setSpeedControl(requested.demand);sim.getEngine()->getIgnitionModule()->m_enabled=requested.ignition!=0;sim.m_starterMotor.m_enabled=requested.starter!=0;});
         const std::array<std::size_t,5> edges{0,147,257,441,44101};

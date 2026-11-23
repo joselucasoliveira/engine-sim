@@ -2,6 +2,7 @@
 #include "runtime.hpp"
 #include "simulation_fault.h"
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstring>
@@ -82,7 +83,7 @@ struct Fixture {
 Handle create(std::uint32_t rate, std::uint32_t mode) {
     es_error error{};
     es_config config{};
-    checked(es_config_init(ES_ABI_V1, sizeof(config), &config, &error), error);
+    checked(es_config_init(ES_ABI_V2, sizeof(config), &config, &error), error);
     config.output_hz = rate;
     config.mode = mode;
     config.seed = 403;
@@ -96,7 +97,7 @@ es_telemetry telemetry(es_runtime *runtime) {
     es_error error{};
     es_telemetry result{};
     result.size = sizeof(result);
-    result.abi = ES_ABI_V1;
+    result.abi = ES_ABI_V2;
     checked(es_get_telemetry(runtime, &result, &error), error);
     return result;
 }
@@ -108,7 +109,7 @@ void same(es_runtime *a, es_runtime *b) {
 }
 
 void controls(es_runtime *runtime, bool driven, unsigned phase) {
-    es_controls next{sizeof(es_controls), ES_ABI_V1, 1, driven || phase > 1 ? 0u : 1u,
+    es_controls next{sizeof(es_controls), ES_ABI_V2, 1, driven || phase > 1 ? 0u : 1u,
                      0.25 + (phase % 3) * 0.15, 0.5 + (phase % 3) * 0.125, driven ? 450.0 + phase * 50 : 0.0};
     es_error error{};
     checked(es_set_controls(runtime, &next, &error), error);
@@ -164,11 +165,11 @@ void transactional(const Fixture &fixture) {
             expect(json::reset(a.get(), &detail), ES_STATE, detail, "API_STATE");
             expect(json::load_bytes(a.get(), nullptr, 1, fixture.directory, &detail), ES_INVALID, detail, "API_INVALID");
             expect(json::load_bytes(a.get(), nullptr, 0, fixture.directory, &detail),
-                   json::configuration_error, detail, "CFG_SYNTAX");
+                   ES_CONFIG, detail, "CFG_SYNTAX");
             expect(json::load_bytes(a.get(), "x", std::numeric_limits<std::uint64_t>::max(), fixture.directory, &detail),
                    ES_CAPACITY, detail, "API_CAPACITY");
             expect(json::load_bytes(a.get(), "x", 16 * 1024 * 1024 + 1, fixture.directory, &detail),
-                   json::configuration_error, detail, "CFG_LIMIT");
+                   ES_CONFIG, detail, "CFG_LIMIT");
             expect(json::load_file(a.get(), "relative.json", fixture.directory, &detail), ES_INVALID, detail, "API_INVALID");
             require(telemetry(a.get()).state == ES_EMPTY, "Preflight advanced an empty handle");
 
@@ -176,10 +177,10 @@ void transactional(const Fixture &fixture) {
             advance(a.get(), b.get(), 0);
             struct Invalid { std::string_view bytes; es_status status; const char *code; };
             const Invalid failures[]{
-                {"{", json::configuration_error, "CFG_SYNTAX"},
+                {"{", ES_CONFIG, "CFG_SYNTAX"},
                 {"{\"format_version\":2}", ES_VERSION, "CFG_VERSION"},
-                {"{\"format_version\":1}", json::configuration_error, "CFG_SHAPE"},
-                {"{\"format_version\":1,\"format_version\":1}", json::configuration_error, "CFG_DUPLICATE_KEY"},
+                {"{\"format_version\":1}", ES_CONFIG, "CFG_SHAPE"},
+                {"{\"format_version\":1,\"format_version\":1}", ES_CONFIG, "CFG_DUPLICATE_KEY"},
             };
             controls(a.get(), mode == ES_DRIVEN, 1);
             controls(b.get(), mode == ES_DRIVEN, 1);
@@ -307,6 +308,152 @@ void identity(const Fixture &fixture) {
     checked(es_unload(file, &error), error);
     expect(json::reset(file, &detail), ES_STATE, detail, "API_STATE");
 }
+
+void public_abi(const Fixture &fixture) {
+    require(es_api_version() == ES_ABI_V2 && es_capabilities() == 1023, "Unexpected runtime version or capability set");
+    auto runtime = create(44100, ES_FREE);
+    struct Extended {
+        es_diagnostic detail;
+        std::array<unsigned char,16> tail;
+    };
+    Extended out;
+    std::memset(&out, 0xa5, sizeof(out));
+    auto &detail = out.detail;
+    const auto root = fixture.directory.u8string();
+    const auto entry = fixture.entry.u8string();
+    es_error error{};
+    detail.size = sizeof(out);
+    detail.abi = 0x00010000;
+    auto before = out;
+    require(es_load_json_file(runtime.get(), entry.c_str(), root.c_str(), &detail, &error) == ES_VERSION,
+            "A v1 record must be rejected");
+    require(std::memcmp(&before, &out, sizeof(out)) == 0, "Rejected ABI wrote diagnostic bytes");
+    detail.abi = ES_ABI_V2;
+    detail.size = sizeof(detail) - 1;
+    before = out;
+    require(es_reset_detailed(runtime.get(), &detail, &error) == ES_CAPACITY &&
+            std::memcmp(&before, &out, sizeof(out)) == 0,
+            "Rejected diagnostic capacity touched caller storage");
+
+    detail.size = sizeof(out);
+    const auto check = [&](es_status status, es_status expected, std::uint32_t stage, std::string_view code) {
+        require(status == expected && detail.stage == stage && detail.code == code,
+                "Unexpected caller-owned diagnostic");
+        require(out.tail == before.tail && detail.abi == ES_ABI_V2 && detail.size == sizeof(out),
+                "A C diagnostic modified its prefix metadata or the caller tail");
+    };
+    check(es_reset_detailed(runtime.get(), &detail, &error), ES_STATE, ES_DIAG_API, "API_STATE");
+    const char badPath[] = {'/', static_cast<char>(0xc0), static_cast<char>(0x80), 0};
+    check(es_load_json_file(runtime.get(), badPath, root.c_str(), &detail, &error),
+          ES_INVALID, ES_DIAG_API, "API_INVALID");
+    check(es_load_json_bytes(runtime.get(), nullptr, 1, root.c_str(), &detail, &error),
+          ES_INVALID, ES_DIAG_API, "API_INVALID");
+    check(es_load_json_bytes(runtime.get(), nullptr, 0, root.c_str(), &detail, &error),
+          ES_CONFIG, ES_DIAG_PARSE, "CFG_SYNTAX");
+    require(detail.path[0] == 0 && detail.byte_offset == 0 && detail.line == 1 && detail.column == 1,
+            "Byte-backed parse diagnostic has a wrong source or location");
+    const auto load = [&](std::string_view bytes) {
+        return es_load_json_bytes(runtime.get(), reinterpret_cast<const uint8_t *>(bytes.data()), bytes.size(),
+                                  root.c_str(), &detail, &error);
+    };
+    const uint8_t one = '{';
+    check(es_load_json_bytes(runtime.get(), &one, UINT64_MAX, root.c_str(), &detail, &error),
+          ES_CAPACITY, ES_DIAG_API, "API_CAPACITY");
+    check(es_load_json_bytes(runtime.get(), &one, (16u << 20) + 1, root.c_str(), &detail, &error),
+          ES_CONFIG, ES_DIAG_PARSE, "CFG_LIMIT");
+    check(load("{\"format_version\":2}"), ES_VERSION, ES_DIAG_SCHEMA, "CFG_VERSION");
+    require(std::string_view(detail.pointer) == "/format_version", "Expected the rejected version pointer");
+    const auto versionFailure = detail;
+    es_diagnostic separate{};
+    separate.size = sizeof(separate);
+    separate.abi = ES_ABI_V2;
+    const auto missing = (fixture.directory / "absent.json").u8string();
+    require(es_load_json_file(runtime.get(), missing.c_str(), root.c_str(), &separate, &error) == ES_RESOURCE &&
+            separate.stage == ES_DIAG_RESOURCE && separate.path == missing &&
+            std::memcmp(&versionFailure, &detail, sizeof(detail)) == 0,
+            "A second caller diagnostic clobbered the first");
+
+    std::string key;
+    for (int i = 0; i < 600; ++i) key += u8"é";
+    auto withUnknown = fixture.document;
+    withUnknown.insert(withUnknown.find('{') + 1, "\"" + key + "\":null,");
+    check(load(withUnknown), ES_CONFIG, ES_DIAG_SCHEMA, "CFG_SHAPE");
+    require(detail.truncated == (ES_DIAG_TRUNC_POINTER | ES_DIAG_TRUNC_FIELD) &&
+            std::string_view(detail.pointer) == "/" + key.substr(0, 1022) &&
+            std::string_view(detail.field) == key.substr(0, 126),
+            "Truncated diagnostic must keep complete UTF-8 scalars");
+
+    const auto differentSuffix = fixture.directory / "valid.data";
+    Fixture::write(differentSuffix, fixture.document);
+    const auto differentlyNamed = differentSuffix.u8string();
+    check(es_load_json_file(runtime.get(), differentlyNamed.c_str(), root.c_str(), &detail, &error),
+          ES_OK, ES_DIAG_NONE, "");
+    require(detail.path[0] == 0 && detail.pointer[0] == 0 && detail.message[0] == 0 &&
+            detail.byte_offset == ES_DIAG_NO_LOCATION && detail.line == ES_DIAG_NO_LOCATION &&
+            detail.column == ES_DIAG_NO_LOCATION && error.message[0] == 0 && detail.truncated == 0,
+            "Success did not clear the documented diagnostic fields");
+}
+
+void public_lifecycle(const Fixture &fixture) {
+    const auto entry = fixture.entry.u8string();
+    const auto root = fixture.directory.u8string();
+    const auto impulse = fixture.directory / "impulse.wav";
+    es_error error{};
+    es_diagnostic detail{};
+    detail.size = sizeof(detail);
+    detail.abi = ES_ABI_V2;
+    for (const auto mode : {ES_FREE, ES_DRIVEN}) {
+        for (const auto rate : {44100u, 48000u}) {
+            auto a = create(rate, mode), b = create(rate, mode);
+            checked(es_load_json_file(a.get(), entry.c_str(), root.c_str(), &detail, &error), error);
+            auto bytes = fixture.document;
+            checked(es_load_json_bytes(b.get(), reinterpret_cast<const uint8_t *>(bytes.data()), bytes.size(),
+                                       root.c_str(), &detail, &error), error);
+            bytes.assign(bytes.size(), '!');
+            advance(a.get(), b.get(), 0);
+
+            controls(a.get(), mode == ES_DRIVEN, 1);
+            controls(b.get(), mode == ES_DRIVEN, 1);
+            const uint8_t malformed[] = {'{','\n','!'};
+            require(es_load_json_bytes(a.get(), malformed, sizeof(malformed), root.c_str(), &detail, &error) == ES_CONFIG
+                    && detail.stage == ES_DIAG_PARSE, "Malformed byte load did not report parse failure");
+            same(a.get(), b.get());
+            require(render(a.get(), 37) == render(b.get(), 37), "Failed load changed pending controls or frame phase");
+
+            Fixture::write(fixture.entry, bytes);
+            require(es_reset_detailed(a.get(), &detail, &error) == ES_RESOURCE && detail.stage == ES_DIAG_RESOURCE &&
+                    std::string_view(detail.code) == "CFG_RESOURCE_BYTES", "Reset must reject changed file bytes before parsing");
+            same(a.get(), b.get());
+            Fixture::write(fixture.entry, fixture.document);
+            engine_sim::RuntimeTestAccess::faultNextTick(*a);
+            std::array<float,16> pcm;
+            pcm.fill(42.0f);
+            std::uint32_t written = 99;
+            require(es_render(a.get(), pcm.size(), pcm.data(), pcm.size(), &written, &error) == ES_RENDER_FAULT &&
+                    written < pcm.size() && std::all_of(pcm.begin() + written, pcm.end(), [](float value) { return value == 42.0f; }),
+                    "Fault must publish only its completed prefix");
+            const auto fault = telemetry(a.get());
+            fs::remove(impulse);
+            require(es_reset_detailed(a.get(), &detail, &error) == ES_RESOURCE && detail.path == impulse.u8string(),
+                    "Reset must verify the original resource path while faulted");
+            const auto after = telemetry(a.get());
+            require(fault.state == ES_FAULTED && std::memcmp(&fault, &after, sizeof(fault)) == 0,
+                    "Failed reset replaced its faulted snapshot");
+            Fixture::write(impulse, fixture.impulse);
+            checked(es_reset_detailed(a.get(), &detail, &error), error);
+            fs::remove(fixture.entry);
+            checked(es_reset(b.get(), &error), error);
+            same(a.get(), b.get());
+            require(telemetry(a.get()).frames == 0 && telemetry(a.get()).state == ES_READY,
+                    "Successful reset must restart the session");
+            advance(a.get(), b.get(), 2);
+            checked(es_unload(a.get(), &error), error);
+            checked(es_unload(a.get(), &error), error);
+            require(es_reset(a.get(), &error) == ES_STATE, "Reset must reject EMPTY");
+            Fixture::write(fixture.entry, fixture.document);
+        }
+    }
+}
 }
 
 int main(int argc, char **argv) {
@@ -316,6 +463,8 @@ int main(int argc, char **argv) {
         const std::string_view mode = argv[1];
         if (mode == "transactional") transactional(fixture);
         else if (mode == "identity") identity(fixture);
+        else if (mode == "v2-abi") public_abi(fixture);
+        else if (mode == "v2-lifecycle") public_lifecycle(fixture);
         else return 2;
     } catch (const std::exception &error) {
         std::cerr << error.what() << '\n';

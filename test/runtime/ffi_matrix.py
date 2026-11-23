@@ -8,7 +8,8 @@ def matrix(library, fixture):
         for rate in (44100, 48000):
             events = [(0, .25, 0, 1, 1 if mode == 0 else 0, 600 if mode else 0),
                       (rate, .25, 1 if mode else 0, 1, 0, 600 if mode else 0)]
-            pcm, telemetry = render(library, fixture / "main.mr", (fixture / "library", fixture), rate, mode, 17, rate * 2, events)
+            pcm, telemetry = render(library, fixture / "main.json", fixture, rate, mode, 17, rate * 2, events,
+                                    use_bytes=bool(mode))
             fingerprint = 14695981039346656037
             for value in pcm:
                 fingerprint = ((fingerprint ^ value) * 1099511628211) & ((1 << 64) - 1)

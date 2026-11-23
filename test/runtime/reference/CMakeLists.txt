@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 project(RuntimeReference LANGUAGES C CXX)
-find_package(EngineSimRuntime 1 CONFIG REQUIRED)
+find_package(EngineSimRuntime 2 CONFIG REQUIRED)
 add_executable(runtime-direct-reference direct.c)
 target_link_libraries(runtime-direct-reference PRIVATE EngineSim::Runtime)
 set_target_properties(runtime-direct-reference PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO LINKER_LANGUAGE CXX)

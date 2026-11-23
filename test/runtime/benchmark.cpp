@@ -1,3 +1,4 @@
+#include "legacy_runtime.hpp"
 #ifdef _WIN32
 #define NOMINMAX
 #include <windows.h>
@@ -193,22 +194,22 @@ class Instance {
 public:
     explicit Instance(const Options &options) : m_options(options), m_handle(nullptr, es_destroy),
         m_output(options.rate / 100 * options.measureBlocks) {
-        es_config config{}; es_error error{}; checked(es_config_init(ES_ABI_V1, sizeof(config), &config, &error), error);
+        es_config config{}; es_error error{}; checked(es_config_init(ES_ABI_V2, sizeof(config), &config, &error), error);
         config.output_hz = options.rate; config.seed = options.seed;
         es_runtime *raw = nullptr; auto start = Clock::now(); es_status status;
         { CountScope count(stats.createCounts); status = es_create(&config, &raw, &error); }
         stats.create = elapsed(start); checked(status, error); m_handle.reset(raw);
         const auto entry = options.entry.u8string(), library = options.library.u8string(), assets = options.assets.u8string();
         start = Clock::now();
-        { CountScope count(stats.loadCounts); status = es_load(raw, entry.c_str(), library.c_str(), assets.c_str(), &error); }
+        { CountScope count(stats.loadCounts); status = engine_sim::legacy_runtime::load(raw, entry.c_str(), library.c_str(), assets.c_str(), &error); }
         stats.load = elapsed(start); checked(status, error);
         start = Clock::now();
-        { CountScope count(stats.resetCounts); status = es_reset(raw, &error); }
+        { CountScope count(stats.resetCounts); status = engine_sim::legacy_runtime::reset(raw, &error); }
         stats.reset = elapsed(start); checked(status, error);
         checked(es_unload(raw, &error), error); start = Clock::now();
-        { CountScope count(stats.reloadCounts); status = es_load(raw, entry.c_str(), library.c_str(), assets.c_str(), &error); }
+        { CountScope count(stats.reloadCounts); status = engine_sim::legacy_runtime::load(raw, entry.c_str(), library.c_str(), assets.c_str(), &error); }
         stats.reload = elapsed(start); checked(status, error);
-        es_telemetry metadata{}; metadata.size = sizeof(metadata); metadata.abi = ES_ABI_V1;
+        es_telemetry metadata{}; metadata.size = sizeof(metadata); metadata.abi = ES_ABI_V2;
         checked(es_get_telemetry(raw, &metadata, &error), error); m_frequency = metadata.simulation_hz;
         if (options.pipeline != "public") {
             auto &pull = engine_sim::RuntimeTestAccess::pull(*raw);
@@ -226,7 +227,7 @@ public:
         unsigned position = 0;
         for (unsigned phase = 0; phase < events.size(); ++phase) {
             const unsigned stop = phase + 1 < events.size() ? std::min(end, events[phase + 1]) : end;
-            es_error error{}; const es_controls value{sizeof(value), ES_ABI_V1, phase != 0, phase == 1,
+            es_error error{}; const es_controls value{sizeof(value), ES_ABI_V2, phase != 0, phase == 1,
                 m_options.schedule == "legacy" ? .1 : .3, 0, 0};
             checked(es_set_controls(m_handle.get(), &value, &error), error);
             while (position < stop) { const auto count = std::min<unsigned>(scratch.size(), stop - position); pull(scratch.data(), count); m_previousOutput = scratch[count - 1]; position += count; }
@@ -285,7 +286,7 @@ private:
     }
     engine_sim::ClockCounts counts() const {
         if (m_core) return m_core->counts();
-        es_error error{}; es_telemetry value{}; value.size = sizeof(value); value.abi = ES_ABI_V1;
+        es_error error{}; es_telemetry value{}; value.size = sizeof(value); value.abi = ES_ABI_V2;
         checked(es_get_telemetry(m_handle.get(), &value, &error), error); return {value.frames, value.ticks, value.native_frames};
     }
     const Options &m_options;
@@ -335,14 +336,14 @@ int convert(const Options &config) {
 }
 int cycles(const Options &config) {
     if (config.instances != 1) throw std::invalid_argument("Lifecycle probe uses one owner");
-    es_config settings{}; es_error error{}; checked(es_config_init(ES_ABI_V1, sizeof(settings), &settings, &error), error);
+    es_config settings{}; es_error error{}; checked(es_config_init(ES_ABI_V2, sizeof(settings), &settings, &error), error);
     settings.output_hz = config.rate; settings.seed = config.seed;
     const auto entry = config.entry.u8string(), library = config.library.u8string(), assets = config.assets.u8string();
     std::array<float, 257> output{};
     auto cycle = [&] {
         es_runtime *raw = nullptr; checked(es_create(&settings, &raw, &error), error); Handle handle(raw, es_destroy);
-        checked(es_load(raw, entry.c_str(), library.c_str(), assets.c_str(), &error), error);
-        const es_controls controls{sizeof(controls), ES_ABI_V1, 1, 1, .3, 0, 0}; checked(es_set_controls(raw, &controls, &error), error);
+        checked(engine_sim::legacy_runtime::load(raw, entry.c_str(), library.c_str(), assets.c_str(), &error), error);
+        const es_controls controls{sizeof(controls), ES_ABI_V2, 1, 1, .3, 0, 0}; checked(es_set_controls(raw, &controls, &error), error);
         std::uint32_t written = 99; checked(es_render(raw, output.size(), output.data(), output.size(), &written, &error), error);
         if (written != output.size()) throw std::runtime_error("Lifecycle measurement lost frames");
         checked(es_unload(raw, &error), error);

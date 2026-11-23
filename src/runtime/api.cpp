@@ -1,66 +1,34 @@
+#include "api_text.hpp"
+#include "json_runtime.hpp"
 #include "runtime.hpp"
 #include "simulation_fault.h"
-#include "constants.h"
-#include "piston_engine_simulator.h"
-#include "shaft_drive.hpp"
 
-#include <algorithm>
 #include <cmath>
-#include <cstddef>
-#include <cstring>
-#include <filesystem>
 #include <limits>
 #include <new>
 #include <stdexcept>
 
 namespace {
-// Validate scalar UTF-8 without allocating, including overlongs and surrogates.
-std::size_t character(const unsigned char *s) noexcept {
-    const auto c = s[0];
-    if (c < 0x80) return c ? 1 : 0;
-    const unsigned length = c >= 0xc2 && c <= 0xdf ? 2 : c >= 0xe0 && c <= 0xef ? 3 : c >= 0xf0 && c <= 0xf4 ? 4 : 0;
-    if (!length) return 0;
-    for (unsigned i = 1; i < length; ++i) if (s[i] < 0x80 || s[i] > 0xbf) return 0;
-    if ((c == 0xe0 && s[1] < 0xa0) || (c == 0xed && s[1] > 0x9f)
-        || (c == 0xf0 && s[1] < 0x90) || (c == 0xf4 && s[1] > 0x8f)) return 0;
-    return length;
-}
-bool utf8(const char *text) noexcept {
-    const auto *p = reinterpret_cast<const unsigned char *>(text);
-    while (*p) { const auto count = character(p); if (!count) return false; p += count; }
-    return true;
-}
-es_status fail(es_error *error, es_status status, const char *text) noexcept {
-    if (error) {
-        std::size_t at = 0;
-        auto *input = reinterpret_cast<const unsigned char *>(text);
-        while (*input && at < sizeof(error->message) - 1) {
-            const auto count = character(input);
-            if (!count) { error->message[at++] = '?'; ++input; continue; }
-            if (count > sizeof(error->message) - 1 - at) break;
-            std::memcpy(error->message + at, input, count); at += count; input += count;
-        }
-        error->message[at] = 0;
-    }
-    return status;
-}
+namespace api = engine_sim::api;
+namespace json = engine_sim::json_runtime;
+using engine_sim::config_v1::Diagnostic;
+using api::fail;
+
 es_status record(std::uint32_t abi, std::uint32_t capacity, std::size_t minimum, es_error *error) noexcept {
-    if ((abi >> 16) != 1 || (abi & 0xffff) != 0) return fail(error, ES_VERSION, "abi: unsupported record version");
+    if (abi != ES_ABI_V2) return fail(error, ES_VERSION, "abi: unsupported record version");
     if (capacity < minimum) return fail(error, ES_CAPACITY, "size: record prefix is too small");
     return ES_OK;
+}
+template<class Record> es_status record(const Record &value, es_error *error) noexcept {
+    const auto size = value.size;
+    if (size < 2 * sizeof(std::uint32_t))
+        return fail(error, ES_CAPACITY, "size: record prefix is too small");
+    return record(value.abi, size, sizeof(Record), error);
 }
 template<class Operation> es_status boundary(es_error *error, Operation operation) noexcept {
     if (error) error->message[0] = 0;
     try { return operation(); }
     catch (const std::bad_alloc &) { return fail(error, ES_NO_MEMORY, "runtime: allocation failed"); }
-    catch (const EngineLoadError &e) {
-        const auto &stage = e.diagnostic.stage;
-        const auto status = stage == "resources" ? ES_RESOURCE
-            : stage == "compile" || stage == "execute" ? ES_SCRIPT
-            : stage == "unsupported" ? ES_UNSUPPORTED
-            : stage == "paths" || stage == "configuration" ? ES_INVALID : ES_MODEL;
-        return fail(error, status, e.what());
-    }
     catch (const engine_sim::SimulationFault &e) { return fail(error, ES_RENDER_FAULT, e.what()); }
     catch (const std::overflow_error &e) { return fail(error, ES_CAPACITY, e.what()); }
     catch (const std::exception &e) { return fail(error, ES_INTERNAL, e.what()); }
@@ -75,23 +43,91 @@ es_status configStatus(const es_config &c, es_error *error) noexcept {
     if (c.mode == ES_DRIVEN && c.starter_torque_nm != 0) return fail(error, ES_UNSUPPORTED, "config.starter_torque_nm: unavailable in driven mode");
     return ES_OK;
 }
-es_status pathStatus(const char *text, bool directory, std::filesystem::path &out, es_error *error) {
-    if (!utf8(text)) return fail(error, ES_INVALID, "paths: malformed UTF-8");
-    out = std::filesystem::u8path(text);
-    if (!out.is_absolute()) return fail(error, ES_INVALID, "paths: absolute entry, library and asset paths are required");
-    std::error_code failure;
-    const bool exists = directory ? std::filesystem::is_directory(out, failure) : std::filesystem::is_regular_file(out, failure);
-    if (!exists || failure) {
-        const auto message = std::string("resources: ") + text + (directory ? ": expected an existing directory" : ": expected an existing entry file");
-        return fail(error, ES_RESOURCE, message.c_str());
+std::uint32_t stage(std::string_view value) noexcept {
+    if (value == "parse") return ES_DIAG_PARSE;
+    if (value == "shape" || value == "version") return ES_DIAG_SCHEMA;
+    if (value == "normalize") return ES_DIAG_NORMALIZE;
+    if (value == "graph") return ES_DIAG_SEMANTIC;
+    if (value == "resources") return ES_DIAG_RESOURCE;
+    if (value == "initialize") return ES_DIAG_PREPARE;
+    return ES_DIAG_API;
+}
+
+void writeDiagnostic(es_diagnostic &out, const Diagnostic &diagnostic) noexcept {
+    es_diagnostic value{};
+    value.size = out.size;
+    value.abi = out.abi;
+    value.stage = diagnostic.code.empty() ? ES_DIAG_NONE : stage(diagnostic.stage);
+    value.byte_offset = diagnostic.byte_offset.value_or(ES_DIAG_NO_LOCATION);
+    value.line = diagnostic.line.value_or(ES_DIAG_NO_LOCATION);
+    value.column = diagnostic.column.value_or(ES_DIAG_NO_LOCATION);
+    api::copy(value.code, diagnostic.code);
+    if (api::copy(value.pointer, diagnostic.pointer)) value.truncated |= ES_DIAG_TRUNC_POINTER;
+    if (diagnostic.component_id && api::copy(value.component_id, *diagnostic.component_id))
+        value.truncated |= ES_DIAG_TRUNC_COMPONENT;
+    if (diagnostic.field && api::copy(value.field, *diagnostic.field)) value.truncated |= ES_DIAG_TRUNC_FIELD;
+    if (diagnostic.path && api::copy(value.path, *diagnostic.path)) value.truncated |= ES_DIAG_TRUNC_PATH;
+    if (api::copy(value.message, diagnostic.message)) value.truncated |= ES_DIAG_TRUNC_MESSAGE;
+    std::memcpy(&out, &value, sizeof(value));
+}
+
+es_status diagnosticFailure(es_diagnostic *detail, es_error *error, es_status status,
+                             std::uint32_t stage, std::string_view code, std::string_view message) noexcept {
+    if (detail) {
+        writeDiagnostic(*detail, {});
+        detail->stage = stage;
+        api::copy(detail->code, code);
+        api::copy(detail->message, message);
     }
-    return ES_OK;
+    return fail(error, status, message);
+}
+
+bool path(const char *text, std::filesystem::path &value) {
+    if (!text || !api::utf8(text)) return false;
+    value = std::filesystem::u8path(text);
+    return value.is_absolute();
+}
+
+template<class Operation>
+es_status jsonBoundary(es_diagnostic *detail, es_error *error, const Operation &operation) noexcept {
+    if (error) error->message[0] = '\0';
+    if (detail) {
+        const auto status = record(*detail, error);
+        if (status != ES_OK) return status;
+    }
+    Diagnostic failure;
+    es_status status;
+    try {
+        status = operation(detail ? &failure : nullptr);
+    } catch (const std::bad_alloc &) {
+        status = ES_NO_MEMORY;
+    } catch (...) {
+        status = ES_INTERNAL;
+    }
+    if (status == ES_NO_MEMORY)
+        return diagnosticFailure(detail, error, status, ES_DIAG_PREPARE, "CFG_MEMORY", "Allocation failed");
+    if (status == ES_INTERNAL)
+        return diagnosticFailure(detail, error, status, ES_DIAG_API, "API_INTERNAL", "Unexpected runtime exception");
+    if (status == ES_RESOURCE && detail && failure.code.empty())
+        return diagnosticFailure(detail, error, status, ES_DIAG_RESOURCE, "CFG_RESOURCE_PATH", "Filesystem operation failed");
+    if (detail) writeDiagnostic(*detail, failure);
+    return status;
+}
+
+es_status invalid(Diagnostic *detail, es_error *error, const char *message) {
+    if (detail) {
+        detail->code = "API_INVALID";
+        detail->stage = "api";
+        detail->message = message;
+    }
+    return fail(error, ES_INVALID, message);
 }
 }
 
 extern "C" {
-uint32_t ES_CALL es_api_version(void) { return ES_ABI_V1; }
-uint32_t ES_CALL es_capabilities(void) { return ES_CAP_FREE | ES_CAP_44100 | ES_CAP_48000 | ES_CAP_LOAD | ES_CAP_DRIVEN | ES_CAP_RESET | ES_CAP_PARALLEL_RENDER; }
+uint32_t ES_CALL es_api_version(void) { return ES_ABI_V2; }
+uint32_t ES_CALL es_capabilities(void) { return ES_CAP_FREE | ES_CAP_44100 | ES_CAP_48000 | ES_CAP_LOAD | ES_CAP_DRIVEN | ES_CAP_RESET | ES_CAP_PARALLEL_RENDER
+    | ES_CAP_JSON_FILE | ES_CAP_JSON_BYTES | ES_CAP_CONFIG_DIAGNOSTIC; }
 es_status ES_CALL es_config_init(uint32_t abi, uint32_t capacity, es_config *out, es_error *error) {
     return boundary(error, [&] {
         if (!out) return fail(error, ES_INVALID, "config: NULL destination");
@@ -104,25 +140,33 @@ es_status ES_CALL es_create(const es_config *config, es_runtime **out, es_error 
     if (out) *out = nullptr;
     return boundary(error, [&] {
         if (!config || !out) return fail(error, ES_INVALID, "create: config and output slot are required");
-        auto status = record(config->abi, config->size, sizeof(es_config), error); if (status) return status;
+        auto status = record(*config, error); if (status) return status;
         status = configStatus(*config, error); if (status) return status;
         *out = new es_runtime(*config); return ES_OK;
     });
 }
-es_status ES_CALL es_load(es_runtime *rt, const char *entry, const char *library, const char *assets, es_error *error) {
-    return boundary(error, [&] {
-        if (!rt || !entry || !library || !assets) return fail(error, ES_INVALID, "load: handle and all paths are required");
-        es_script::PreparationContext recipe;
-        for (const auto item : {std::make_pair(entry, &recipe.entry), std::make_pair(library, &recipe.libraryRoot), std::make_pair(assets, &recipe.assetRoot)}) {
-            const auto status = pathStatus(item.first, item.second != &recipe.entry, *item.second, error); if (status) return status;
-        }
-        rt->implementation.load(recipe); return ES_OK;
+es_status ES_CALL es_load_json_file(es_runtime *rt, const char *entry, const char *root,
+                                    es_diagnostic *detail, es_error *error) {
+    return jsonBoundary(detail, error, [&](Diagnostic *problem) {
+        std::filesystem::path entryPath, rootPath;
+        if (!rt || !path(entry, entryPath) || !path(root, rootPath))
+            return invalid(problem, error, "A runtime and absolute UTF-8 entry and asset paths are required");
+        return json::load_file(rt, entryPath, rootPath, problem, error);
+    });
+}
+es_status ES_CALL es_load_json_bytes(es_runtime *rt, const uint8_t *bytes, uint64_t length, const char *root,
+                                     es_diagnostic *detail, es_error *error) {
+    return jsonBoundary(detail, error, [&](Diagnostic *problem) {
+        std::filesystem::path rootPath;
+        if (!rt || !path(root, rootPath))
+            return invalid(problem, error, "A runtime and absolute UTF-8 asset path are required");
+        return json::load_bytes(rt, reinterpret_cast<const char *>(bytes), length, rootPath, problem, error);
     });
 }
 es_status ES_CALL es_set_controls(es_runtime *rt, const es_controls *controls, es_error *error) {
     return boundary(error, [&] {
         if (!rt || !controls) return fail(error, ES_INVALID, "controls: handle and vector are required");
-        auto status = record(controls->abi, controls->size, sizeof(es_controls), error); if (status) return status;
+        auto status = record(*controls, error); if (status) return status;
         if (controls->ignition > 1 || controls->starter > 1 || !finiteRange(controls->demand, 1)
             || !finiteRange(controls->load_nm, 10000) || !finiteRange(controls->driven_rpm, 12000))
             return fail(error, ES_INVALID, "controls: invalid boolean or numeric range");
@@ -148,17 +192,16 @@ es_status ES_CALL es_render(es_runtime *rt, uint32_t frames, float *mono, uint32
 es_status ES_CALL es_get_telemetry(const es_runtime *rt, es_telemetry *out, es_error *error) {
     return boundary(error, [&] {
         if (!rt || !out) return fail(error, ES_INVALID, "telemetry: handle and destination are required");
-        const auto status = record(out->abi, out->size, sizeof(es_telemetry), error); if (status) return status;
+        const auto status = record(*out, error); if (status) return status;
         auto value = rt->implementation.telemetry(); value.size = out->size; value.abi = out->abi;
         std::memcpy(out, &value, sizeof(value)); return ES_OK;
     });
 }
 es_status ES_CALL es_reset(es_runtime *rt, es_error *error) {
-    return boundary(error, [&] {
-        if (!rt) return fail(error, ES_INVALID, "reset: handle is required");
-        if (rt->implementation.telemetry().state == ES_EMPTY) return fail(error, ES_STATE, "reset: prepared engine required");
-        rt->implementation.reset(); return ES_OK;
-    });
+    return es_reset_detailed(rt, nullptr, error);
+}
+es_status ES_CALL es_reset_detailed(es_runtime *rt, es_diagnostic *detail, es_error *error) {
+    return jsonBoundary(detail, error, [&](Diagnostic *problem) { return json::reset(rt, problem, error); });
 }
 es_status ES_CALL es_unload(es_runtime *rt, es_error *error) {
     return boundary(error, [&] {

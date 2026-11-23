@@ -3,6 +3,10 @@
 
 #include "runtime.hpp"
 #include "../../include/desktop_engine_views.h"
+#include <filesystem>
+
+namespace es_script { struct PreparationContext; }
+namespace engine_sim { struct PreparedEngine; }
 
 namespace desktop {
 // Private owner adapter. Device pacing and presentation stay in the application;

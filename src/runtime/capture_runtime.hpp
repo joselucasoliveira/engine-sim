@@ -1,7 +1,7 @@
 #ifndef ENGINE_SIM_PRIVATE_CAPTURE_RUNTIME_HPP
 #define ENGINE_SIM_PRIVATE_CAPTURE_RUNTIME_HPP
 
-#include "runtime.hpp"
+#include "legacy_runtime.hpp"
 #include <array>
 #include <limits>
 
@@ -39,7 +39,9 @@ public:
     Synthesizer::BufferStatistics synthesisStatistics() const {
         return m_runtime.m_session->prepared.session->synthesis.getBufferStatistics();
     }
-    const std::vector<es_script::ScriptInput> &inputs() const { return std::get<engine_sim::Runtime::LegacyRecipe>(m_runtime.m_session->prepared.recipe).inputs; }
+    const std::vector<es_script::ScriptInput> &inputs() const {
+        return engine_sim::legacy_runtime::Access::saved(m_runtime)->inputs;
+    }
     const es_telemetry &telemetry() const { return m_runtime.telemetry(); }
     const Diagnostics &diagnostics() const { return m_diagnostics; }
     TickSample current() const;

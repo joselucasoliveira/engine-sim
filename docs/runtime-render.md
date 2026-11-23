@@ -2,14 +2,16 @@
 
 Build the optional native examples with `ENGINE_SIM_BUILD_RUNTIME_EXAMPLES=ON` in a `runtime-static` or `runtime-shared` SDK build. Install component `RuntimeSDK` into its own prefix. `engine-sim-render` uses only the public C interface and opens no audio device. The native tool has no Python dependency. The source at `examples/runtime` also builds as an independent CMake project against an installed `EngineSim::Runtime` target.
 
-Supply all nine options:
+Supply the eight options shown here.
 
 ```sh
-engine-sim-render --entry "$MODEL/main.mr" --library-root "$MODEL/library" --asset-root "$MODEL" \
+engine-sim-render --entry "$MODEL/main.json" --asset-root "$MODEL" \
   --rate 48000 --mode free --seed 1 --frames 96017 --schedule "$OUT/run.tsv" --out "$OUT/run.wav"
 ```
 
-Entry, library and asset paths must be absolute UTF-8 paths, as required by the C API. The schedule and output paths may be relative to the caller's directory. On Windows the native wide-character entry point preserves Unicode arguments, including output paths. Rates are 44100 or 48000 Hz; modes are `free` or `driven`. Seeds accept every unsigned 64-bit value.
+The JSON entry and asset root must be absolute UTF-8 paths, as required by the C API. The schedule and output paths may be relative to the caller's directory. On Windows the native wide-character entry point preserves Unicode arguments, including output paths. Rates are 44100 or 48000 Hz; modes are `free` or `driven`. Seeds accept every unsigned 64-bit value.
+
+Convert a legacy script with `engine-sim-convert` before running the renderer. [Legacy converter guide](legacy-converter.md)
 
 The schedule is a UTF-8 TSV file with this exact header and six tab-separated fields per row:
 
@@ -27,13 +29,13 @@ Rows use nondecreasing absolute unsigned frame indices less than `--frames`. The
 
 Output is mono IEEE float32 little-endian RIFF/WAVE, format tag 3, with a fact sample count and exact final partial block. The tool checks the 32-bit RIFF extent before rendering. It writes a unique temporary file beside the destination and publishes the completed file after successful rendering and close. Invalid input, runtime faults and I/O failures return a nonzero exit status; temporary audio is discarded. An existing destination is preserved and rejected. Zero frames with a header-only schedule produces a valid empty WAV.
 
-`engine-sim-runtime-consumer` is the accompanying C11 example. Pass absolute entry, library and asset paths to render two seconds through caller-owned blocks. The independent consumer project under `examples/runtime/consumer` includes C11 and C++17 clients; static clients use the C++ final link.
+`engine-sim-runtime-consumer` is the accompanying C11 example. Pass the absolute JSON entry and asset root to render two seconds through caller-owned blocks. The independent consumer project under `examples/runtime/consumer` includes C11 and C++17 clients; static clients use the C++ final link.
 
-`examples/runtime/ffi_smoke.py` demonstrates `ctypes.CDLL` with cdecl bindings for all eleven functions, native record sizes/offsets, caller-owned PCM and diagnostics before creation:
+`examples/runtime/ffi_smoke.py` demonstrates `ctypes.CDLL` with cdecl bindings for all thirteen functions, native record sizes/offsets, caller-owned PCM and diagnostics before creation:
 
 ```sh
-python3 examples/runtime/ffi_smoke.py --library "$SDK/lib/libengine-sim-runtime.so.1" \
-  --entry "$MODEL/main.mr" --library-root "$MODEL/library" --asset-root "$MODEL"
+python3 examples/runtime/ffi_smoke.py --library "$SDK/lib/libengine-sim-runtime.so.2" \
+  --entry "$MODEL/main.json" --asset-root "$MODEL"
 ```
 
 Select the installed DLL or dylib path on other hosts. The script renders two seconds at 48 kHz, releases the starter after one second, inspects telemetry, resets, unloads and destroys the handle. It never frees a library allocation directly. Serialize calls to each handle; separate prepared handles may render independently. Library qualification is recorded per native platform, independently of these example sources.

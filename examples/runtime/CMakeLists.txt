@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.25)
 if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     project(EngineSimRuntimeExamples LANGUAGES C CXX)
-    find_package(EngineSimRuntime 1.0 CONFIG REQUIRED)
+    find_package(EngineSimRuntime 2.0 CONFIG REQUIRED)
     include(GNUInstallDirs)
 else ()
     enable_language(C)

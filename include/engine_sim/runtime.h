@@ -22,7 +22,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-#define ES_ABI_V1 UINT32_C(0x00010000)
+#define ES_ABI_V2 UINT32_C(0x00020000)
 #define ES_MAX_FRAMES UINT32_C(65536)
 #define ES_CAP_FREE    UINT32_C(1)
 #define ES_CAP_44100   UINT32_C(2)
@@ -31,6 +31,9 @@ extern "C" {
 #define ES_CAP_DRIVEN  UINT32_C(16)
 #define ES_CAP_RESET   UINT32_C(32)
 #define ES_CAP_PARALLEL_RENDER UINT32_C(64)
+#define ES_CAP_JSON_FILE UINT32_C(128)
+#define ES_CAP_JSON_BYTES UINT32_C(256)
+#define ES_CAP_CONFIG_DIAGNOSTIC UINT32_C(512)
 #define ES_FREE UINT32_C(0)
 #define ES_DRIVEN UINT32_C(1)
 #define ES_EMPTY UINT32_C(0)
@@ -43,17 +46,38 @@ typedef int32_t es_status;
 #define ES_VERSION        INT32_C(2)
 #define ES_UNSUPPORTED    INT32_C(3)
 #define ES_STATE          INT32_C(4)
-#define ES_SCRIPT         INT32_C(5)
+/* Value 5 is reserved for the removed v1 script error. */
 #define ES_RESOURCE       INT32_C(6)
 #define ES_MODEL          INT32_C(7)
 #define ES_CAPACITY       INT32_C(8)
 #define ES_NO_MEMORY      INT32_C(9)
 #define ES_RENDER_FAULT   INT32_C(10)
 #define ES_INTERNAL       INT32_C(11)
+#define ES_CONFIG         INT32_C(12)
 
 typedef struct es_runtime es_runtime;
 /* Fixed storage, valid without initialization. Always NUL-terminated when supplied. */
 typedef struct es_error { char message[512]; } es_error;
+#define ES_DIAG_NONE UINT32_C(0)
+#define ES_DIAG_PARSE UINT32_C(1)
+#define ES_DIAG_SCHEMA UINT32_C(2)
+#define ES_DIAG_NORMALIZE UINT32_C(3)
+#define ES_DIAG_SEMANTIC UINT32_C(4)
+#define ES_DIAG_RESOURCE UINT32_C(5)
+#define ES_DIAG_PREPARE UINT32_C(6)
+#define ES_DIAG_API UINT32_C(7)
+#define ES_DIAG_NO_LOCATION UINT64_MAX
+#define ES_DIAG_TRUNC_POINTER UINT32_C(1)
+#define ES_DIAG_TRUNC_COMPONENT UINT32_C(2)
+#define ES_DIAG_TRUNC_FIELD UINT32_C(4)
+#define ES_DIAG_TRUNC_PATH UINT32_C(8)
+#define ES_DIAG_TRUNC_MESSAGE UINT32_C(16)
+/* Optional caller-owned output. Initialize size and abi before the call. */
+typedef struct es_diagnostic {
+    uint32_t size, abi, stage, truncated;
+    uint64_t byte_offset, line, column;
+    char code[32], pointer[1024], component_id[128], field[128], path[1024], message[512];
+} es_diagnostic;
 typedef struct es_config {
     uint32_t size, abi, output_hz, mode;
     uint64_t seed;
@@ -78,9 +102,12 @@ ES_API uint32_t ES_CALL es_capabilities(void);
 ES_API es_status ES_CALL es_config_init(uint32_t abi, uint32_t capacity,
                                          es_config *config, es_error *error);
 ES_API es_status ES_CALL es_create(const es_config *config, es_runtime **out, es_error *error);
-ES_API es_status ES_CALL es_load(es_runtime *rt, const char *entry_utf8,
-                                  const char *library_root_utf8, const char *asset_root_utf8,
-                                  es_error *error);
+ES_API es_status ES_CALL es_load_json_file(es_runtime *rt, const char *entry_utf8,
+                                            const char *asset_root_utf8, es_diagnostic *detail,
+                                            es_error *error);
+ES_API es_status ES_CALL es_load_json_bytes(es_runtime *rt, const uint8_t *bytes, uint64_t length,
+                                             const char *asset_root_utf8, es_diagnostic *detail,
+                                             es_error *error);
 ES_API es_status ES_CALL es_set_controls(es_runtime *rt, const es_controls *controls,
                                           es_error *error);
 ES_API es_status ES_CALL es_render(es_runtime *rt, uint32_t frames, float *mono,
@@ -88,6 +115,7 @@ ES_API es_status ES_CALL es_render(es_runtime *rt, uint32_t frames, float *mono,
 ES_API es_status ES_CALL es_get_telemetry(const es_runtime *rt, es_telemetry *out,
                                            es_error *error);
 ES_API es_status ES_CALL es_reset(es_runtime *rt, es_error *error);
+ES_API es_status ES_CALL es_reset_detailed(es_runtime *rt, es_diagnostic *detail, es_error *error);
 ES_API es_status ES_CALL es_unload(es_runtime *rt, es_error *error);
 ES_API void ES_CALL es_destroy(es_runtime *rt);
 #ifdef __cplusplus

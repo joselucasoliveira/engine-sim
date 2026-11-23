@@ -22,14 +22,14 @@ static int run_case(char **paths, uint32_t rate, uint32_t mode) {
     memset(&error, 0, sizeof error);
     memset(&control, 0, sizeof control);
     memset(&telemetry, 0, sizeof telemetry);
-    if (es_api_version() != ES_ABI_V1 || (es_capabilities() & UINT32_C(127)) != UINT32_C(127)) goto done;
-    if (es_config_init(ES_ABI_V1, (uint32_t)sizeof config, &config, &error) != ES_OK) goto done;
+    if (es_api_version() != ES_ABI_V2 || (es_capabilities() & UINT32_C(127)) != UINT32_C(127)) goto done;
+    if (es_config_init(ES_ABI_V2, (uint32_t)sizeof config, &config, &error) != ES_OK) goto done;
     config.output_hz = rate;
     config.mode = mode;
     config.seed = 17;
-    if (es_create(&config, &handle, &error) != ES_OK || es_load(handle, paths[1], paths[2], paths[3], &error) != ES_OK) goto done;
+    if (es_create(&config, &handle, &error) != ES_OK || es_load_json_file(handle, paths[1], paths[2], NULL, &error) != ES_OK) goto done;
     control.size = (uint32_t)sizeof control;
-    control.abi = ES_ABI_V1;
+    control.abi = ES_ABI_V2;
     control.ignition = 1;
     control.starter = mode == ES_FREE;
     control.demand = .25;
@@ -55,7 +55,7 @@ static int run_case(char **paths, uint32_t rate, uint32_t mode) {
         position += written;
     }
     telemetry.size = (uint32_t)sizeof telemetry;
-    telemetry.abi = ES_ABI_V1;
+    telemetry.abi = ES_ABI_V2;
     if (es_get_telemetry(handle, &telemetry, &error) != ES_OK || telemetry.state != ES_READY || telemetry.mode != mode ||
         telemetry.output_hz != rate || telemetry.frames != rate * 2 || telemetry.native_frames != 88200 ||
         telemetry.ticks != (uint64_t)telemetry.simulation_hz * 2 || !isfinite(energy) || energy <= 0 ||
@@ -75,7 +75,7 @@ done:
 }
 static int run(int argc, char **paths) {
     const uint32_t endian = 1;
-    if (argc != 4 || sizeof(void *) != 8 || sizeof(float) != 4 || *(const unsigned char *)&endian != 1) return 2;
+    if (argc != 3 || sizeof(void *) != 8 || sizeof(float) != 4 || *(const unsigned char *)&endian != 1) return 2;
     for (uint32_t mode = ES_FREE; mode <= ES_DRIVEN; ++mode)
         for (unsigned rate = 0; rate < 2; ++rate)
             if (run_case(paths, rate ? 48000 : 44100, mode)) return 1;
@@ -84,10 +84,10 @@ static int run(int argc, char **paths) {
 }
 #ifdef _WIN32
 int wmain(int argc, wchar_t **wide) {
-    char *paths[4] = {NULL, NULL, NULL, NULL};
+    char *paths[3] = {NULL, NULL, NULL};
     int result = 2;
-    if (argc != 4) return result;
-    for (int i = 1; i < 4; ++i) {
+    if (argc != 3) return result;
+    for (int i = 1; i < 3; ++i) {
         int bytes = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, wide[i], -1, NULL, 0, NULL, NULL);
         if (bytes <= 0) goto release;
         paths[i] = (char *)malloc((size_t)bytes);
@@ -95,7 +95,7 @@ int wmain(int argc, wchar_t **wide) {
     }
     result = run(argc, paths);
 release:
-    for (int i = 1; i < 4; ++i) free(paths[i]);
+    for (int i = 1; i < 3; ++i) free(paths[i]);
     return result;
 }
 #else

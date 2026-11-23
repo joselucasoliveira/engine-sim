@@ -1,3 +1,4 @@
+#include "legacy_runtime.hpp"
 #include "sample_clock.h"
 #include "runtime.hpp"
 #include "simulation_fault.h"
@@ -157,12 +158,12 @@ TEST(Rate, CounterOverflowAndZeroWorkAreCheckedBeforeMutation) {
 }
 using Handle=std::unique_ptr<es_runtime,decltype(&es_destroy)>;
 Handle instance(std::uint32_t rate,std::uint32_t frequency=10000) {
-    es_config config;es_error error{};if(es_config_init(ES_ABI_V1,sizeof(config),&config,&error))throw std::runtime_error(error.message);config.output_hz=rate;config.simulation_hz=frequency;
+    es_config config;es_error error{};if(es_config_init(ES_ABI_V2,sizeof(config),&config,&error))throw std::runtime_error(error.message);config.output_hz=rate;config.simulation_hz=frequency;
     es_runtime *raw=nullptr;if(es_create(&config,&raw,&error))throw std::runtime_error(error.message);Handle owned(raw,es_destroy);
     const auto *source=std::getenv("ENGINE_SIM_TEST_SOURCE");if(!source)throw std::runtime_error("fixture source missing");const auto root=std::filesystem::u8path(source)/"examples/runtime/fixture";
-    if(es_load(raw,(root/"main.mr").u8string().c_str(),(root/"library").u8string().c_str(),root.u8string().c_str(),&error))throw std::runtime_error(error.message);return owned;
+    if(engine_sim::legacy_runtime::load(raw,(root/"main.mr").u8string().c_str(),(root/"library").u8string().c_str(),root.u8string().c_str(),&error))throw std::runtime_error(error.message);return owned;
 }
-es_telemetry telemetry(es_runtime *rt) {es_telemetry t{};t.size=sizeof(t);t.abi=ES_ABI_V1;es_error e{};if(es_get_telemetry(rt,&t,&e))throw std::runtime_error(e.message);return t;}
+es_telemetry telemetry(es_runtime *rt) {es_telemetry t{};t.size=sizeof(t);t.abi=ES_ABI_V2;es_error e{};if(es_get_telemetry(rt,&t,&e))throw std::runtime_error(e.message);return t;}
 std::vector<float> render(es_runtime *rt,std::size_t count,std::size_t part=257) {
     std::vector<float> pcm(count);es_error e{};
     for(std::size_t n=0;n<count;) {const auto take=static_cast<std::uint32_t>(std::min(part,count-n));std::uint32_t written;if(es_render(rt,take,pcm.data()+n,take,&written,&e)||written!=take)throw std::runtime_error(e.message);n+=take;}return pcm;
@@ -172,18 +173,18 @@ TEST(Rate, RealEngineMatchesNativePcmOnTheSamePhysicalControlTimelineAndReset) {
     for(const auto frequency:{4000u,10000u,30000u,96000u}) {
         auto native=instance(S,frequency),converted=instance(R,frequency);std::vector<float> nativePcm,actual;
         for(unsigned interval=0;interval<125;++interval) {
-            es_controls c{sizeof(c),ES_ABI_V1,1,interval<100?1u:0u,interval<25?.2:.3,0,0};es_error e{};
+            es_controls c{sizeof(c),ES_ABI_V2,1,interval<100?1u:0u,interval<25?.2:.3,0,0};es_error e{};
             ASSERT_EQ(es_set_controls(native.get(),&c,&e),ES_OK);ASSERT_EQ(es_set_controls(converted.get(),&c,&e),ES_OK);
             auto a=render(native.get(),441,31),b=render(converted.get(),480,7);nativePcm.insert(nativePcm.end(),a.begin(),a.end());actual.insert(actual.end(),b.begin(),b.end());
             const auto ta=telemetry(native.get()),tb=telemetry(converted.get());EXPECT_EQ(ta.ticks,tb.ticks);EXPECT_EQ(ta.native_frames,tb.native_frames);EXPECT_DOUBLE_EQ(ta.crank_rad_s,tb.crank_rad_s);EXPECT_DOUBLE_EQ(ta.cycle_rad,tb.cycle_rad);
         }
         const auto signal=[&](std::uint64_t n){return static_cast<std::int16_t>(std::lround(nativePcm[n]*32768.));};
         for(std::size_t n=0;n<actual.size();++n)ASSERT_EQ(actual[n],expected(n,signal))<<frequency<<' '<<n;
-        es_error e{};ASSERT_EQ(es_reset(converted.get(),&e),ES_OK);auto fresh=instance(R,frequency);EXPECT_EQ(render(converted.get(),44101,1),render(fresh.get(),44101,503));
+        es_error e{};ASSERT_EQ(engine_sim::legacy_runtime::reset(converted.get(),&e),ES_OK);auto fresh=instance(R,frequency);EXPECT_EQ(render(converted.get(),44101,1),render(fresh.get(),44101,503));
     }
 }
 TEST(Rate, PublicFaultPrefixKeepsTheLastCoherent48000Snapshot) {
-    auto fault=instance(R,96000),reference=instance(R,96000);es_controls c{sizeof(c),ES_ABI_V1,1,1,.3,0,0};es_error e{};
+    auto fault=instance(R,96000),reference=instance(R,96000);es_controls c{sizeof(c),ES_ABI_V2,1,1,.3,0,0};es_error e{};
     ASSERT_EQ(es_set_controls(fault.get(),&c,&e),ES_OK);ASSERT_EQ(es_set_controls(reference.get(),&c,&e),ES_OK);const auto expectedPcm=render(reference.get(),2);const auto coherent=telemetry(reference.get());
     unsigned ticks=0;RuntimeTestAccess::pull(*fault).setTickObserver([&](const Simulator &){if(++ticks==5)throw SimulationFault("injected48000 tick failure");});
     std::array<float,66> pcm;pcm.fill(42);std::uint32_t written=99;

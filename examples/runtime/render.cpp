@@ -1,6 +1,6 @@
 #include <engine_sim/runtime.h>
-#ifdef ENGINE_SIM_RENDER_JSON_TEST
-#include "json_runtime.hpp"
+#ifdef ENGINE_SIM_RENDER_LEGACY_TEST
+#include "legacy_runtime.hpp"
 #endif
 #include <algorithm>
 #include <array>
@@ -72,7 +72,7 @@ std::vector<Event> schedule(const fs::path &path,std::uint64_t frames,std::uint3
         for(unsigned i=0;i<6;++i) {const auto tab=line.find('\t',start);if((i<5&&tab==std::string::npos)||(i==5&&tab!=std::string::npos))fail("schedule: expected six tab-separated fields");fields[i]=line.substr(start,tab==std::string::npos?tab:tab-start);start=tab==std::string::npos?line.size():tab+1;}
         Event e{};e.frame=integer(fields[0],"schedule.frame");if(e.frame>=frames||(!events.empty()&&e.frame<previous))fail("schedule: frames must be nondecreasing and within output interval");previous=e.frame;
         const auto ignition=integer(fields[3],"schedule.ignition"),starter=integer(fields[4],"schedule.starter");if(ignition>1||starter>1)fail("schedule: booleans must be zero or one");
-        e.controls={sizeof(es_controls),ES_ABI_V1,static_cast<std::uint32_t>(ignition),static_cast<std::uint32_t>(starter),number(fields[1]),number(fields[2]),number(fields[5])};validate(e.controls,mode,12000);events.push_back(e);
+        e.controls={sizeof(es_controls),ES_ABI_V2,static_cast<std::uint32_t>(ignition),static_cast<std::uint32_t>(starter),number(fields[1]),number(fields[2]),number(fields[5])};validate(e.controls,mode,12000);events.push_back(e);
     }
     if(!file.eof())fail("schedule: read failed");return events;
 }
@@ -100,15 +100,35 @@ public:
     void bytes(const void *data,std::size_t size){if(std::fwrite(data,1,size,m_file)!=size)fail("output: write failed");}
     void u16(std::uint16_t n){const unsigned char v[]{static_cast<unsigned char>(n),static_cast<unsigned char>(n>>8)};bytes(v,2);}
     void u32(std::uint32_t n){const unsigned char v[]{static_cast<unsigned char>(n),static_cast<unsigned char>(n>>8),static_cast<unsigned char>(n>>16),static_cast<unsigned char>(n>>24)};bytes(v,4);}
-    void finish(){const int flushed=std::fflush(m_file),closed=std::fclose(m_file);m_file=nullptr;if(flushed||closed)fail("output: close failed");if(fs::exists(fs::symlink_status(m_target)))fail("output appeared before publication");fs::rename(m_temp,m_target);m_done=true;}
+    void finish() {
+        const int flushed = std::fflush(m_file), closed = std::fclose(m_file);
+        m_file = nullptr;
+        if (flushed || closed) fail("output: close failed");
+#ifdef _WIN32
+        if (!MoveFileW(m_temp.c_str(), m_target.c_str())) {
+            const auto error = GetLastError();
+            if (error == ERROR_ALREADY_EXISTS || error == ERROR_FILE_EXISTS)
+                fail("output appeared before publication");
+            fail("output: cannot publish completed WAV");
+        }
+#else
+        // Linking the closed file publishes it atomically and leaves an existing name intact.
+        std::error_code error;
+        fs::create_hard_link(m_temp, m_target, error);
+        if (error == std::errc::file_exists) fail("output appeared before publication");
+        if (error) fail("output: cannot publish completed WAV: " + error.message());
+        fs::remove(m_temp, error);
+#endif
+        m_done = true;
+    }
 private:
     fs::path m_target,m_temp;std::FILE *m_file=nullptr;bool m_done=false;
 };
 void render(const std::vector<std::string> &args) {
     static_assert(sizeof(float)==4&&std::numeric_limits<float>::is_iec559,"IEEE float32 required");
-#ifdef ENGINE_SIM_RENDER_JSON_TEST
+#ifndef ENGINE_SIM_RENDER_LEGACY_TEST
     const std::array<std::string,8> keys{"--entry","--asset-root","--rate","--mode","--seed","--frames","--schedule","--out"};
-    constexpr auto help = "engine-sim-render-json-test --entry JSON --asset-root PATH --rate 44100|48000 --mode free|driven --seed U64 --frames U64 --schedule TSV --out WAV\n";
+    constexpr auto help = "engine-sim-render --entry JSON --asset-root PATH --rate 44100|48000 --mode free|driven --seed U64 --frames U64 --schedule TSV --out WAV\n";
     constexpr auto arity = "expected all eight options; use --help";
     for (std::size_t i = 0; i < args.size(); i += 2) {
         if (args[i] == "--library-root")
@@ -116,7 +136,7 @@ void render(const std::vector<std::string> &args) {
     }
 #else
     const std::array<std::string,9> keys{"--entry","--library-root","--asset-root","--rate","--mode","--seed","--frames","--schedule","--out"};
-    constexpr auto help = "engine-sim-render --entry PATH --library-root PATH --asset-root PATH --rate 44100|48000 --mode free|driven --seed U64 --frames U64 --schedule TSV --out WAV\n";
+    constexpr auto help = "engine-sim-render-legacy-test --entry PATH --library-root PATH --asset-root PATH --rate 44100|48000 --mode free|driven --seed U64 --frames U64 --schedule TSV --out WAV\n";
     constexpr auto arity = "expected all nine options; use --help";
 #endif
     std::map<std::string,std::string> options;
@@ -128,15 +148,19 @@ void render(const std::vector<std::string> &args) {
     const auto mode=options.at("--mode")=="free"?ES_FREE:options.at("--mode")=="driven"?ES_DRIVEN:2u;if(mode>ES_DRIVEN)fail("mode: expected free or driven");
     auto events=schedule(fs::u8path(options.at("--schedule")),frames,mode);
     es_config config{};es_error error{};const auto check=[&](es_status s){if(s!=ES_OK)fail(error.message);};
-    check(es_config_init(ES_ABI_V1,sizeof(config),&config,&error));config.output_hz=static_cast<std::uint32_t>(rate);config.mode=mode;config.seed=integer(options.at("--seed"),"seed");
+    check(es_config_init(ES_ABI_V2,sizeof(config),&config,&error));config.output_hz=static_cast<std::uint32_t>(rate);config.mode=mode;config.seed=integer(options.at("--seed"),"seed");
     es_runtime *raw=nullptr;check(es_create(&config,&raw,&error));std::unique_ptr<es_runtime,decltype(&es_destroy)> engine(raw,es_destroy);
-#ifdef ENGINE_SIM_RENDER_JSON_TEST
-    check(engine_sim::json_runtime::load_file(raw,fs::u8path(options.at("--entry")),
-                                             fs::u8path(options.at("--asset-root")),nullptr,&error));
+#ifndef ENGINE_SIM_RENDER_LEGACY_TEST
+    es_diagnostic detail{};
+    detail.size = sizeof(detail);
+    detail.abi = ES_ABI_V2;
+    if (es_load_json_file(raw, options.at("--entry").c_str(), options.at("--asset-root").c_str(),
+                          &detail, &error) != ES_OK)
+        fail(std::string(detail.code) + ": " + error.message);
 #else
-    check(es_load(raw,options.at("--entry").c_str(),options.at("--library-root").c_str(),options.at("--asset-root").c_str(),&error));
+    check(engine_sim::legacy_runtime::load(raw,options.at("--entry").c_str(),options.at("--library-root").c_str(),options.at("--asset-root").c_str(),&error));
 #endif
-    es_telemetry state{};state.size=sizeof(state);state.abi=ES_ABI_V1;check(es_get_telemetry(raw,&state,&error));for(const auto &e:events)validate(e.controls,mode,state.driven_limit_rpm);
+    es_telemetry state{};state.size=sizeof(state);state.abi=ES_ABI_V2;check(es_get_telemetry(raw,&state,&error));for(const auto &e:events)validate(e.controls,mode,state.driven_limit_rpm);
     // Validate overwritten rows too, then retain only the final full vector.
     std::vector<Event> timeline;for(const auto &e:events){if(!timeline.empty()&&timeline.back().frame==e.frame)timeline.back()=e;else timeline.push_back(e);}
     TemporaryWave wave(fs::u8path(options.at("--out")));wave.bytes("RIFF",4);wave.u32(static_cast<std::uint32_t>(50+4*frames));wave.bytes("WAVEfmt ",8);wave.u32(18);wave.u16(3);wave.u16(1);wave.u32(config.output_hz);wave.u32(config.output_hz*4);wave.u16(4);wave.u16(32);wave.u16(0);wave.bytes("fact",4);wave.u32(4);wave.u32(static_cast<std::uint32_t>(frames));wave.bytes("data",4);wave.u32(static_cast<std::uint32_t>(frames*4));

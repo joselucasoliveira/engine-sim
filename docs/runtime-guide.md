@@ -1,28 +1,25 @@
 # Embedding Engine Simulator
 
-The runtime SDK loads an engine script and renders mono PCM synchronously through
-eleven C functions. It starts no window, audio device or worker. C11, C++17 and
+The runtime SDK loads a canonical engine JSON document and renders mono PCM synchronously through
+thirteen C functions. It starts no window, audio device or worker. C11, C++17 and
 foreign-language hosts use the same [public header](../include/engine_sim/runtime.h).
-The SDK package is version 1.0.0; the ABI is major 1, minor 0. Its mechanical and
+The SDK package is version 2.0.0 and the ABI is major 2, minor 0. Its mechanical and
 acoustic model remains an exploratory simulator, unsuitable for engineering
 validation or tuning decisions.
 
 ## Build a code SDK and its optional example
 
 Start in an ordinary checkout with the [native prerequisites](../BUILDING.md)
-installed: CMake 3.25+, Python 3.9+, Ninja, a C++17 toolchain, and the platform's
-Flex/Bison tools. C examples also need a C11 compiler. Only the pinned solver
-and parser submodules are needed for this profile. In a POSIX shell:
+installed. Use CMake 3.25+, Ninja, a C++17 toolchain and the pinned solver
+submodule. The C examples need a C11 compiler. These commands use a POSIX shell.
 
 ```sh
 set -e
-git submodule update --init dependencies/submodules/simple-2d-constraint-solver \
-  dependencies/submodules/piranha
+git submodule update --init dependencies/submodules/simple-2d-constraint-solver
 export CMAKE_GENERATOR=Ninja
 export ES_OUT="$(cd .. && pwd)/engine-sim-runtime-output"
 export SDK_PREFIX="$ES_OUT/sdk-static"
 export CONSUMER_BUILD="$ES_OUT/client-static"
-python3 -B tools/bootstrap.py --profile runtime --out "$ES_OUT"
 cmake --preset runtime-static -DENGINE_SIM_INSTALL_RUNTIME_EXAMPLE=ON \
   -DENGINE_SIM_BUILD_RUNTIME_EXAMPLES=ON
 cmake --build --preset runtime-static --config Release --parallel 2
@@ -32,23 +29,19 @@ cmake -S examples/runtime/consumer -B "$CONSUMER_BUILD" \
   -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$SDK_PREFIX"
 cmake --build "$CONSUMER_BUILD" --config Release --parallel 2
 export FIXTURE="$SDK_PREFIX/share/engine-sim-runtime/example"
-"$CONSUMER_BUILD/runtime-c-consumer" "$FIXTURE/main.mr" "$FIXTURE/library" "$FIXTURE"
-"$CONSUMER_BUILD/runtime-cxx-consumer" "$FIXTURE/main.mr" "$FIXTURE/library" "$FIXTURE"
+"$CONSUMER_BUILD/runtime-c-consumer" "$FIXTURE/main.json" "$FIXTURE"
+"$CONSUMER_BUILD/runtime-cxx-consumer" "$FIXTURE/main.json" "$FIXTURE"
 ```
 
-Choose a fresh absolute output directory outside the checkout. No build depends
-on planning files or a desktop resource tree. Bootstrap verifies locked archives;
-it does not install OS packages or initialize submodules. For disconnected builds,
-prepare the verified cache and pinned Git objects as described in
-[offline rebuilding](../BUILDING.md#offline-rebuilding), then add
-`--offline --cache "$CACHE"` to bootstrap.
+Choose a fresh absolute output directory outside the checkout. For a
+disconnected build, make the solver's pinned Git object available before
+starting. The SDK presets configure the runtime with the interpreter disabled.
 
 `ENGINE_SIM_INSTALL_RUNTIME_EXAMPLE` and `ENGINE_SIM_BUILD_RUNTIME_EXAMPLES`
 default to OFF. Omitting both produces only libraries, the header, CMake metadata
-and notices. The opt-in example installs an authored single-cylinder engine,
-synthetic eight-sample impulse and the minimal attributed script library. Its
-entry is `example/main.mr`, library root is `example/library`, and asset root is
-`example` itself. Original engine recordings remain caller-supplied private
+the format-v1 schema and notices. The opt-in example installs a single-cylinder
+JSON and its synthetic eight-sample impulse. Use `example/main.json` as
+the entry and `example` as the asset root. Original engine recordings remain caller-supplied private
 inputs with their own redistribution obligations. See [notices](../THIRD_PARTY_NOTICES.md)
 and the [fixture description](../examples/runtime/fixture/README.md).
 
@@ -67,17 +60,17 @@ cmake -S examples/runtime/consumer -B "$CONSUMER_BUILD" \
   -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$SDK_PREFIX"
 cmake --build "$CONSUMER_BUILD" --config Release --parallel 2
 export FIXTURE="$SDK_PREFIX/share/engine-sim-runtime/example"
-"$CONSUMER_BUILD/runtime-c-consumer" "$FIXTURE/main.mr" "$FIXTURE/library" "$FIXTURE"
-"$CONSUMER_BUILD/runtime-cxx-consumer" "$FIXTURE/main.mr" "$FIXTURE/library" "$FIXTURE"
+"$CONSUMER_BUILD/runtime-c-consumer" "$FIXTURE/main.json" "$FIXTURE"
+"$CONSUMER_BUILD/runtime-cxx-consumer" "$FIXTURE/main.json" "$FIXTURE"
 ```
 
-Consumers enable C and CXX, call `find_package(EngineSimRuntime 1.0 CONFIG REQUIRED)`
+Consumers enable C and CXX, call `find_package(EngineSimRuntime 2.0 CONFIG REQUIRED)`
 and link `EngineSim::Runtime`. The imported target supplies only installed usage
 requirements and private archive dependencies. A C source uses only
 `<engine_sim/runtime.h>`; a static consumer needs a C++ final link, as in the
 [complete consumer CMake project](../examples/runtime/consumer/CMakeLists.txt).
 Avoid loading an SDK implementation into a process already linked to another
-copy of the private runtime/parser.
+copy of the runtime.
 
 On Windows use a native VS 2022 x64 developer environment. PowerShell sets the
 variables with `$env:ES_OUT`, `$env:SDK_PREFIX` and `$env:CONSUMER_BUILD`; use
@@ -85,8 +78,7 @@ variables with `$env:ES_OUT`, `$env:SDK_PREFIX` and `$env:CONSUMER_BUILD`; use
 selects Ninja, whose executables are in the consumer build root. Visual Studio
 multi-config consumers instead put them under `Release`; retain `--config Release`.
 Put the shared prefix's `bin` directory on `PATH` before running its clients.
-The SDK uses MSVC's shared CRT. On macOS use native arm64/Xcode tools and the
-documented recent Flex/Bison. ELF/Darwin clients need an application rpath or
+The SDK uses the shared MSVC CRT. On macOS use native arm64 Xcode tools. ELF/Darwin clients need an application rpath or
 their ordinary loader search path when moved. These prepared recipes do not
 replace the [per-platform execution status](platforms.md#device-free-runtime-sdk).
 
@@ -101,9 +93,9 @@ Every request is split at that event and the final frame. The
 96,000 frames at 48,000 Hz with the same one-second event. Neither plays PCM.
 
 Initialize configuration with `es_config_init`, then edit supported fields before
-`es_create`. Defaults are 44,100 Hz, FREE mode, seed 1, script numerical frequency,
-zero flags and the script's starter torque. The handle begins EMPTY; a successful
-`es_load` makes it READY at frame zero. Set every field of a complete controls
+`es_create`. Defaults are 44,100 Hz, FREE mode, seed 1, model numerical frequency,
+zero flags and the model's starter torque. The handle begins EMPTY; a successful
+`es_load_json_file` makes it READY at frame zero. Set every field of a complete controls
 record, including its size and ABI. The [ABI reference](runtime-abi.md) defines
 all ranges, units, states and diagnostics. Driver demand follows the preset's
 direct linkage or governor; it is not a measured throttle angle.
@@ -122,12 +114,12 @@ faulting interval does not advance the public counters. The runtime never pads
 missing source frames with silence. A host can report a device deficit and add
 its own silence without claiming the source rendered those frames.
 
-Load paths must be absolute UTF-8: entry file, library directory and asset
-directory. Relative imports search their declaring script's directory, then the
-explicit library and asset roots. Relative impulse paths resolve at their
-declaring script. No executable-relative or current-directory fallback is used.
-Scripts are trusted inputs, not a sandbox. Preparation owns all consumed scripts,
-IR data and graph storage; render does no resource I/O.
+Pass an absolute UTF-8 JSON entry and asset directory to
+`es_load_json_file`. `es_load_json_bytes` accepts a borrowed length-delimited
+document and the same explicit asset directory. The load owns the JSON and
+the referenced impulse-response data after return. Resolve relative asset
+locators beneath that directory. Use the offline converter to migrate an
+existing script. [Legacy converter guide](legacy-converter.md)
 
 Failed load/reset preserves the active graph, counters, controls and fault state.
 Reset can access the filesystem: it requires the exact original canonical paths
@@ -140,7 +132,7 @@ seed, output rate, mode or numerical-rate override, create another handle.
 Serialize all calls on one handle, including telemetry and destruction. A
 different thread can take ownership only at a synchronized quiescent boundary.
 Distinct prepared handles can render concurrently and keep independent clocks,
-controls and random streams. Parser preparation is serialized internally.
+controls and random streams.
 Synchronous rendering can still allocate or lock; an audio callback deadline
 has not been qualified. A host worker with bounded ready PCM is an integration
 choice, not a service provided by this API.
@@ -153,8 +145,8 @@ With either example-enabled SDK above, from the checkout:
 export AUDIO_OUT="$ES_OUT/offline-run"
 mkdir -p "$AUDIO_OUT"
 printf 'frame\tdemand\tload_nm\tignition\tstarter\tdriven_rpm\n0\t0.25\t0\t1\t1\t0\n48000\t0.25\t0\t1\t0\t0\n' > "$AUDIO_OUT/run.tsv"
-"$SDK_PREFIX/bin/engine-sim-render" --entry "$FIXTURE/main.mr" \
-  --library-root "$FIXTURE/library" --asset-root "$FIXTURE" --rate 48000 \
+"$SDK_PREFIX/bin/engine-sim-render" --entry "$FIXTURE/main.json" \
+  --asset-root "$FIXTURE" --rate 48000 \
   --mode free --seed 1 --frames 96000 --schedule "$AUDIO_OUT/run.tsv" \
   --out "$AUDIO_OUT/run.wav"
 ```
@@ -170,13 +162,13 @@ For a shared Linux SDK:
 
 ```sh
 python3 -B examples/runtime/ffi_smoke.py \
-  --library "$SDK_PREFIX/lib/libengine-sim-runtime.so.1" \
-  --entry "$FIXTURE/main.mr" --library-root "$FIXTURE/library" --asset-root "$FIXTURE"
+  --library "$SDK_PREFIX/lib/libengine-sim-runtime.so.2" \
+  --entry "$FIXTURE/main.json" --asset-root "$FIXTURE"
 ```
 
-Use the installed DLL under `bin` on Windows or dylib under `lib` on macOS.
+Use `bin/engine-sim-runtime-2.dll` on Windows or `lib/libengine-sim-runtime.2.dylib` on macOS.
 The [ctypes example](../examples/runtime/ffi_smoke.py) sets cdecl signatures and
-record layouts for all eleven functions and performs a two-second 48 kHz run,
+record layouts for all thirteen functions and performs a two-second 48 kHz run,
 reset, unload and destroy with caller-owned storage.
 
 ## Signal, desktop and compatibility limits

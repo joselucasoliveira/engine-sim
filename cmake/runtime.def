@@ -1,13 +1,15 @@
-LIBRARY engine-sim-runtime
+LIBRARY engine-sim-runtime-2
 EXPORTS
     es_api_version
     es_capabilities
     es_config_init
     es_create
-    es_load
+    es_load_json_file
+    es_load_json_bytes
     es_set_controls
     es_render
     es_get_telemetry
     es_reset
+    es_reset_detailed
     es_unload
     es_destroy

@@ -26,6 +26,8 @@ if (WIN32 AND MSVC AND CMAKE_SIZEOF_VOID_P EQUAL 8
     set(engine_sim_windows TRUE)
 endif ()
 option(ENGINE_SIM_BUILD_DESKTOP "Build the Engine Simulator desktop app" ${engine_sim_windows})
+option(BUILD_TESTING "Build and register the Engine Simulator tests" OFF)
+option(ENGINE_SIM_BUILD_CAPTURE "Build the offline signal characterization tool" OFF)
 option(ENGINE_SIM_BUILD_RUNTIME "Build the device-free C runtime" OFF)
 option(ENGINE_SIM_RUNTIME_SHARED "Build the C runtime as a shared library" OFF)
 option(ENGINE_SIM_INSTALL_RUNTIME_EXAMPLE "Install the lawful synthetic runtime example" OFF)
@@ -33,7 +35,7 @@ option(ENGINE_SIM_BUILD_RUNTIME_EXAMPLES "Build public C API offline examples" O
 option(ENGINE_SIM_BUILD_HOST_TESTS "Build the desktop host contract fixtures" ON)
 option(ENGINE_SIM_BUILD_LEGACY_CONVERTER "Build the optional legacy migration adapter" OFF)
 set(engine_sim_parser_default ${ENGINE_SIM_BUILD_DESKTOP})
-if (ENGINE_SIM_BUILD_RUNTIME OR ENGINE_SIM_BUILD_LEGACY_CONVERTER)
+if (ENGINE_SIM_BUILD_CAPTURE OR ENGINE_SIM_BUILD_LEGACY_CONVERTER OR (BUILD_TESTING AND ENGINE_SIM_BUILD_RUNTIME))
     set(engine_sim_parser_default ON)
 endif ()
 option(PIRANHA_ENABLED "Enable the engine script interpreter" ${engine_sim_parser_default})
@@ -42,8 +44,6 @@ if (ENGINE_SIM_BUILD_LEGACY_CONVERTER AND NOT PIRANHA_ENABLED)
 endif ()
 option(DTV "Enable video output" OFF)
 option(DISCORD_ENABLED "Enable Discord Rich Presence (Windows x64)" OFF)
-option(BUILD_TESTING "Build and register the Engine Simulator tests" OFF)
-option(ENGINE_SIM_BUILD_CAPTURE "Build the offline signal characterization tool" OFF)
 include(cmake/Diagnostics.cmake)
 
 if (ENGINE_SIM_BUILD_DESKTOP AND NOT engine_sim_windows
@@ -57,9 +57,6 @@ if ((DTV OR DISCORD_ENABLED) AND (NOT ENGINE_SIM_BUILD_DESKTOP OR NOT engine_sim
     message(FATAL_ERROR "DTV and DISCORD_ENABLED require the Windows desktop app")
 endif ()
 
-if (ENGINE_SIM_BUILD_RUNTIME AND NOT PIRANHA_ENABLED)
-    message(FATAL_ERROR "The runtime requires PIRANHA_ENABLED")
-endif ()
 if (ENGINE_SIM_BUILD_RUNTIME_EXAMPLES AND NOT ENGINE_SIM_BUILD_RUNTIME)
     message(FATAL_ERROR "Runtime examples require ENGINE_SIM_BUILD_RUNTIME")
 endif ()
@@ -167,7 +164,7 @@ add_library(engine-sim STATIC
 find_package(Threads REQUIRED)
 target_link_libraries(engine-sim PUBLIC simple-2d-constraint-solver PRIVATE Threads::Threads)
 target_compile_features(engine-sim PUBLIC cxx_std_17)
-if (BUILD_TESTING OR ENGINE_SIM_BUILD_DESKTOP)
+if (BUILD_TESTING OR ENGINE_SIM_BUILD_DESKTOP OR ENGINE_SIM_BUILD_RUNTIME)
     add_subdirectory(modules/assembly)
 endif ()
 if (BUILD_TESTING)
@@ -254,25 +251,31 @@ if (DISCORD_ENABLED)
     set_property(TARGET discord PROPERTY FOLDER "discord")
 endif ()
 
-if (PIRANHA_ENABLED AND (ENGINE_SIM_BUILD_RUNTIME OR ENGINE_SIM_BUILD_DESKTOP OR ENGINE_SIM_BUILD_CAPTURE OR (BUILD_TESTING AND ENGINE_SIM_BUILD_HOST_TESTS)))
+if (ENGINE_SIM_BUILD_RUNTIME OR ENGINE_SIM_BUILD_DESKTOP OR ENGINE_SIM_BUILD_CAPTURE OR (BUILD_TESTING AND ENGINE_SIM_BUILD_HOST_TESTS))
     add_library(engine-sim-runtime-backend STATIC src/runtime/runtime.cpp)
-    target_link_libraries(engine-sim-runtime-backend PRIVATE engine-sim-script-interpreter)
+    target_link_libraries(engine-sim-runtime-backend PUBLIC engine-sim)
     target_compile_features(engine-sim-runtime-backend PRIVATE cxx_std_17)
     engine_sim_diagnose(engine-sim-runtime-backend TRUE)
 endif ()
 
+if (PIRANHA_ENABLED AND TARGET engine-sim-runtime-backend AND
+        (ENGINE_SIM_BUILD_DESKTOP OR ENGINE_SIM_BUILD_CAPTURE OR BUILD_TESTING))
+    add_library(engine-sim-legacy-runtime STATIC src/runtime/legacy_runtime.cpp)
+    target_include_directories(engine-sim-legacy-runtime PUBLIC "${PROJECT_SOURCE_DIR}/src/runtime")
+    target_link_libraries(engine-sim-legacy-runtime PUBLIC engine-sim-script-interpreter engine-sim-runtime-backend)
+    target_compile_features(engine-sim-legacy-runtime PRIVATE cxx_std_17)
+    engine_sim_diagnose(engine-sim-legacy-runtime TRUE)
+endif ()
+
 if (TARGET engine-sim-runtime-backend AND TARGET engine-sim-assembly AND
-        (BUILD_TESTING OR ENGINE_SIM_BUILD_DESKTOP))
+        (BUILD_TESTING OR ENGINE_SIM_BUILD_DESKTOP OR ENGINE_SIM_BUILD_RUNTIME))
     add_library(engine-sim-runtime-json-private STATIC src/runtime/json_runtime.cpp)
     target_include_directories(engine-sim-runtime-json-private
         PUBLIC "${PROJECT_SOURCE_DIR}/src/runtime"
         PRIVATE "${PROJECT_SOURCE_DIR}/modules/assembly/src")
     target_link_libraries(engine-sim-runtime-json-private
         PUBLIC EngineSim::Config
-        PRIVATE engine-sim-assembly engine-sim-runtime-backend engine-sim-script-interpreter EngineSim::Json)
-    if (ENGINE_SIM_BUILD_RUNTIME)
-        target_link_libraries(engine-sim-runtime-json-private PUBLIC EngineSim::Runtime)
-    endif ()
+        PRIVATE engine-sim-assembly engine-sim-runtime-backend EngineSim::Json)
     target_compile_features(engine-sim-runtime-json-private PRIVATE cxx_std_17)
     engine_sim_diagnose(engine-sim-runtime-json-private TRUE)
 endif ()
@@ -289,7 +292,7 @@ endif ()
 if (PIRANHA_ENABLED AND ((BUILD_TESTING AND ENGINE_SIM_BUILD_HOST_TESTS) OR ENGINE_SIM_BUILD_DESKTOP))
     add_library(engine-sim-desktop-runtime STATIC src/runtime/desktop_runtime.cpp src/desktop_engine_views.cpp)
     target_link_libraries(engine-sim-desktop-runtime PRIVATE
-        engine-sim-runtime-backend engine-sim-script-interpreter engine-sim-runtime-json-private)
+        engine-sim-legacy-runtime engine-sim-runtime-json-private)
     target_compile_features(engine-sim-desktop-runtime PRIVATE cxx_std_17)
     engine_sim_diagnose(engine-sim-desktop-runtime TRUE)
     if (NOT MSVC)
@@ -482,7 +485,7 @@ if (ENGINE_SIM_BUILD_RUNTIME)
     add_library(engine-sim-runtime ${engine_sim_runtime_kind} src/runtime/api.cpp)
     add_library(EngineSim::Runtime ALIAS engine-sim-runtime)
     target_include_directories(engine-sim-runtime PUBLIC "$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>")
-    target_link_libraries(engine-sim-runtime PRIVATE engine-sim-runtime-backend engine-sim-script-interpreter)
+    target_link_libraries(engine-sim-runtime PRIVATE engine-sim-runtime-backend engine-sim-runtime-json-private)
     target_compile_features(engine-sim-runtime PUBLIC cxx_std_17)
     engine_sim_diagnose(engine-sim-runtime TRUE)
 endif ()
@@ -556,13 +559,13 @@ endif ()
 if (ENGINE_SIM_BUILD_RUNTIME_EXAMPLES)
     add_subdirectory(examples/runtime)
 endif ()
-if (TARGET engine-sim-render-json-test AND TARGET engine-sim-render AND TARGET engine-sim-config-roundtrip)
+if (TARGET engine-sim-render-legacy-test AND TARGET engine-sim-render AND TARGET engine-sim-config-roundtrip)
     find_package(Python3 3.9 COMPONENTS Interpreter REQUIRED)
     set(preset_check "${PROJECT_SOURCE_DIR}/test/config/preset_corpus.py")
     add_executable(engine-sim-preset-runtime-probe test/config/preset_runtime_probe.cpp)
     target_include_directories(engine-sim-preset-runtime-probe PRIVATE "${PROJECT_SOURCE_DIR}/tools/capture")
     target_link_libraries(engine-sim-preset-runtime-probe PRIVATE
-        engine-sim-runtime-json-private engine-sim-script-interpreter)
+        EngineSim::Runtime engine-sim-runtime-json-private engine-sim-legacy-runtime)
     engine_sim_diagnose(engine-sim-preset-runtime-probe TRUE)
 
     function(engine_sim_check_presets prefix behavior index count)
@@ -571,9 +574,9 @@ if (TARGET engine-sim-render-json-test AND TARGET engine-sim-render AND TARGET e
                 "${PROJECT_SOURCE_DIR}/${index}" "${count}" ${ARGN} --writer "$<TARGET_FILE:engine-sim-config-roundtrip>")
         add_test(NAME "${behavior}"
             COMMAND "${Python3_EXECUTABLE}" -B "${preset_check}" behavior "${PROJECT_SOURCE_DIR}"
-                "${PROJECT_SOURCE_DIR}/${index}" "${count}" ${ARGN} --legacy "$<TARGET_FILE:engine-sim-render>"
+                "${PROJECT_SOURCE_DIR}/${index}" "${count}" ${ARGN} --legacy "$<TARGET_FILE:engine-sim-render-legacy-test>"
                 --writer "$<TARGET_FILE:engine-sim-config-roundtrip>"
-                --renderer "$<TARGET_FILE:engine-sim-render-json-test>"
+                --renderer "$<TARGET_FILE:engine-sim-render>"
                 --probe "$<TARGET_FILE:engine-sim-preset-runtime-probe>")
         set_tests_properties("${prefix}PresetCoverage" "${behavior}" PROPERTIES LABELS r25-corpus TIMEOUT 180)
     endfunction()

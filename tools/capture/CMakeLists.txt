@@ -15,7 +15,7 @@ file(CONFIGURE OUTPUT build.txt CONTENT
     @ONLY)
 
 add_library(engine-sim-capture-runtime STATIC "${PROJECT_SOURCE_DIR}/src/runtime/capture_runtime.cpp")
-target_link_libraries(engine-sim-capture-runtime PRIVATE engine-sim-runtime-backend engine-sim-script-interpreter)
+target_link_libraries(engine-sim-capture-runtime PRIVATE engine-sim-legacy-runtime)
 engine_sim_diagnose(engine-sim-capture-runtime TRUE)
 add_executable(engine-sim-capture launcher.cpp worker.cpp)
 if (WIN32)
