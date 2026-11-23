@@ -97,6 +97,63 @@ def indexed(root, filename, count):
         yield item, source, model
 
 
+def verify_catalog(args):
+    catalog = json.loads(args.catalog.read_bytes())
+    require(catalog["version"] == 1, "Unexpected catalog version")
+    entries = [catalog["fixture"]]
+    for index in catalog["indexes"]:
+        entries.extend(json.loads((args.repo / index).read_bytes())["entries"])
+    declared = {entry["source"] for entry in entries}
+    require(len(entries) == len(declared) == 27, "Invalid or duplicate engine selections")
+    require(len({entry["model"] for entry in entries}) == 27, "Duplicate canonical models")
+    require(all((args.repo / entry["model"]).is_file() for entry in entries), "Missing canonical model")
+    roles = catalog["source_roles"]
+    actual = {path.relative_to(args.repo).as_posix()
+              for directory in ("assets", "es", "examples/runtime/fixture")
+              for path in (args.repo / directory).rglob("*.mr") if path.is_file()}
+    require(len(roles) == 67 and set(roles) == actual, "Incomplete legacy source classification")
+    selections = {"published_main", "factory_default", "desktop_entry", "sdk_fixture"}
+    require(declared == {source for source, role in roles.items() if role in selections},
+            "Selections differ from classified source entries")
+    themes = {theme["source"] for theme in catalog["themes"]}
+    require(len(themes) == len(catalog["themes"]) == 6 and
+            themes == {source for source, role in roles.items() if role == "desktop_theme"},
+            "Incomplete or duplicate theme closure")
+    require(all((args.repo / theme["settings"]).is_file() for theme in catalog["themes"]),
+            "Missing canonical theme")
+    return catalog
+
+
+def verify_themes(args, work):
+    catalog = verify_catalog(args)
+    main_path = args.repo / catalog["default"]
+    main = json.loads(main_path.read_bytes())
+    named = json.loads((args.repo / catalog["default_engine"]).read_bytes())
+    require({key:value for key,value in main.items() if key != "desktop"} ==
+            {key:value for key,value in named.items() if key != "desktop"}, "Default engine or drivetrain differs")
+    require(main["desktop"] == json.loads((args.repo / catalog["default_theme"]).read_bytes()),
+            "Default preset did not retain the actual default theme")
+    changes = {key for key in main["desktop"] if main["desktop"][key] != named["desktop"][key]}
+    require(changes == {"boost_units"} and main["desktop"]["boost_units"] == "PSI"
+            and named["desktop"]["boost_units"] == "psi", "Default versus named host setting distinction differs")
+    run([args.probe, args.repo, main_path.with_suffix(".mr"), main_path, "--settings-only"], work)
+
+    for theme in catalog["themes"]:
+        source = (args.repo / theme["source"]).relative_to(args.repo / "assets")
+        factory = theme["factory"]
+        require(re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", factory) is not None, "Invalid theme factory")
+        settings = json.loads((args.repo / theme["settings"]).read_bytes())
+        legacy = work / (source.stem + ".mr")
+        legacy.write_text('import "engine_sim.mr"\nimport "engines/atg-video-2/01_subaru_ej25_eh.mr"\n'
+                          + f'import "{source.as_posix()}"\nmain()\n{factory}()\n', encoding="utf-8")
+        verify = work / (source.stem + ".json")
+        canonical = work / (source.stem + "-canonical.json")
+        verify.write_text(json.dumps({**named, "desktop":settings}), encoding="utf-8")
+        run([args.writer, verify, canonical], work)
+        require(json.loads(canonical.read_bytes())["desktop"] == settings, "Writer changed an embedded theme")
+        run([args.probe, args.repo, legacy, canonical, "--settings-only"], work)
+
+
 def coverage(args, work):
     visited = []
     for item, source, model in indexed(args.repo, args.index, args.count):
@@ -123,6 +180,8 @@ def coverage(args, work):
         require(numbered(".json") == [source.with_suffix(".json") for source in declarations],
                 "Numbered preset coverage differs")
     require(len(visited) == args.count, "Incomplete preset coverage")
+    if args.catalog:
+        verify_catalog(args)
 
 
 def legacy_entry(args, source, item, work):
@@ -192,6 +251,8 @@ def behavior(args, work):
             require((left / field).read_bytes() != (right / field).read_bytes(),
                     f"Expected distinct {field} for {pair['left']} and {pair['right']}")
 
+    if args.catalog:
+        verify_themes(args, work)
     first = next(indexed(args.repo, args.index, args.count))[2]
     missing_root = work / "no-impulses"
     missing_root.mkdir()
@@ -218,6 +279,7 @@ if __name__ == "__main__":
     parser.add_argument("--legacy", type=Path)
     parser.add_argument("--renderer", type=Path)
     parser.add_argument("--probe", type=Path)
+    parser.add_argument("--catalog", type=Path)
     options = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix="engine-sim-presets-") as directory:
         (coverage if options.check == "coverage" else behavior)(options, Path(directory))

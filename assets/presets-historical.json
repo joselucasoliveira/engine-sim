@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "source": "assets/engines/audi/i5.mr",
+      "model": "assets/engines/audi/i5.json",
+      "selection": "audi_i5_2_2L",
+      "coverage": "all-entry"
+    },
+    {
+      "source": "assets/engines/bmw/M52B28.mr",
+      "model": "assets/engines/bmw/M52B28.json",
+      "selection": "M52B28",
+      "coverage": "deep"
+    },
+    {
+      "source": "assets/engines/chevrolet/chev_truck_454.mr",
+      "model": "assets/engines/chevrolet/chev_truck_454.json",
+      "selection": "chev_truck_454",
+      "coverage": "all-entry"
+    },
+    {
+      "source": "assets/engines/chevrolet/engine_03_for_e1.mr",
+      "model": "assets/engines/chevrolet/engine_03_for_e1.json",
+      "selection": "engine_03_for_e1",
+      "coverage": "all-entry"
+    },
+    {
+      "source": "assets/engines/kohler/kohler_ch750.mr",
+      "model": "assets/engines/kohler/kohler_ch750.json",
+      "selection": "kohler_ch750",
+      "coverage": "all-entry"
+    },
+    {
+      "source": "assets/main.mr",
+      "model": "assets/main.json",
+      "selection": "entry",
+      "coverage": "deep"
+    }
+  ]
+}

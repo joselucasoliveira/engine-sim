@@ -7,6 +7,8 @@
 #include <cstring>
 #include <fstream>
 #include <iostream>
+#include <string_view>
+#include <tuple>
 #include <vector>
 
 namespace engine_sim {
@@ -46,26 +48,47 @@ struct Trace {
     bool distinct_reactions = false;
 };
 
-Trace measure(const fs::path &root, const fs::path &entry, bool canonical) {
+using RuntimeOwner = std::unique_ptr<es_runtime, decltype(&es_destroy)>;
+
+RuntimeOwner load(const fs::path &root, const fs::path &entry, bool canonical) {
     es_error error{};
     es_config config{};
     check(es_config_init(ES_ABI_V1, sizeof(config), &config, &error), error);
     config.seed = 403;
     es_runtime *handle = nullptr;
     check(es_create(&config, &handle, &error), error);
-    Trace trace;
-    std::unique_ptr<es_runtime, decltype(&es_destroy)> owner(handle, es_destroy);
+    RuntimeOwner owner(handle, es_destroy);
     if (canonical) {
         check(engine_sim::json_runtime::load_file(handle, entry, root, nullptr, &error), error);
     } else {
         check(es_load(handle, entry.u8string().c_str(), (root / "es").u8string().c_str(),
                       (root / "assets").u8string().c_str(), &error), error);
     }
+    return owner;
+}
 
+auto desktop_values(const ApplicationSettings &settings) {
+    return std::tie(settings.startFullscreen, settings.powerUnits, settings.torqueUnits,
+                    settings.speedUnits, settings.pressureUnits, settings.boostUnits,
+                    settings.colorBackground, settings.colorForeground, settings.colorShadow,
+                    settings.colorHighlight1, settings.colorHighlight2, settings.colorPink,
+                    settings.colorRed, settings.colorOrange, settings.colorYellow,
+                    settings.colorBlue, settings.colorGreen);
+}
+
+const ApplicationSettings &selected_settings(es_runtime &runtime) {
+    return engine_sim::RuntimeTestAccess::session(runtime).prepared.session->definition.applicationSettings;
+}
+
+Trace measure(const fs::path &root, const fs::path &entry, bool canonical) {
+    es_error error{};
+    Trace trace;
+    auto owner = load(root, entry, canonical);
+    auto *handle = owner.get();
     auto &session = engine_sim::RuntimeTestAccess::session(*handle);
     const auto &simulator = static_cast<const PistonEngineSimulator &>(*session.prepared.session->simulator);
     const auto &engine = *session.prepared.session->definition.engine;
-    const auto ticks = std::size_t{24000} * simulator.getSimulationFrequency() / config.output_hz;
+    const auto ticks = std::size_t{24000} * simulator.getSimulationFrequency() / 44100;
     engine_sim_capture::MechanicalObservation mechanics(simulator, ticks);
     trace.mechanics.push_back(bits(engine.getDisplacement()));
     if (!(engine.getDisplacement() > 0)) throw std::runtime_error("Invalid prepared displacement");
@@ -132,6 +155,13 @@ int main(int argc, char **argv) {
     if (argc != 5) return 2;
     try {
         const auto root = fs::u8path(argv[1]);
+        if (std::string_view(argv[4]) == "--settings-only") {
+            auto legacy = load(root, fs::u8path(argv[2]), false);
+            auto canonical = load(root, fs::u8path(argv[3]), true);
+            if (desktop_values(selected_settings(*legacy)) != desktop_values(selected_settings(*canonical)))
+                throw std::runtime_error("Evaluated desktop settings differ");
+            return 0;
+        }
         const auto legacy = measure(root, fs::u8path(argv[2]), false);
         const auto canonical = measure(root, fs::u8path(argv[3]), true);
         if (legacy.routes != canonical.routes || legacy.endpoints != canonical.endpoints ||

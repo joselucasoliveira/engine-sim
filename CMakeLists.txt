@@ -571,7 +571,8 @@ if (TARGET engine-sim-render-json-test AND TARGET engine-sim-render AND TARGET e
                 "${PROJECT_SOURCE_DIR}/${index}" "${count}" ${ARGN} --writer "$<TARGET_FILE:engine-sim-config-roundtrip>")
         add_test(NAME "${behavior}"
             COMMAND "${Python3_EXECUTABLE}" -B "${preset_check}" behavior "${PROJECT_SOURCE_DIR}"
-                "${PROJECT_SOURCE_DIR}/${index}" "${count}" --legacy "$<TARGET_FILE:engine-sim-render>"
+                "${PROJECT_SOURCE_DIR}/${index}" "${count}" ${ARGN} --legacy "$<TARGET_FILE:engine-sim-render>"
+                --writer "$<TARGET_FILE:engine-sim-config-roundtrip>"
                 --renderer "$<TARGET_FILE:engine-sim-render-json-test>"
                 --probe "$<TARGET_FILE:engine-sim-preset-runtime-probe>")
         set_tests_properties("${prefix}PresetCoverage" "${behavior}" PROPERTIES LABELS r25-corpus TIMEOUT 180)
@@ -580,4 +581,6 @@ if (TARGET engine-sim-render-json-test AND TARGET engine-sim-render AND TARGET e
     engine_sim_check_presets(VideoTwoSix HeaderAndIgnitionParity assets/engines/atg-video-2/presets-01-06.json 6 --numbered)
     engine_sim_check_presets(Large RadialAndBankOrderParity assets/engines/atg-video-2/presets-07-12.json 6
         --numbered --first-number 7)
+    engine_sim_check_presets(Historical DefaultSelectionAndThemes assets/presets-historical.json 6
+        --catalog "${PROJECT_SOURCE_DIR}/assets/preset-catalog.json")
 endif ()
