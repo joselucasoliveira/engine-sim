@@ -384,6 +384,23 @@ if (TARGET engine-sim-runtime AND TARGET engine-sim-runtime-json-private)
         "${fleet_fixture}" "${PROJECT_SOURCE_DIR}")
     set_tests_properties(R3FaultPrefixes R3FaultNoUnwind PROPERTIES LABELS r3-fault TIMEOUT 120)
 
+    add_executable(engine-sim-fleet-owner-test fleet-owner/main.cpp fleet-owner/consumer.c)
+    target_link_libraries(engine-sim-fleet-owner-test PRIVATE
+        EngineSim::Fleet EngineSim::Runtime EngineSim::Config engine-sim-runtime-backend)
+    target_include_directories(engine-sim-fleet-owner-test PRIVATE
+        "${PROJECT_SOURCE_DIR}/src/fleet" "${PROJECT_SOURCE_DIR}/modules/assembly/src"
+        "${PROJECT_SOURCE_DIR}/src/runtime")
+    set_target_properties(engine-sim-fleet-owner-test PROPERTIES
+        C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO
+        CXX_STANDARD 17 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO)
+    if (NOT MSVC)
+        target_compile_options(engine-sim-fleet-owner-test PRIVATE -pedantic-errors)
+    endif ()
+    engine_sim_diagnose(engine-sim-fleet-owner-test TRUE)
+    add_test(NAME FleetOwnerABI COMMAND engine-sim-fleet-owner-test layout "${fleet_fixture}")
+    add_test(NAME FleetCandidateCells COMMAND engine-sim-fleet-owner-test cells "${fleet_fixture}")
+    set_tests_properties(FleetOwnerABI FleetCandidateCells PROPERTIES LABELS r3-fleet-owner TIMEOUT 90)
+
 endif ()
 
 if (TARGET engine-sim-runtime AND TARGET engine-sim-config-roundtrip AND ENGINE_SIM_BUILD_RUNTIME_EXAMPLES)

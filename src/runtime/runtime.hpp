@@ -15,6 +15,7 @@ struct LayoutFixtureAccess;
 struct JsonRuntimeAccess;
 struct JsonRecipe;
 class DrivenShaft;
+namespace fleet { struct Voice; }
 class Runtime {
 public:
     explicit Runtime(es_config config, SampleClock::Profile profile = SampleClock::Profile::Public) noexcept;
@@ -30,6 +31,7 @@ private:
     friend class desktop::RuntimeHost;
     friend class engine_sim_capture::RuntimeHost;
     friend struct LayoutFixtureAccess;
+    friend struct fleet::Voice;
     using Recipe = std::shared_ptr<const JsonRecipe>;
     struct PreparedGraph {
         Recipe recipe;
