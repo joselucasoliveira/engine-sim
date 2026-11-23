@@ -79,3 +79,21 @@ if (TARGET engine-sim-json)
         "${CMAKE_CURRENT_SOURCE_DIR}/../../schemas/engine-config-v1.schema.json")
     set_tests_properties(ConfigSchemaParity ConfigSchemaEmbedding PROPERTIES LABELS r25-config TIMEOUT 60)
 endif ()
+
+if (TARGET engine-sim-json AND TARGET engine-sim-config-roundtrip)
+    add_executable(engine-sim-config-json-roundtrip-test json_roundtrip.cpp)
+    target_link_libraries(engine-sim-config-json-roundtrip-test PRIVATE EngineSim::Json)
+    target_include_directories(engine-sim-config-json-roundtrip-test PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../modules/json/src")
+    set_target_properties(engine-sim-config-json-roundtrip-test PROPERTIES
+        CXX_STANDARD 17 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO)
+    if (COMMAND engine_sim_diagnose)
+        engine_sim_diagnose(engine-sim-config-json-roundtrip-test TRUE)
+    endif ()
+    add_test(NAME ConfigJsonRoundTrip COMMAND engine-sim-config-json-roundtrip-test
+        "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/schema-engine.json")
+    add_test(NAME ConfigJsonDeterminism COMMAND "${Python3_EXECUTABLE}" -B
+        "${CMAKE_CURRENT_SOURCE_DIR}/json_determinism.py" "$<TARGET_FILE:engine-sim-config-roundtrip>"
+        "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/schema-engine.json")
+    set_tests_properties(ConfigJsonRoundTrip ConfigJsonDeterminism PROPERTIES LABELS r25-config TIMEOUT 60)
+endif ()

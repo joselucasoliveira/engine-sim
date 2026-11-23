@@ -25,11 +25,13 @@ execute_process(
         "${schema_generated}/config_schema_v1.hpp" --expected-sha256 "${schema_digest}"
     COMMAND_ERROR_IS_FATAL ANY)
 
-add_library(engine-sim-json STATIC src/lexical.cpp src/schema.cpp src/decode.cpp)
+add_library(engine-sim-json STATIC src/lexical.cpp src/schema.cpp src/decode.cpp src/write.cpp)
 target_include_directories(engine-sim-json PRIVATE "${schema_generated}")
 add_library(EngineSim::Json ALIAS engine-sim-json)
 target_include_directories(engine-sim-json SYSTEM PRIVATE "${json_vendor}")
-target_link_libraries(engine-sim-json PRIVATE EngineSim::Config)
+target_include_directories(engine-sim-json PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>")
+target_compile_features(engine-sim-json PUBLIC cxx_std_17)
+target_link_libraries(engine-sim-json PUBLIC EngineSim::Config)
 set_target_properties(engine-sim-json PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO)
 if (COMMAND engine_sim_diagnose)
     engine_sim_diagnose(engine-sim-json TRUE)
