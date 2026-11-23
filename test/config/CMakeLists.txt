@@ -97,3 +97,17 @@ if (TARGET engine-sim-json AND TARGET engine-sim-config-roundtrip)
         "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/schema-engine.json")
     set_tests_properties(ConfigJsonRoundTrip ConfigJsonDeterminism PROPERTIES LABELS r25-config TIMEOUT 60)
 endif ()
+
+if (TARGET engine-sim-assembly)
+    add_executable(engine-sim-mechanical-assembly-test mechanical_assembly.cpp)
+    target_link_libraries(engine-sim-mechanical-assembly-test PRIVATE engine-sim-assembly engine-sim EngineSim::Json)
+    target_include_directories(engine-sim-mechanical-assembly-test PRIVATE
+        "${PROJECT_SOURCE_DIR}/include" "${PROJECT_SOURCE_DIR}/modules/assembly/src")
+    set_target_properties(engine-sim-mechanical-assembly-test PROPERTIES
+        CXX_STANDARD 17 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO)
+    engine_sim_diagnose(engine-sim-mechanical-assembly-test TRUE)
+    set(assembly_fixture "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/schema-engine.json")
+    add_test(NAME CanonicalMechanicalAssembly COMMAND engine-sim-mechanical-assembly-test assembly "${assembly_fixture}")
+    add_test(NAME CanonicalRodPlacement COMMAND engine-sim-mechanical-assembly-test placement "${assembly_fixture}")
+    set_tests_properties(CanonicalMechanicalAssembly CanonicalRodPlacement PROPERTIES LABELS r25-assembly TIMEOUT 60)
+endif ()

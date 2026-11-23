@@ -99,7 +99,6 @@ if (BUILD_TESTING OR ENGINE_SIM_BUILD_RUNTIME OR ENGINE_SIM_BUILD_LEGACY_CONVERT
 endif ()
 if (BUILD_TESTING)
     add_subdirectory(examples/config)
-    add_subdirectory(test/config)
 endif ()
 
 add_subdirectory(dependencies)
@@ -203,6 +202,10 @@ add_library(engine-sim STATIC
 find_package(Threads REQUIRED)
 target_link_libraries(engine-sim PUBLIC simple-2d-constraint-solver PRIVATE Threads::Threads)
 target_compile_features(engine-sim PUBLIC cxx_std_17)
+if (BUILD_TESTING)
+    add_subdirectory(modules/assembly)
+    add_subdirectory(test/config)
+endif ()
 if (NOT ENGINE_SIM_BUILD_RUNTIME)
     target_sources(engine-sim PRIVATE src/compiled_scene.cpp src/resource_paths.cpp)
     if (WIN32)
