@@ -36,7 +36,7 @@ public:
         std::uint64_t seed, bool mechanics = false);
     const Engine &engine() const { return *simulator().getEngine(); }
     const Simulator &simulator() const { return *m_runtime.m_session->prepared.session->simulator; }
-    const std::vector<es_script::ScriptInput> &inputs() const { return m_runtime.m_session->prepared.inputs; }
+    const std::vector<es_script::ScriptInput> &inputs() const { return std::get<engine_sim::Runtime::LegacyRecipe>(m_runtime.m_session->prepared.recipe).inputs; }
     const es_telemetry &telemetry() const { return m_runtime.telemetry(); }
     const Diagnostics &diagnostics() const { return m_diagnostics; }
     TickSample current() const;

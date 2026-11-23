@@ -197,3 +197,37 @@ if (TARGET engine-sim-runtime)
         LABELS "r25-observation;characterization" TIMEOUT 180
         ENVIRONMENT "ENGINE_SIM_TEST_SOURCE=${PROJECT_SOURCE_DIR};ENGINE_SIM_TEST_MECHANICAL_FIXTURE=${mechanical_fixture}")
 endif ()
+
+if (TARGET engine-sim-runtime AND TARGET engine-sim-assembly)
+    add_library(engine-sim-runtime-json-private STATIC "${PROJECT_SOURCE_DIR}/src/runtime/json_runtime.cpp")
+    target_include_directories(engine-sim-runtime-json-private
+        PUBLIC "${PROJECT_SOURCE_DIR}/src/runtime"
+        PRIVATE "${PROJECT_SOURCE_DIR}/modules/assembly/src")
+    target_link_libraries(engine-sim-runtime-json-private
+        PUBLIC EngineSim::Runtime EngineSim::Config
+        PRIVATE engine-sim-assembly engine-sim-runtime-backend engine-sim-script-interpreter EngineSim::Json)
+    target_compile_features(engine-sim-runtime-json-private PRIVATE cxx_std_17)
+    engine_sim_diagnose(engine-sim-runtime-json-private TRUE)
+
+    add_executable(engine-sim-render-json-test "${PROJECT_SOURCE_DIR}/examples/runtime/render.cpp")
+    target_compile_definitions(engine-sim-render-json-test PRIVATE ENGINE_SIM_RENDER_JSON_TEST)
+    target_link_libraries(engine-sim-render-json-test PRIVATE engine-sim-runtime-json-private)
+    target_compile_features(engine-sim-render-json-test PRIVATE cxx_std_17)
+    set_target_properties(engine-sim-render-json-test PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/bin")
+    engine_sim_diagnose(engine-sim-render-json-test TRUE)
+
+    add_executable(engine-sim-json-runtime-test json_runtime_tests.cpp)
+    target_link_libraries(engine-sim-json-runtime-test PRIVATE
+        engine-sim-runtime-json-private engine-sim-script-interpreter)
+    target_compile_features(engine-sim-json-runtime-test PRIVATE cxx_std_17)
+    engine_sim_diagnose(engine-sim-json-runtime-test TRUE)
+
+    set(json_fixture "${PROJECT_SOURCE_DIR}/test/config/fixtures/schema-engine.json")
+    set(impulse_fixture "${PROJECT_SOURCE_DIR}/examples/runtime/fixture/impulse.wav")
+    add_test(NAME JsonTransactionalRuntime
+        COMMAND engine-sim-json-runtime-test transactional "${json_fixture}" "${impulse_fixture}")
+    add_test(NAME JsonResetIdentity
+        COMMAND engine-sim-json-runtime-test identity "${json_fixture}" "${impulse_fixture}")
+    set_tests_properties(JsonTransactionalRuntime JsonResetIdentity PROPERTIES LABELS r25-json-runtime TIMEOUT 90)
+endif ()

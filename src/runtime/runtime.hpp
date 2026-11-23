@@ -5,12 +5,15 @@
 #include "prepared_engine.h"
 #include "pull_engine.h"
 #include <memory>
+#include <variant>
 
 namespace desktop { class RuntimeHost; }
 namespace engine_sim_capture { class RuntimeHost; }
 
 namespace engine_sim {
 struct RuntimeTestAccess;
+struct JsonRuntimeAccess;
+struct JsonRecipe;
 class DrivenShaft;
 class Runtime {
 public:
@@ -23,15 +26,28 @@ public:
     const es_telemetry &telemetry() const noexcept { return m_snapshot; }
 private:
     friend struct RuntimeTestAccess;
+    friend struct JsonRuntimeAccess;
     friend class desktop::RuntimeHost;
     friend class engine_sim_capture::RuntimeHost;
     void adoptPrepared(PreparedEngine prepared, PullEngine::ControlLatch controls = {});
+    struct LegacyRecipe {
+        es_script::PreparationContext paths;
+        PreparationConfig config;
+        std::vector<es_script::ScriptInput> inputs;
+    };
+    using Recipe = std::variant<LegacyRecipe, std::shared_ptr<const JsonRecipe>>;
+    struct PreparedGraph {
+        Recipe recipe;
+        std::unique_ptr<EngineSession> session;
+    };
+    void adoptSession(std::unique_ptr<EngineSession> engine, Recipe recipe, std::uint32_t mode, bool desktop,
+                      PullEngine::ControlLatch controls, const std::function<void()> &beforeCommit = {});
     struct Session {
-        Session(PreparedEngine value, std::uint32_t outputHz, SampleClock::Profile profile,
-                PullEngine::ControlLatch controls);
+        Session(std::unique_ptr<EngineSession> engine, Recipe recipe, std::uint32_t mode, bool desktop,
+                std::uint32_t outputHz, SampleClock::Profile profile, PullEngine::ControlLatch controls);
         ~Session();
         void latch();
-        PreparedEngine prepared;
+        PreparedGraph prepared;
         es_controls requested{sizeof(es_controls), ES_ABI_V1, 0, 0, 0, 0, 0};
         std::unique_ptr<DrivenShaft> drive;
         std::unique_ptr<PullEngine> pull;

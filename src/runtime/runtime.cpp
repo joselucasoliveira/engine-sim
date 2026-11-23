@@ -15,17 +15,18 @@
 
 namespace engine_sim {
 Runtime::Runtime(es_config config, SampleClock::Profile profile) noexcept : m_config(config), m_profile(profile) { unload(); }
-Runtime::Session::Session(PreparedEngine value, std::uint32_t outputHz, SampleClock::Profile profile,
-        PullEngine::ControlLatch controls) : prepared(std::move(value)) {
+Runtime::Session::Session(std::unique_ptr<EngineSession> value, Recipe source, std::uint32_t mode, bool desktop,
+        std::uint32_t outputHz, SampleClock::Profile profile, PullEngine::ControlLatch controls)
+    : prepared{std::move(source), std::move(value)} {
     auto &sim = *prepared.session->simulator;
     if (profile == SampleClock::Profile::Public) {
         if (sim.getTransmission()->getGear() != -1) sim.getTransmission()->changeGear(-1);
         sim.getTransmission()->setClutchPressure(0);
         sim.m_dyno.m_enabled = sim.m_dyno.m_hold = false;
-        if (prepared.config.mode == ES_DRIVEN) drive = std::make_unique<DrivenShaft>(sim);
+        if (mode == ES_DRIVEN) drive = std::make_unique<DrivenShaft>(sim);
         else static_cast<PistonEngineSimulator &>(sim).enableExternalLoad();
     }
-    else if (!prepared.config.desktop || !controls) {
+    else if (!desktop || !controls) {
         throw std::logic_error("Desktop session requires detached owner commands");
     }
     if (!controls) controls = [this] { latch(); };
@@ -67,8 +68,15 @@ es_telemetry Runtime::snapshot(const Session &session) const {
     return value;
 }
 void Runtime::adoptPrepared(PreparedEngine prepared, PullEngine::ControlLatch controls) {
-    auto candidate = std::make_unique<Session>(std::move(prepared), m_config.output_hz, m_profile, std::move(controls));
+    adoptSession(std::move(prepared.session), LegacyRecipe{std::move(prepared.recipe), prepared.config, std::move(prepared.inputs)},
+                 prepared.config.mode, prepared.config.desktop, std::move(controls));
+}
+void Runtime::adoptSession(std::unique_ptr<EngineSession> engine, Recipe recipe, std::uint32_t mode, bool desktop,
+        PullEngine::ControlLatch controls, const std::function<void()> &beforeCommit) {
+    auto candidate = std::make_unique<Session>(std::move(engine), std::move(recipe), mode, desktop,
+                                               m_config.output_hz, m_profile, std::move(controls));
     const auto initial = snapshot(*candidate);
+    if (beforeCommit) beforeCommit();
     m_session.swap(candidate);
     m_snapshot = initial;
 }
@@ -79,8 +87,8 @@ void Runtime::load(const es_script::PreparationContext &recipe) {
 }
 void Runtime::reset() {
     if (m_profile != SampleClock::Profile::Public) throw std::logic_error("Desktop reset requires staged bindings");
-    const auto &saved = m_session->prepared;
-    adoptPrepared(prepareEngine(saved.recipe,
+    const auto &saved = std::get<LegacyRecipe>(m_session->prepared.recipe);
+    adoptPrepared(prepareEngine(saved.paths,
         {m_config.simulation_hz, m_config.mode, m_config.starter_torque_nm, m_config.seed}, &saved.inputs));
 }
 void Runtime::setControls(const es_controls &controls) noexcept {

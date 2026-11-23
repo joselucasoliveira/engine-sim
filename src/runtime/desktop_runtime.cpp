@@ -34,9 +34,9 @@ std::unique_ptr<RuntimeHost> RuntimeHost::adopt(EngineDefinition definition) {
 }
 std::unique_ptr<RuntimeHost> RuntimeHost::resetCandidate() const {
     m_views->requireQuiescent();
-    const auto &saved = m_runtime.m_session->prepared;
-    if (saved.recipe.entry.empty() || saved.recipe.libraryRoot.empty() || saved.recipe.assetRoot.empty()) throw EngineLoadError({"unsupported", "", "Reset needs an owned script recipe"});
-    return fromPrepared(engine_sim::prepareEngine(saved.recipe, saved.config, &saved.inputs));
+    const auto &saved = std::get<engine_sim::Runtime::LegacyRecipe>(m_runtime.m_session->prepared.recipe);
+    if (saved.paths.entry.empty() || saved.paths.libraryRoot.empty() || saved.paths.assetRoot.empty()) throw EngineLoadError({"unsupported", "", "Reset needs an owned script recipe"});
+    return fromPrepared(engine_sim::prepareEngine(saved.paths, saved.config, &saved.inputs));
 }
 void RuntimeHost::render(float *output, std::uint32_t frames, std::uint32_t &written) {
     m_views->requireQuiescent();

@@ -1,4 +1,7 @@
 #include <engine_sim/runtime.h>
+#ifdef ENGINE_SIM_RENDER_JSON_TEST
+#include "json_runtime.hpp"
+#endif
 #include <algorithm>
 #include <array>
 #include <charconv>
@@ -103,9 +106,22 @@ private:
 };
 void render(const std::vector<std::string> &args) {
     static_assert(sizeof(float)==4&&std::numeric_limits<float>::is_iec559,"IEEE float32 required");
-    const std::array<std::string,9> keys{"--entry","--library-root","--asset-root","--rate","--mode","--seed","--frames","--schedule","--out"};std::map<std::string,std::string> options;
-    if(args.size()==1&&args[0]=="--help"){std::cout<<"engine-sim-render --entry PATH --library-root PATH --asset-root PATH --rate 44100|48000 --mode free|driven --seed U64 --frames U64 --schedule TSV --out WAV\n";return;}
-    if(args.size()!=18)fail("expected all nine options; use --help");
+#ifdef ENGINE_SIM_RENDER_JSON_TEST
+    const std::array<std::string,8> keys{"--entry","--asset-root","--rate","--mode","--seed","--frames","--schedule","--out"};
+    constexpr auto help = "engine-sim-render-json-test --entry JSON --asset-root PATH --rate 44100|48000 --mode free|driven --seed U64 --frames U64 --schedule TSV --out WAV\n";
+    constexpr auto arity = "expected all eight options; use --help";
+    for (std::size_t i = 0; i < args.size(); i += 2) {
+        if (args[i] == "--library-root")
+            fail("--library-root was removed; convert the legacy engine to JSON with engine-sim-convert");
+    }
+#else
+    const std::array<std::string,9> keys{"--entry","--library-root","--asset-root","--rate","--mode","--seed","--frames","--schedule","--out"};
+    constexpr auto help = "engine-sim-render --entry PATH --library-root PATH --asset-root PATH --rate 44100|48000 --mode free|driven --seed U64 --frames U64 --schedule TSV --out WAV\n";
+    constexpr auto arity = "expected all nine options; use --help";
+#endif
+    std::map<std::string,std::string> options;
+    if(args.size()==1&&args[0]=="--help"){std::cout<<help;return;}
+    if(args.size()!=2*keys.size())fail(arity);
     for(std::size_t i=0;i<args.size();i+=2){utf8(args[i]);utf8(args[i+1]);if(std::find(keys.begin(),keys.end(),args[i])==keys.end()||!options.emplace(args[i],args[i+1]).second)fail("unknown or duplicate option");}
     const auto frames=integer(options.at("--frames"),"frames");if(frames>MaxWaveFrames)fail("frames: exceeds 32-bit RIFF capacity");
     const auto rate=integer(options.at("--rate"),"rate");if(rate!=44100&&rate!=48000)fail("rate: expected 44100 or 48000");
@@ -114,7 +130,12 @@ void render(const std::vector<std::string> &args) {
     es_config config{};es_error error{};const auto check=[&](es_status s){if(s!=ES_OK)fail(error.message);};
     check(es_config_init(ES_ABI_V1,sizeof(config),&config,&error));config.output_hz=static_cast<std::uint32_t>(rate);config.mode=mode;config.seed=integer(options.at("--seed"),"seed");
     es_runtime *raw=nullptr;check(es_create(&config,&raw,&error));std::unique_ptr<es_runtime,decltype(&es_destroy)> engine(raw,es_destroy);
+#ifdef ENGINE_SIM_RENDER_JSON_TEST
+    check(engine_sim::json_runtime::load_file(raw,fs::u8path(options.at("--entry")),
+                                             fs::u8path(options.at("--asset-root")),nullptr,&error));
+#else
     check(es_load(raw,options.at("--entry").c_str(),options.at("--library-root").c_str(),options.at("--asset-root").c_str(),&error));
+#endif
     es_telemetry state{};state.size=sizeof(state);state.abi=ES_ABI_V1;check(es_get_telemetry(raw,&state,&error));for(const auto &e:events)validate(e.controls,mode,state.driven_limit_rpm);
     // Validate overwritten rows too, then retain only the final full vector.
     std::vector<Event> timeline;for(const auto &e:events){if(!timeline.empty()&&timeline.back().frame==e.frame)timeline.back()=e;else timeline.push_back(e);}
