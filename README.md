@@ -18,7 +18,8 @@ The C runtime SDK loads engine models from JSON and renders caller-owned mono
 float PCM at 44.1 or 48 kHz without a window, device or worker. It supports
 free-running engines, an independent shaft load and solver-driven clockwise
 rotation. Static/shared C11, C++17 and ctypes examples accompany the
-[integration guide](docs/runtime-guide.md), [ABI reference](docs/runtime-abi.md)
+[integration guide](docs/runtime-guide.md), [engine JSON format](docs/engine-config.md),
+[ABI reference](docs/runtime-abi.md)
 and [offline WAV renderer](docs/runtime-render.md). The optional installed
 example uses a synthetic impulse; code-only SDKs include no original recordings.
 Linux installed execution is exercised locally. Native Windows/macOS and hosted
@@ -32,7 +33,7 @@ theme. Pass `--model ABSOLUTE_JSON_PATH` to select another engine. For example,
 Pass `--resources ABSOLUTE_DIRECTORY` when using a different asset root.
 Keep the installed resource tree intact so its model and impulse paths retain
 their verified identities. Convert existing scripts with the offline
-converter. [Default model](assets/main.json) · [Legacy converter guide](docs/legacy-converter.md)
+converter. [Default model](assets/main.json) · [Engine migration guide](docs/engine-migration.md)
 
 | Input | Action |
 | --- | --- |
@@ -46,7 +47,7 @@ converter. [Default model](assets/main.json) · [Legacy converter guide](docs/le
 | M / comma | Show deeper / shallower engine layers |
 | 1–5 | Slow the simulation while held |
 | F / Tab | Toggle fullscreen / cycle display layouts |
-| Enter / Escape | Reload the script / exit |
+| Enter / Escape | Reload the model / exit |
 
 Engage the dynamometer with D after enabling hold with H. Read the target on the DYNO. SPEED gauge. Some settings depend on the engine preset and the operating state.
 

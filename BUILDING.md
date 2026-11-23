@@ -130,7 +130,7 @@ cmake --preset legacy-converter
 cmake --build --preset legacy-converter --config Release
 ```
 
-Use the converter in a separate process to migrate a script to canonical JSON. To build runtime, desktop, capture and the converter together, set a fresh `ES_OUT`, initialize the selected source paths above, and prepare the union in one bootstrap.
+The [engine migration guide](docs/engine-migration.md) shows how to run the converter in a separate process and validate the resulting JSON. To build runtime, desktop, capture and the converter together, set a fresh `ES_OUT`, initialize the selected source paths above, and prepare the union in one bootstrap.
 
 ```sh
 python3 -B tools/bootstrap.py --profile runtime --with-desktop --with-capture --with-converter --tests --out "$ES_OUT"

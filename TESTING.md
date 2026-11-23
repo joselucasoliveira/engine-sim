@@ -336,3 +336,14 @@ in separate prefixes; the installed-consumer test deliberately relocates its
 prefix, so do not point it at a personal SDK installation. Check local Markdown
 paths/anchors after documentation edits. Keep builds, logs, WAVs and command
 receipts outside the checkout; documentation must not depend on them.
+
+The Linux documentation gates execute the guide's shell blocks from fresh
+checkouts. They require Ninja, bubblewrap, the pinned solver and Piranha
+checkouts, Flex/Bison and the verified Boost archive for the converter.
+Point `ENGINE_SIM_PROFILE_CACHE` at that archive cache before running both.
+
+```sh
+export ENGINE_SIM_PROFILE_CACHE=/absolute/cache
+ctest --test-dir "$ES_OUT/runtime-test" -C Release --no-tests=error \
+  -R '^(DocumentedQuickstarts|MigrationGuideExamples)$'
+```

@@ -7,59 +7,71 @@ The SDK package is version 2.0.0 and the ABI is major 2, minor 0. Its mechanical
 acoustic model remains an exploratory simulator, unsuitable for engineering
 validation or tuning decisions.
 
+Rebuild clients for ABI 2 before linking the SDK. An ABI 1 client used the
+legacy script load entry point. ABI 2 exposes explicit JSON file and byte
+loads and detailed diagnostics. Pin the v2 CMake package and library name
+when updating a dynamic client. See [platform and compatibility](runtime-abi.md#platform-and-compatibility).
+
 ## Build a code SDK and its optional example
 
-Start in an ordinary checkout with the [native prerequisites](../BUILDING.md)
-installed. Use CMake 3.25+, Ninja, a C++17 toolchain and the pinned solver
-submodule. The C examples need a C11 compiler. These commands use a POSIX shell.
+Start in a checkout with the [native prerequisites](../BUILDING.md) installed.
+Use CMake 3.25+, Ninja, a C++17 toolchain and the pinned solver submodule. The
+C examples need a C11 compiler. These commands use a POSIX shell.
 
-```sh
-set -e
-git submodule update --init dependencies/submodules/simple-2d-constraint-solver
-export CMAKE_GENERATOR=Ninja
-export ES_OUT="$(cd .. && pwd)/engine-sim-runtime-output"
-export SDK_PREFIX="$ES_OUT/sdk-static"
-export CONSUMER_BUILD="$ES_OUT/client-static"
-cmake --preset runtime-static -DENGINE_SIM_INSTALL_RUNTIME_EXAMPLE=ON \
-  -DENGINE_SIM_BUILD_RUNTIME_EXAMPLES=ON
-cmake --build --preset runtime-static --config Release --parallel 2
-cmake --install "$ES_OUT/runtime-static" --config Release \
-  --prefix "$SDK_PREFIX" --component RuntimeSDK
-cmake -S examples/runtime/consumer -B "$CONSUMER_BUILD" \
-  -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$SDK_PREFIX"
-cmake --build "$CONSUMER_BUILD" --config Release --parallel 2
-export FIXTURE="$SDK_PREFIX/share/engine-sim-runtime/example"
-"$CONSUMER_BUILD/runtime-c-consumer" "$FIXTURE/main.json" "$FIXTURE"
-"$CONSUMER_BUILD/runtime-cxx-consumer" "$FIXTURE/main.json" "$FIXTURE"
-```
+### Install the code-only SDK
 
 Choose a fresh absolute output directory outside the checkout. For a
-disconnected build, make the solver's pinned Git object available before
-starting. The SDK presets configure the runtime with the interpreter disabled.
-
-`ENGINE_SIM_INSTALL_RUNTIME_EXAMPLE` and `ENGINE_SIM_BUILD_RUNTIME_EXAMPLES`
-default to OFF. Omitting both produces only libraries, the header, CMake metadata
-the format-v1 schema and notices. The opt-in example installs a single-cylinder
-JSON and its synthetic eight-sample impulse. Use `example/main.json` as
-the entry and `example` as the asset root. Original engine recordings remain caller-supplied private
-inputs with their own redistribution obligations. See [notices](../THIRD_PARTY_NOTICES.md)
-and the [fixture description](../examples/runtime/fixture/README.md).
-
-For a shared SDK, reuse the verified dependencies but select another prefix and
-consumer build directory:
+disconnected build, make the pinned solver Git object available first.
 
 ```sh
-export SDK_PREFIX="$ES_OUT/sdk-shared"
-export CONSUMER_BUILD="$ES_OUT/client-shared"
-cmake --preset runtime-shared -DENGINE_SIM_INSTALL_RUNTIME_EXAMPLE=ON \
+set -eu
+git submodule update --init -- dependencies/submodules/simple-2d-constraint-solver
+export CMAKE_GENERATOR=Ninja
+export ES_OUT="${ES_OUT:-$(cd .. && pwd)/engine-sim-runtime-output}"
+for variant in static shared; do
+  cmake --preset "runtime-$variant"
+  cmake --build --preset "runtime-$variant" --config Release --parallel 2
+  cmake --install "$ES_OUT/runtime-$variant" --config Release \
+    --prefix "$ES_OUT/sdk-$variant" --component RuntimeSDK
+done
+```
+
+The default installation contains libraries, `engine_sim/runtime.h`, CMake
+metadata, the [v1 schema](engine-config.md) and notices. The optional example
+adds C and renderer executables, a synthetic single-cylinder JSON model and
+its eight-sample impulse. The fixture's model and impulse are under MIT.
+See the [notices](../THIRD_PARTY_NOTICES.md) and
+[fixture description](../examples/runtime/fixture/README.md).
+
+### Opt in to the synthetic example
+
+With the same `ES_OUT`, install to a separate prefix. Set `VARIANT=shared`
+before running this block to get the dynamic-library example.
+
+```sh
+export VARIANT="${VARIANT:-static}"
+export SDK_PREFIX="$ES_OUT/example-$VARIANT"
+cmake --preset "runtime-$VARIANT" -DENGINE_SIM_INSTALL_RUNTIME_EXAMPLE=ON \
   -DENGINE_SIM_BUILD_RUNTIME_EXAMPLES=ON
-cmake --build --preset runtime-shared --config Release --parallel 2
-cmake --install "$ES_OUT/runtime-shared" --config Release \
+cmake --build --preset "runtime-$VARIANT" --config Release --parallel 2
+cmake --install "$ES_OUT/runtime-$VARIANT" --config Release \
   --prefix "$SDK_PREFIX" --component RuntimeSDK
+export FIXTURE="$SDK_PREFIX/share/engine-sim-runtime/example"
+```
+
+### Build the installed clients
+
+Start in the source checkout with `SDK_PREFIX` and `FIXTURE` from the
+example above. You can also use a code-only prefix and specify a caller-owned
+model directory as `FIXTURE`. After relocating a prefix, set both paths to
+their new absolute locations and configure the clients in a fresh build
+directory.
+
+```sh
+export CONSUMER_BUILD="$ES_OUT/client-${VARIANT:-static}"
 cmake -S examples/runtime/consumer -B "$CONSUMER_BUILD" \
   -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$SDK_PREFIX"
 cmake --build "$CONSUMER_BUILD" --config Release --parallel 2
-export FIXTURE="$SDK_PREFIX/share/engine-sim-runtime/example"
 "$CONSUMER_BUILD/runtime-c-consumer" "$FIXTURE/main.json" "$FIXTURE"
 "$CONSUMER_BUILD/runtime-cxx-consumer" "$FIXTURE/main.json" "$FIXTURE"
 ```
@@ -188,7 +200,7 @@ Pass an absolute UTF-8 JSON entry and asset directory to
 document and the same explicit asset directory. The load owns the JSON and
 the referenced impulse-response data after return. Resolve relative asset
 locators beneath that directory. Use the offline converter to migrate an
-existing script. [Legacy converter guide](legacy-converter.md)
+existing script. [Engine migration guide](engine-migration.md)
 
 Failed load/reset preserves the active graph, counters, controls and fault state.
 Reset can access the filesystem: it requires the exact original canonical paths
@@ -205,6 +217,23 @@ controls and random streams.
 Synchronous rendering can still allocate or lock; an audio callback deadline
 has not been qualified. A host worker with bounded ready PCM is an integration
 choice, not a service provided by this API.
+
+### Reproduce reset recovery
+
+With the shared example installed, run the recovery example from the
+checkout. It makes a private disposable copy of the synthetic engine and
+its impulse before trying a malformed reload and two changed-input resets.
+
+```sh
+python3 -B examples/runtime/reset_recovery.py \
+  --library "$SDK_PREFIX/lib/libengine-sim-runtime.so.2" --fixture "$FIXTURE"
+```
+
+The malformed reload reports `CFG_SHAPE`. The changed JSON and changed
+impulse report `CFG_RESOURCE_BYTES` and leave the running timeline intact.
+Restoring both exact files allows reset, and the next PCM block matches
+a second independently prepared handle. Use the installed DLL or dylib
+path shown below on Windows or macOS.
 
 ## Render a WAV or load the shared ABI from Python
 

@@ -2,7 +2,7 @@
 
 The converter evaluates trusted Engine Sim scripts and exports v1 JSON plus
 a private source and resource manifest. It is an optional local build target.
-The runtime does not invoke it.
+The runtime loads the resulting JSON directly. Start with the [migration walkthrough](engine-migration.md) for fixture conversion and recovery.
 
 Build the converter from the project checkout with an external build directory
 and a populated locked archive cache.

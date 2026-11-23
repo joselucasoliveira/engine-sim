@@ -208,6 +208,13 @@ if (TARGET engine-sim-runtime)
         add_test(NAME ProfileDependencyIsolation COMMAND ${profile_gate} isolation)
         add_test(NAME CombinedProfileClosure COMMAND ${profile_gate} combined)
         set_tests_properties(ProfileDependencyIsolation CombinedProfileClosure PROPERTIES RUN_SERIAL TRUE TIMEOUT 1200)
+        set(documentation_gate "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/documentation_gate.py"
+            --out "${CMAKE_CURRENT_BINARY_DIR}/documentation-working" --deps-root "${ENGINE_SIM_PRESET_ROOT}")
+        add_test(NAME DocumentedQuickstarts COMMAND ${documentation_gate} quickstarts)
+        add_test(NAME MigrationGuideExamples COMMAND ${documentation_gate} migration)
+        set_tests_properties(DocumentedQuickstarts MigrationGuideExamples PROPERTIES
+            LABELS r25-documentation RUN_SERIAL TRUE TIMEOUT 1200)
+        set_property(TEST MigrationGuideExamples APPEND PROPERTY LABELS r25-profile-combined)
         set_tests_properties(CombinedProfileClosure PROPERTIES
             DEPENDS ProfileDependencyIsolation LABELS "r25-profile-combined" TIMEOUT 1800)
         set(sdk_relocation "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/relocation_gate.py"
