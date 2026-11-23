@@ -401,6 +401,18 @@ if (TARGET engine-sim-runtime AND TARGET engine-sim-runtime-json-private)
     add_test(NAME FleetCandidateCells COMMAND engine-sim-fleet-owner-test cells "${fleet_fixture}")
     set_tests_properties(FleetOwnerABI FleetCandidateCells PROPERTIES LABELS r3-fleet-owner TIMEOUT 90)
 
+    add_executable(engine-sim-fleet-ingress-test fleet-ingress/main.cpp)
+    target_link_libraries(engine-sim-fleet-ingress-test PRIVATE
+        EngineSim::Fleet EngineSim::Config engine-sim-runtime-backend Threads::Threads)
+    target_include_directories(engine-sim-fleet-ingress-test PRIVATE
+        "${PROJECT_SOURCE_DIR}/src/fleet" "${PROJECT_SOURCE_DIR}/modules/assembly/src"
+        "${PROJECT_SOURCE_DIR}/src/runtime")
+    target_compile_features(engine-sim-fleet-ingress-test PRIVATE cxx_std_17)
+    engine_sim_diagnose(engine-sim-fleet-ingress-test TRUE)
+    add_test(NAME FleetIngressBounds COMMAND engine-sim-fleet-ingress-test bounds "${fleet_fixture}")
+    add_test(NAME FleetIngressRace COMMAND engine-sim-fleet-ingress-test race "${fleet_fixture}")
+    set_tests_properties(FleetIngressBounds FleetIngressRace PROPERTIES LABELS r3-ingress TIMEOUT 90)
+
 endif ()
 
 if (TARGET engine-sim-runtime AND TARGET engine-sim-config-roundtrip AND ENGINE_SIM_BUILD_RUNTIME_EXAMPLES)

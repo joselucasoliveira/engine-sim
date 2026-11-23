@@ -95,6 +95,8 @@ ES_RT_DECL(int32_t, es_rt_create, (const es_rt_config *, es_rt_fleet **, es_rt_d
 ES_RT_DECL(int32_t, es_rt_prepare_file, (es_rt_fleet *, const es_rt_voice_config *, const char *entry, const char *root, es_rt_token *, es_rt_diagnostic *));
 ES_RT_DECL(int32_t, es_rt_prepare_bytes, (es_rt_fleet *, const es_rt_voice_config *, const uint8_t *, uint64_t length, const char *root, es_rt_token *, es_rt_diagnostic *));
 ES_RT_DECL(int32_t, es_rt_discard, (es_rt_fleet *, es_rt_token));
+ES_RT_DECL(int32_t, es_rt_submit, (es_rt_fleet *, const es_rt_event *));
+ES_RT_DECL(int32_t, es_rt_poll_result, (es_rt_fleet *, uint64_t sequence, es_rt_result *));
 ES_RT_DECL(void, es_rt_destroy, (es_rt_fleet *));
 #undef ES_RT_DECL
 #ifdef __cplusplus

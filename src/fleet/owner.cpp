@@ -9,7 +9,8 @@
 namespace engine_sim::fleet {
 Voice::Voice(const es_config &config, const es_rt_voice_config &settings,
              assembly::FleetCapacity estimate, json_runtime::PreparedModel graph)
-    : runtime(config), capacity(estimate), initial(settings.initial), controlsPolicy(settings.controls_policy) {
+    : runtime(config), capacity(estimate), initial(settings.initial), controlsPolicy(settings.controls_policy),
+      mode(settings.mode) {
     runtime.adoptSession(std::move(graph.session), std::move(graph.recipe), config.mode, false, {});
     const auto *system = runtime.m_session->prepared.session->simulator->getSystem();
     auto &actual = capacity.assembled;
@@ -21,6 +22,7 @@ Voice::Voice(const es_config &config, const es_rt_voice_config &settings,
     if (actual.bodies != expected.bodies || actual.constraints != expected.constraints ||
         actual.rows != expected.rows || actual.generators != expected.generators)
         throw SimulationFault("Final voice graph differs from its admitted solver dimensions");
+    drivenLimitRpm = runtime.telemetry().driven_limit_rpm;
 }
 }
 
@@ -30,6 +32,10 @@ namespace assembly = engine_sim::assembly;
 namespace json = engine_sim::json_runtime;
 using engine_sim::fleet::CellState;
 using engine_sim::fleet::Voice;
+using engine_sim::fleet::finiteRange;
+using engine_sim::fleet::prefix;
+using engine_sim::fleet::preparedCell;
+using engine_sim::fleet::validVector;
 using engine_sim::config_v1::Diagnostic;
 
 std::int32_t report(es_rt_diagnostic *detail, std::int32_t code, std::uint32_t stage,
@@ -40,13 +46,6 @@ std::int32_t report(es_rt_diagnostic *detail, std::int32_t code, std::uint32_t s
         engine_sim::api::copy(detail->message, text);
     }
     return code;
-}
-
-template<class Record>
-std::int32_t prefix(const Record &value) noexcept {
-    if (value.size < 2 * sizeof(std::uint32_t)) return ES_RT_CAPACITY;
-    if (value.abi != ES_RT_V1) return ES_RT_VERSION;
-    return value.size < sizeof(Record) ? ES_RT_CAPACITY : ES_RT_OK;
 }
 
 template<class Operation>
@@ -67,10 +66,6 @@ std::int32_t boundary(es_rt_diagnostic *detail, const Operation &operation) noex
     } catch (...) {
         return report(detail, ES_RT_INTERNAL, ES_RT_DIAG_PREPARE, "Unexpected fleet error");
     }
-}
-
-bool finite_range(double number, double limit) noexcept {
-    return std::isfinite(number) && number >= 0 && number <= limit;
 }
 
 bool absolute_path(const char *text, fs::path &out) {
@@ -98,11 +93,10 @@ std::int32_t validate_voice(const es_rt_voice_config &config, es_rt_diagnostic *
     if (config.reserved != 0 || config.mode > ES_RT_DRIVEN || config.controls_policy > ES_RT_RAW)
         return report(detail, ES_RT_INVALID, ES_RT_DIAG_INPUT, "Invalid fleet voice mode, controls policy or reserved field");
     if ((config.simulation_hz != 0 && (config.simulation_hz < 4000 || config.simulation_hz > 96000)) ||
-        !finite_range(config.starter_torque_nm, 10000))
+        !finiteRange(config.starter_torque_nm, 10000))
         return report(detail, ES_RT_INVALID, ES_RT_DIAG_INPUT, "Invalid simulation rate or starter torque");
     const auto &initial = config.initial;
-    if (!finite_range(initial.demand, 1) || !finite_range(initial.load_nm, 10000) ||
-        !finite_range(initial.driven_rpm, 12000) || initial.ignition > 1 || initial.starter > 1)
+    if (!validVector(initial))
         return report(detail, ES_RT_INVALID, ES_RT_DIAG_INPUT, "Invalid initial physical vector");
     if ((config.mode == ES_RT_DRIVEN && (initial.starter || config.starter_torque_nm != 0)) ||
         (config.mode == ES_RT_FREE && initial.driven_rpm != 0))
@@ -149,7 +143,7 @@ std::int32_t prepare_voice(es_rt_fleet *fleet, const es_rt_voice_config *voice, 
         auto candidate = std::make_unique<Voice>(options, *voice, capacity,
             std::get<json::PreparedModel>(std::move(result)));
         const auto &initial = voice->initial;
-        if (voice->mode == ES_RT_DRIVEN && initial.driven_rpm > candidate->runtime.telemetry().driven_limit_rpm)
+        if (voice->mode == ES_RT_DRIVEN && initial.driven_rpm > candidate->drivenLimitRpm)
             return report(detail, ES_RT_INVALID, ES_RT_DIAG_INPUT, "Initial driven RPM exceeds the prepared engine limit");
         candidate->runtime.setControls({sizeof(es_controls), ES_ABI_V2, initial.ignition, initial.starter,
                                        initial.demand, initial.load_nm, initial.driven_rpm});
@@ -195,6 +189,8 @@ std::int32_t ES_RT_CALL es_rt_create(const es_rt_config *input, es_rt_fleet **ou
         if (!assembly::charge_capacity(retained, *cells, sizeof(engine_sim::fleet::Cell), assembly::fleet_storage_limit))
             return report(detail, ES_RT_CAPACITY, ES_RT_DIAG_PROFILE, "Fixed fleet storage exceeds capacity");
         auto owner = std::make_unique<es_rt_fleet>(config, *cells);
+        if (!owner->commands.lockFree())
+            return report(detail, ES_RT_UNSUPPORTED, ES_RT_DIAG_PROFILE, "Fleet transport atomics are not lock-free");
         for (std::size_t index = 0; index < *cells; ++index) {
             const auto &cell = owner->cells[index];
             if (!cell.state.is_lock_free() || !cell.generation.is_lock_free())
@@ -228,13 +224,11 @@ std::int32_t ES_RT_CALL es_rt_prepare_bytes(es_rt_fleet *fleet, const es_rt_voic
 
 std::int32_t ES_RT_CALL es_rt_discard(es_rt_fleet *fleet, es_rt_token token) {
     if (!fleet || token.reserved) return ES_RT_INVALID;
-    if (token.epoch != fleet->config.epoch || !token.generation || token.cell >= fleet->cellCount) return ES_RT_STALE;
-    auto &cell = fleet->cells[token.cell];
-    if (cell.state.load(std::memory_order_acquire) != CellState::prepared ||
-        cell.generation.load(std::memory_order_relaxed) != token.generation) return ES_RT_STALE;
-    cell.voice.reset();
+    auto *cell = preparedCell(*fleet, token);
+    if (!cell) return ES_RT_STALE;
+    cell->voice.reset();
     --fleet->prepared;
-    cell.state.store(CellState::free, std::memory_order_release);
+    cell->state.store(CellState::free, std::memory_order_release);
     return ES_RT_OK;
 }
 
