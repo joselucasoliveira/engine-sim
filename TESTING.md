@@ -52,7 +52,7 @@ xvfb-run -a -s '-screen 0 2560x1440x24 -nolisten tcp' \
   --expected-revision "$(git rev-parse HEAD)" --out /absolute/external/desktop-run
 ```
 
-Staged-resource tests require Linux bubblewrap or the native Windows/macOS equivalent used by their fixture. If unprivileged namespaces are unavailable, a trusted local runner may explicitly provide a JSON command prefix in `ENGINE_SIM_BWRAP_COMMAND`; the workflow records its narrow `sudo -n bwrap` fallback. Do not grant privileged execution to untrusted pull-request code.
+Staged-resource tests require Linux bubblewrap or the native Windows/macOS equivalent used by their fixture. The Ubuntu CI runner probes the unprivileged network namespace before building. If needed, it loads Ubuntu's packaged Bubblewrap AppArmor profile and repeats the probe as the runner user. A trusted local runner can provide a JSON command prefix in `ENGINE_SIM_BWRAP_COMMAND`.
 
 Run an already installed application from an unrelated working directory:
 

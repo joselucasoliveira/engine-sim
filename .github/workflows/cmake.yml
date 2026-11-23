@@ -58,9 +58,7 @@ jobs:
           git submodule update --init -- dependencies/submodules/simple-2d-constraint-solver
           sudo apt-get update
           sudo apt-get install --yes clang-18 llvm-18 bubblewrap
-          if ! bwrap --unshare-net --ro-bind / / -- /usr/bin/true; then
-            echo "ENGINE_SIM_BWRAP_COMMAND=$(python3 -c 'import json,os; print(json.dumps(["sudo","-n","bwrap","--uid",str(os.getuid()),"--gid",str(os.getgid()),"--cap-drop","ALL"]))')" >> "$GITHUB_ENV"
-          fi
+          bash tools/prepare_ci_bwrap.sh
       - name: Run all memory diagnostics or the separate threaded selection
         shell: bash
         env:
@@ -102,9 +100,7 @@ jobs:
           icd=$(find /usr/share/vulkan/icd.d -maxdepth 1 -name 'lvp_icd*.json' -print -quit)
           test -n "$icd"
           echo "VK_DRIVER_FILES=$icd" >> "$GITHUB_ENV"
-          if ! bwrap --unshare-net --ro-bind / / -- /usr/bin/true; then
-            echo "ENGINE_SIM_BWRAP_COMMAND=$(python3 -c 'import json,os; print(json.dumps(["sudo","-n","bwrap","--uid",str(os.getuid()),"--gid",str(os.getgid()),"--cap-drop","ALL"]))')" >> "$GITHUB_ENV"
-          fi
+          bash tools/prepare_ci_bwrap.sh
       - name: Exercise the actual installed application
         env:
           EXPECTED_REVISION: ${{ github.sha }}
