@@ -175,3 +175,25 @@ if (TARGET engine-sim-runtime AND ENGINE_SIM_BUILD_RUNTIME_EXAMPLES)
         set_tests_properties(RuntimeExampleInstalled_${variant} PROPERTIES LABELS "r2-example" RUN_SERIAL TRUE TIMEOUT 600)
     endforeach ()
 endif ()
+
+if (TARGET engine-sim-runtime)
+    set(mechanical_fixture "${CMAKE_CURRENT_BINARY_DIR}/mechanical-fixture")
+    file(MAKE_DIRECTORY "${mechanical_fixture}")
+    configure_file("${PROJECT_SOURCE_DIR}/test/characterization/asymmetric.mr"
+        "${mechanical_fixture}/main.mr" COPYONLY)
+    configure_file("${PROJECT_SOURCE_DIR}/examples/runtime/fixture/impulse.wav"
+        "${mechanical_fixture}/impulse.wav" COPYONLY)
+    add_executable(engine-sim-mechanical-observation-test mechanical_observation_tests.cpp)
+    target_include_directories(engine-sim-mechanical-observation-test PRIVATE
+        "${PROJECT_SOURCE_DIR}/src/runtime" "${PROJECT_SOURCE_DIR}/tools/capture")
+    target_link_libraries(engine-sim-mechanical-observation-test PRIVATE
+        EngineSim::Runtime engine-sim-script-interpreter gtest_main)
+    engine_sim_diagnose(engine-sim-mechanical-observation-test TRUE)
+    add_test(NAME ObservationIsolation COMMAND engine-sim-mechanical-observation-test
+        --gtest_filter=MechanicalObservationTest.Isolation)
+    add_test(NAME OutputShaftTorque COMMAND engine-sim-mechanical-observation-test
+        --gtest_filter=MechanicalObservationTest.Torque:MechanicalConventionTest.OneNewtonAtOneMetreIsPositive)
+    set_tests_properties(ObservationIsolation OutputShaftTorque PROPERTIES
+        LABELS "r25-observation;characterization" TIMEOUT 180
+        ENVIRONMENT "ENGINE_SIM_TEST_SOURCE=${PROJECT_SOURCE_DIR};ENGINE_SIM_TEST_MECHANICAL_FIXTURE=${mechanical_fixture}")
+endif ()
