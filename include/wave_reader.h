@@ -22,6 +22,7 @@ public:
 inline constexpr std::uintmax_t maxImpulseWaveBytes = 64 * 1024 * 1024;
 std::vector<std::int16_t> decodeImpulseWave(
     const std::vector<unsigned char> &bytes, const std::filesystem::path &source);
+std::vector<unsigned char> readImpulseWaveBytes(const std::filesystem::path &path);
 std::vector<std::int16_t> readImpulseWave(const std::filesystem::path &path);
 }
 #endif

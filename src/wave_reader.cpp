@@ -5,18 +5,23 @@
 #include <string_view>
 
 namespace engine_sim {
-std::vector<std::int16_t> readImpulseWave(const std::filesystem::path &path) {
+std::vector<unsigned char> readImpulseWaveBytes(const std::filesystem::path &path) {
     const auto fail = [&](WaveFailure failure, const char *reason) { throw WaveError(failure, path, reason); };
-    std::error_code error;
-    const auto size = std::filesystem::file_size(path, error);
-    if (error) fail(WaveFailure::Io, "cannot inspect impulse file");
-    if (size < 12 || size > maxImpulseWaveBytes) fail(WaveFailure::Size, "WAVE size must be between 12 bytes and 64 MiB");
+    std::ifstream stream(path, std::ios::binary | std::ios::ate);
+    const auto size = stream.tellg();
+    if (size < 0) fail(WaveFailure::Io, "cannot inspect impulse file");
+    if (static_cast<std::uintmax_t>(size) > maxImpulseWaveBytes)
+        fail(WaveFailure::Size, "WAVE size must be between 12 bytes and 64 MiB");
     std::vector<unsigned char> bytes(static_cast<std::size_t>(size));
-    std::ifstream stream(path, std::ios::binary);
-    if (!stream.read(reinterpret_cast<char *>(bytes.data()), static_cast<std::streamsize>(bytes.size()))) {
+    stream.seekg(0);
+    if ((!bytes.empty() && !stream.read(reinterpret_cast<char *>(bytes.data()), static_cast<std::streamsize>(bytes.size())))
+        || !stream || stream.peek() != std::char_traits<char>::eof() || stream.bad())
         fail(WaveFailure::Io, "cannot read complete impulse file");
-    }
-    return decodeImpulseWave(bytes, path);
+    return bytes;
+}
+
+std::vector<std::int16_t> readImpulseWave(const std::filesystem::path &path) {
+    return decodeImpulseWave(readImpulseWaveBytes(path), path);
 }
 
 std::vector<std::int16_t> decodeImpulseWave(

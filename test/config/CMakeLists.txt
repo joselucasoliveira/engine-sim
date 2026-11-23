@@ -121,4 +121,15 @@ if (TARGET engine-sim-assembly)
     add_test(NAME CanonicalInductionAssembly COMMAND engine-sim-simulation-assembly-test induction "${assembly_fixture}")
     add_test(NAME CanonicalInitialization COMMAND engine-sim-simulation-assembly-test initialization "${assembly_fixture}")
     set_tests_properties(CanonicalInductionAssembly CanonicalInitialization PROPERTIES LABELS r25-assembly TIMEOUT 60)
+
+    add_executable(engine-sim-resource-preparation-test resource_preparation.cpp)
+    target_link_libraries(engine-sim-resource-preparation-test PRIVATE engine-sim-assembly engine-sim EngineSim::Json)
+    target_include_directories(engine-sim-resource-preparation-test PRIVATE
+        "${PROJECT_SOURCE_DIR}/include" "${PROJECT_SOURCE_DIR}/modules/assembly/src")
+    set_target_properties(engine-sim-resource-preparation-test PROPERTIES
+        CXX_STANDARD 17 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO)
+    engine_sim_diagnose(engine-sim-resource-preparation-test TRUE)
+    add_test(NAME CanonicalResourcePreparation COMMAND engine-sim-resource-preparation-test resources "${assembly_fixture}")
+    add_test(NAME CanonicalCandidateLifetime COMMAND engine-sim-resource-preparation-test lifetime "${assembly_fixture}")
+    set_tests_properties(CanonicalResourcePreparation CanonicalCandidateLifetime PROPERTIES LABELS r25-assembly TIMEOUT 60)
 endif ()

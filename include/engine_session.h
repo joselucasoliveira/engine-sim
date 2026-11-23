@@ -9,7 +9,6 @@
 #include "impulse_response.h"
 #include "units.h"
 
-#include <functional>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -42,6 +41,7 @@ struct EngineDefinition {
 struct EngineSessionOptions {
     int simulationFrequency = 0;
     double starterTorque = 0;
+    bool startAtLegacyDesktopRate = false;
 };
 
 class EngineSession {
@@ -51,10 +51,9 @@ public:
             if (simulator != nullptr) { simulator->releaseSimulation(); delete simulator; }
         }
     };
-    using ImpulseReader = std::function<std::vector<int16_t>(const ImpulseResponse &)>;
-
     explicit EngineSession(EngineDefinition value) : definition(std::move(value)) {}
 
+    template<class ImpulseReader>
     static std::unique_ptr<EngineSession> prepare(EngineDefinition definition, const ImpulseReader &reader,
             EngineSessionOptions options = {}) {
         const auto path = definition.sourcePath;
@@ -85,9 +84,10 @@ public:
                 throw EngineLoadError({"graph", path, "Engine topology is incomplete"});
             }
             engine->calculateDisplacement();
-            if (options.simulationFrequency == 0) {
+            if (options.simulationFrequency == 0 || options.startAtLegacyDesktopRate) {
                 candidate->simulator.reset(engine->createSimulator(model.vehicle.get(), model.transmission.get()));
-                candidate->simulator->setSimulationFrequency(engine->getSimulationFrequency());
+                candidate->simulator->setSimulationFrequency(options.simulationFrequency == 0
+                    ? static_cast<int>(engine->getSimulationFrequency()) : options.simulationFrequency);
             }
             else {
                 candidate->simulator.reset(engine->createSimulator(
@@ -103,7 +103,7 @@ public:
             for (int i = 0; i < engine->getExhaustSystemCount(); ++i) {
                 const auto *response = engine->getExhaustSystem(i)->getImpulseResponse();
                 if (response == nullptr) throw EngineLoadError({"resources", path, "Missing impulse response"});
-                const auto samples = reader(*response);
+                const auto &samples = reader(*response);
                 synth.initializeImpulseResponse(samples.data(), static_cast<unsigned>(samples.size()),
                     static_cast<float>(response->getVolume()), i);
             }
