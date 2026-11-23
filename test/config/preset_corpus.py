@@ -1,5 +1,6 @@
 """Check an explicit preset index with the real writer and both runtime paths."""
 import argparse
+import hashlib
 import json
 import math
 import re
@@ -90,6 +91,8 @@ def indexed(root, filename, count):
         require(source.resolve().is_relative_to(root) and model.resolve().is_relative_to(root), "Preset escapes checkout")
         require(source.suffix == ".mr" and source.is_file() and model == source.with_suffix(".json")
                 and model.is_file() and source not in paths, "Missing, incorrect or duplicate preset")
+        if "v1_sha256" in item:
+            require(re.fullmatch(r"[0-9a-f]{64}", item["v1_sha256"]) is not None, "Invalid v1 reference hash")
         selection = item["selection"]
         require(item["coverage"] in PROFILES and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", selection) is not None,
                 "Unsupported preset selection or profile")
@@ -168,6 +171,12 @@ def coverage(args, work):
             path = (args.repo / response["path"]).resolve()
             require(path.is_relative_to(args.repo) and path.is_file(), f"{label}: missing IR {response['path']}")
         visited.append(source.relative_to(args.repo))
+        if "v1_sha256" in item:
+            expanded = work / (model.stem + "-effective.json")
+            run([args.writer, "--expand", model, expanded], work)
+            require(graph["format_version"] == 2 and
+                    hashlib.sha256(expanded.read_bytes()).hexdigest() == item["v1_sha256"],
+                    f"{label}: effective model differs from pinned v1 reference")
 
     if args.numbered:
         numbers = range(args.first_number, args.first_number + args.count)

@@ -1,9 +1,11 @@
 # Engine configuration format v1
 
+For editable cam and port profiles, see [authoring JSON v2](engine-authoring.md).
+
 An Engine Simulator model is one UTF-8 JSON document. Its root contains
 `format_version`, `selected_engine`, `engine` and `components`. Use the
 number `1` for `format_version` and the engine's ID for `selected_engine`.
-Use the [complete synthetic model](../examples/runtime/fixture/main.json) as
+Use the [complete v1 schema example](../test/config/fixtures/schema-engine.json) as
 a working starting point. The runtime and desktop use the same engine graph.
 The [runtime guide](runtime-guide.md) shows how to load a file, load bytes or
 construct the same values in C++.

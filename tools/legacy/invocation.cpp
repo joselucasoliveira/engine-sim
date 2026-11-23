@@ -402,6 +402,12 @@ std::string evaluate(const Item &unresolved, const fs::path &manifest, Json &rec
         record["ignored_inputs"].push_back({{"source",ignored.component_id},{"construct","intake"},
             {"field",ignored.name},{"value",ignored.value},{"reason","Evaluated input has no R2 effect"}});
 
+    record["harmonic_lobes"] = Json::array();
+    for (const auto &[id, inputs] : model.harmonics) {
+        record["harmonic_lobes"].push_back({{"id", id}, {"duration_at_50_thou_rad", inputs.duration_at_50_thou_rad},
+            {"max_lift_m", inputs.lift_m}, {"gamma", inputs.gamma}, {"steps", inputs.steps}});
+    }
+
     auto output=cfg::write_json(model.model);
     const auto decoded=cfg::read_json(output);
     if (const auto *error=std::get_if<cfg::Diagnostic>(&decoded))

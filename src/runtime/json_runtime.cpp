@@ -125,7 +125,7 @@ Outcome read_document(JsonRecipe &recipe, const JsonRecipe *expected) {
 PreparedModelResult prepare(JsonRecipe recipe, const JsonRecipe *expected,
                             assembly::PreparationProfile profile, const Checkpoint &checkpoint) {
     if (checkpoint) checkpoint(Phase::document);
-    auto parsed = cfg::read_json(recipe.bytes);
+    auto parsed = config_json::read_model(recipe.bytes);
     if (auto *problem = std::get_if<cfg::Diagnostic>(&parsed)) {
         if (!recipe.resolved_entry.empty()) problem->path = recipe.resolved_entry.u8string();
         return std::move(*problem);

@@ -2,6 +2,7 @@
 #define ENGINE_SIM_LEGACY_SNAPSHOT_HPP
 
 #include "compiler.h"
+#include "legacy_curves.h"
 
 #include <engine_sim/config-v1.hpp>
 
@@ -19,10 +20,16 @@ struct IgnoredInput {
     double value;
 };
 
+struct HarmonicOrigin {
+    std::string function_id;
+    legacy_curves::HarmonicInputs inputs;
+};
+
 struct Snapshot {
     config_v1::Document values;
     std::vector<ImpulseOrigin> impulses;
     std::vector<IgnoredInput> ignored_inputs;
+    std::vector<HarmonicOrigin> harmonics;
     std::vector<es_script::ScriptInput> consumed_scripts;
 };
 

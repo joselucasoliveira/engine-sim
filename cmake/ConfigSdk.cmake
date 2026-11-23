@@ -35,6 +35,7 @@ if (engine_sim_config_has_json)
     install(FILES "${PROJECT_SOURCE_DIR}/modules/json/third_party/nlohmann/LICENSE.MIT"
         DESTINATION "${CMAKE_INSTALL_DATADIR}/engine-sim-config/licenses" RENAME nlohmann-json-MIT.txt COMPONENT ConfigSDK)
     install(FILES "${PROJECT_SOURCE_DIR}/schemas/engine-config-v1.schema.json"
+        "${PROJECT_SOURCE_DIR}/schemas/engine-config-v2.schema.json"
         DESTINATION "${CMAKE_INSTALL_DATADIR}/engine-sim-config/schema" COMPONENT ConfigSDK)
 endif ()
 

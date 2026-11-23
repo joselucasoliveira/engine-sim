@@ -33,7 +33,9 @@ to validate and hash the proposed bytes without creating an engine file.
 The asset and library roots are legacy search roots. The resource root
 contains the canonical WAVE files. Relative impulse names resolve from their
 declaring script. The manifest tracks actual scripts and resources, output
-hashes, and the stage and path of a failure. It does not establish parity
+hashes, and the stage and path of a failure. The harmonic_lobes entries
+record each eligible generated function ID and its actual evaluated duration,
+lift, gamma and steps for [v2 authoring migration](engine-authoring-catalog.md). It does not establish parity
 or redistribution clearance.
 
 Use `--batch /path/to/plan.json --manifest /path/to/result.json` to run an

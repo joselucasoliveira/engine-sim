@@ -107,7 +107,8 @@ private:
     cfg::Components &parts() { return m_snapshot.values.components; }
 
     cfg::Ref<cfg::FunctionTag> function(const FunctionNode *source) {
-        return component(source, "function", parts().functions, [](const auto &node, auto &record) {
+        return component(source, "function", parts().functions, [&](const auto &node, auto &record) {
+            if (node.m_harmonic) m_snapshot.harmonics.push_back({record.id.value, *node.m_harmonic});
             record.filter_radius = {node.m_filterRadius};
             record.samples.reserve(node.m_samples.size());
             for (const auto &sample : node.m_samples) record.samples.push_back({{sample.x}, {sample.y}});
@@ -118,12 +119,10 @@ private:
         auto &table = parts().functions;
         cfg::Function curve;
         curve.id = {identifier("function", table.size() + 1)};
-        curve.filter_radius = {1.0};
-        curve.samples.reserve(30);
-        for (int i = 0; i < 30; ++i) {
-            const double speed = static_cast<double>(i);
-            curve.samples.push_back({{speed}, {speed * 0.5}});
-        }
+        using Formula = engine_sim::legacy_curves::DefaultTurbulence;
+        curve.filter_radius = {Formula::radius};
+        curve.samples.reserve(Formula::samples);
+        Formula::sample([&](double x, double y) { curve.samples.push_back({{x}, {y}}); });
         const auto id = curve.id;
         table.push_back(std::move(curve));
         return id;

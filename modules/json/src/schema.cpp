@@ -1,6 +1,7 @@
 #include "schema.hpp"
 #include "read.hpp"
 #include "config_schema_v1.hpp"
+#include "config_schema_v2.hpp"
 
 #include <algorithm>
 #include <charconv>
@@ -154,8 +155,10 @@ private:
             case Kind::object: return object(rule, value);
             case Kind::array: return array(rule, value);
             case Kind::string: {
-                if (!rule.minLength && !rule.maxLength) break;
                 const auto text = value.text();
+                if (!rule.choices.empty() && std::find(rule.choices.begin(), rule.choices.end(), text) == rule.choices.end())
+                    return fail(value, "Value is outside the schema choices");
+                if (!rule.minLength && !rule.maxLength) break;
                 const auto length = static_cast<std::size_t>(std::count_if(text.begin(), text.end(),
                     [](unsigned char c) { return (c & 0xc0) != 0x80; }));
                 if ((rule.minLength && length < *rule.minLength) || (rule.maxLength && length > *rule.maxLength))
@@ -193,7 +196,7 @@ std::optional<Diagnostic> validate_shape(const Rules &rules, Value value) {
     return Validator(rules).result(value);
 }
 
-std::optional<Diagnostic> validate_v1(const ParsedJson &parsed) {
+std::optional<Diagnostic> validate_document(const ParsedJson &parsed, int &format, bool allow_authoring) {
     const Value root{parsed, 0};
     const auto version = root.member("format_version");
     if (!version || version->kind() != Kind::number ||
@@ -203,14 +206,27 @@ std::optional<Diagnostic> validate_v1(const ParsedJson &parsed) {
         if (version) set_source_location(problem, parsed.bytes, version->node().span.begin);
         return problem;
     }
-    if (compare_numbers(version->lexeme(), "1") != 0) {
+    if (compare_numbers(version->lexeme(), "1") == 0) {
+        format = 1;
+    } else if (allow_authoring && compare_numbers(version->lexeme(), "2") == 0) {
+        format = 2;
+    } else {
         Diagnostic problem{"CFG_VERSION", "version", "/format_version", "Unsupported engine configuration version",
                            {}, "format_version", {}, {}, {}, {}};
         set_source_location(problem, parsed.bytes, version->node().span.begin);
         return problem;
     }
+    if (format == 2) {
+        static const auto rules = make_v2_rules();
+        return validate_shape(rules, root);
+    }
     static const auto rules = make_v1_rules();
     return validate_shape(rules, root);
+}
+
+std::optional<Diagnostic> validate_v1(const ParsedJson &parsed) {
+    int format = 0;
+    return validate_document(parsed, format, false);
 }
 
 std::string_view schema_digest() noexcept { return embedded_schema_digest; }

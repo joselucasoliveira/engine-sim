@@ -5,37 +5,43 @@
       "source": "assets/engines/audi/i5.mr",
       "model": "assets/engines/audi/i5.json",
       "selection": "audi_i5_2_2L",
-      "coverage": "all-entry"
+      "coverage": "all-entry",
+      "v1_sha256": "d345878da37e989d8aff3a875f24651976ea2f8ceb678b496abc5c3959a12220"
     },
     {
       "source": "assets/engines/bmw/M52B28.mr",
       "model": "assets/engines/bmw/M52B28.json",
       "selection": "M52B28",
-      "coverage": "deep"
+      "coverage": "deep",
+      "v1_sha256": "ad7604d090c98ce72db5d0f5d89592d5e022c64f6ee07c26ada93890fa46f6ae"
     },
     {
       "source": "assets/engines/chevrolet/chev_truck_454.mr",
       "model": "assets/engines/chevrolet/chev_truck_454.json",
       "selection": "chev_truck_454",
-      "coverage": "all-entry"
+      "coverage": "all-entry",
+      "v1_sha256": "e3ddfeda659d573b116df1129ac33adc759274c3c19aa43bb2eca8bc5e19daf2"
     },
     {
       "source": "assets/engines/chevrolet/engine_03_for_e1.mr",
       "model": "assets/engines/chevrolet/engine_03_for_e1.json",
       "selection": "engine_03_for_e1",
-      "coverage": "all-entry"
+      "coverage": "all-entry",
+      "v1_sha256": "8b12c2916957811cc19fcf5437c3fb92b00d05e187b820f1a97517e6e60f1d64"
     },
     {
       "source": "assets/engines/kohler/kohler_ch750.mr",
       "model": "assets/engines/kohler/kohler_ch750.json",
       "selection": "kohler_ch750",
-      "coverage": "all-entry"
+      "coverage": "all-entry",
+      "v1_sha256": "5094add34a23f2ffca6834a4842079ba04518984f5b3ce6bbc9a99ba626201ca"
     },
     {
       "source": "assets/main.mr",
       "model": "assets/main.json",
       "selection": "entry",
-      "coverage": "deep"
+      "coverage": "deep",
+      "v1_sha256": "e75d6c0633ffa630709fb7360aa2cc344d72d93327cb00091ec4effba1d93b1b"
     }
   ]
 }

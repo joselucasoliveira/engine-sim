@@ -5,40 +5,46 @@
       "source": "assets/engines/atg-video-2/07_gm_ls.mr",
       "model": "assets/engines/atg-video-2/07_gm_ls.json",
       "selection": "main",
-      "coverage": "deep"
+      "coverage": "deep",
+      "v1_sha256": "f3d5f7958d1759cd7214b41373747b4304ca4cb7c441b3a5cd8973c31e4a44fe"
     },
     {
       "source": "assets/engines/atg-video-2/08_ferrari_f136_v8.mr",
       "model": "assets/engines/atg-video-2/08_ferrari_f136_v8.json",
       "selection": "main",
-      "coverage": "deep"
+      "coverage": "deep",
+      "v1_sha256": "d75f16819c766d66b10c82dcdfcac2cff1f5266bdc888c5e8a0e892854a2104a"
     },
     {
       "source": "assets/engines/atg-video-2/09_radial_9.mr",
       "model": "assets/engines/atg-video-2/09_radial_9.json",
       "selection": "main",
       "coverage": "deep",
-      "deep_drive_profile": "gentle"
+      "deep_drive_profile": "gentle",
+      "v1_sha256": "c7cfd6104a211daa083fa53cab79380d683d3bd1ba362e2a3daff8ea282c3c13"
     },
     {
       "source": "assets/engines/atg-video-2/10_lfa_v10.mr",
       "model": "assets/engines/atg-video-2/10_lfa_v10.json",
       "selection": "main",
-      "coverage": "all-entry"
+      "coverage": "all-entry",
+      "v1_sha256": "ac3e50784a911da2a12706d58462c8d272716816c5ab5bcbece171a44c010ef2"
     },
     {
       "source": "assets/engines/atg-video-2/11_merlin_v12.mr",
       "model": "assets/engines/atg-video-2/11_merlin_v12.json",
       "selection": "main",
       "coverage": "deep",
-      "deep_drive_profile": "gentle"
+      "deep_drive_profile": "gentle",
+      "v1_sha256": "91296e6547e94a6887e46d70801caf401ad855385e97b243325b09231f6559c0"
     },
     {
       "source": "assets/engines/atg-video-2/12_ferrari_412_t2.mr",
       "model": "assets/engines/atg-video-2/12_ferrari_412_t2.json",
       "selection": "main",
       "coverage": "deep",
-      "deep_drive_profile": "gentle"
+      "deep_drive_profile": "gentle",
+      "v1_sha256": "db929a7e7ff925216094c6d5250041fe57c79b5d459021a02687a2c42c40cf41"
     }
   ],
   "observe": [

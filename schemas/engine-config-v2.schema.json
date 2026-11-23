@@ -1,0 +1,1711 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:engine-sim:config:2",
+  "type": "object",
+  "properties": {
+    "format_version": {
+      "const": 2
+    },
+    "selected_engine": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "engine": {
+      "$ref": "#/$defs/engine"
+    },
+    "components": {
+      "$ref": "#/$defs/components"
+    },
+    "initialization": {
+      "$ref": "#/$defs/initialization"
+    },
+    "vehicle": {
+      "$ref": "#/$defs/vehicle"
+    },
+    "transmission": {
+      "$ref": "#/$defs/transmission"
+    },
+    "desktop": {
+      "$ref": "#/$defs/desktop"
+    },
+    "port_flow_tables": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/portFlowTable"
+      },
+      "maxItems": 65536
+    },
+    "port_flow_scales": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/portFlowScale"
+      },
+      "maxItems": 65536
+    }
+  },
+  "required": [
+    "format_version",
+    "selected_engine",
+    "engine",
+    "components"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "sample": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "additionalProperties": false
+    },
+    "function": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/sampleFunction"
+        },
+        {
+          "$ref": "#/$defs/harmonicCamLobe"
+        },
+        {
+          "$ref": "#/$defs/defaultTurbulence"
+        },
+        {
+          "$ref": "#/$defs/measuredPortFlow"
+        },
+        {
+          "$ref": "#/$defs/ignitionTiming"
+        },
+        {
+          "$ref": "#/$defs/camSamples"
+        },
+        {
+          "$ref": "#/$defs/fuelFlameSpeed"
+        }
+      ]
+    },
+    "rod_journal": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "angle": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "angle"
+      ],
+      "additionalProperties": false
+    },
+    "crankshaft": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "throw": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "flywheel_mass": {
+          "type": "number",
+          "minimum": 0
+        },
+        "mass": {
+          "type": "number",
+          "minimum": 0
+        },
+        "friction_torque": {
+          "type": "number",
+          "minimum": 0
+        },
+        "moment_of_inertia": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "position_x": {
+          "type": "number"
+        },
+        "position_y": {
+          "type": "number"
+        },
+        "tdc": {
+          "type": "number"
+        },
+        "journals": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "minItems": 0,
+          "maxItems": 65536
+        }
+      },
+      "required": [
+        "id",
+        "throw",
+        "flywheel_mass",
+        "mass",
+        "friction_torque",
+        "moment_of_inertia",
+        "position_x",
+        "position_y",
+        "tdc",
+        "journals"
+      ],
+      "additionalProperties": false
+    },
+    "piston": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "mass": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "blowby": {
+          "type": "number"
+        },
+        "compression_height": {
+          "type": "number"
+        },
+        "wrist_pin_position": {
+          "type": "number"
+        },
+        "displacement": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "mass",
+        "blowby",
+        "compression_height",
+        "wrist_pin_position",
+        "displacement"
+      ],
+      "additionalProperties": false
+    },
+    "connecting_rod": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "mass": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "moment_of_inertia": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "center_of_mass": {
+          "type": "number"
+        },
+        "length": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "slave_throw": {
+          "type": "number"
+        },
+        "journals": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "minItems": 0,
+          "maxItems": 65536
+        }
+      },
+      "required": [
+        "id",
+        "mass",
+        "moment_of_inertia",
+        "center_of_mass",
+        "length",
+        "slave_throw",
+        "journals"
+      ],
+      "additionalProperties": false
+    },
+    "fuel": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "name": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 4096
+        },
+        "molecular_mass": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "energy_density": {
+          "type": "number",
+          "minimum": 0
+        },
+        "density": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "molecular_afr": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "turbulence_to_flame_speed_ratio": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "max_burning_efficiency": {
+          "type": "number"
+        },
+        "burning_efficiency_randomness": {
+          "type": "number"
+        },
+        "low_efficiency_attenuation": {
+          "type": "number"
+        },
+        "max_turbulence_effect": {
+          "type": "number"
+        },
+        "max_dilution_effect": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "molecular_mass",
+        "energy_density",
+        "density",
+        "molecular_afr",
+        "turbulence_to_flame_speed_ratio",
+        "max_burning_efficiency",
+        "burning_efficiency_randomness",
+        "low_efficiency_attenuation",
+        "max_turbulence_effect",
+        "max_dilution_effect"
+      ],
+      "additionalProperties": false
+    },
+    "direct_throttle": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "kind": {
+          "const": "direct"
+        },
+        "gamma": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "gamma"
+      ],
+      "additionalProperties": false
+    },
+    "governor": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "kind": {
+          "const": "governor"
+        },
+        "min_speed": {
+          "type": "number",
+          "minimum": 0
+        },
+        "max_speed": {
+          "type": "number"
+        },
+        "min_v": {
+          "type": "number"
+        },
+        "max_v": {
+          "type": "number"
+        },
+        "k_s": {
+          "type": "number",
+          "minimum": 0
+        },
+        "k_d": {
+          "type": "number",
+          "minimum": 0
+        },
+        "gamma": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "min_speed",
+        "max_speed",
+        "min_v",
+        "max_v",
+        "k_s",
+        "k_d",
+        "gamma"
+      ],
+      "additionalProperties": false
+    },
+    "engine": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "name": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 4096
+        },
+        "redline": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "starter_speed": {
+          "type": "number"
+        },
+        "starter_torque": {
+          "type": "number",
+          "minimum": 0
+        },
+        "dyno_min_speed": {
+          "type": "number"
+        },
+        "dyno_max_speed": {
+          "type": "number"
+        },
+        "dyno_hold_step": {
+          "type": "number"
+        },
+        "fuel": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "throttle": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "simulation_frequency": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "hf_gain": {
+          "type": "number"
+        },
+        "jitter": {
+          "type": "number"
+        },
+        "noise": {
+          "type": "number"
+        },
+        "crankshafts": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "minItems": 1,
+          "maxItems": 65536
+        },
+        "banks": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "minItems": 1,
+          "maxItems": 65536
+        },
+        "ignition": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "mean_piston_speed_to_turbulence": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "redline",
+        "starter_speed",
+        "starter_torque",
+        "dyno_min_speed",
+        "dyno_max_speed",
+        "dyno_hold_step",
+        "fuel",
+        "throttle",
+        "simulation_frequency",
+        "hf_gain",
+        "jitter",
+        "noise",
+        "crankshafts",
+        "banks",
+        "ignition",
+        "mean_piston_speed_to_turbulence"
+      ],
+      "additionalProperties": false
+    },
+    "cylinder": {
+      "type": "object",
+      "properties": {
+        "piston": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "connecting_rod": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "rod_journal": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "intake": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "exhaust_system": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "ignition_wire": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "primary_length": {
+          "type": "number"
+        },
+        "sound_attenuation": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "piston",
+        "connecting_rod",
+        "rod_journal",
+        "intake",
+        "exhaust_system",
+        "ignition_wire",
+        "primary_length",
+        "sound_attenuation"
+      ],
+      "additionalProperties": false
+    },
+    "cylinder_bank": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "angle": {
+          "type": "number"
+        },
+        "bore": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "deck_height": {
+          "type": "number"
+        },
+        "position_x": {
+          "type": "number"
+        },
+        "position_y": {
+          "type": "number"
+        },
+        "display_depth": {
+          "type": "number"
+        },
+        "cylinders": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/cylinder"
+          },
+          "minItems": 1,
+          "maxItems": 1024
+        },
+        "head": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        }
+      },
+      "required": [
+        "id",
+        "angle",
+        "bore",
+        "deck_height",
+        "position_x",
+        "position_y",
+        "display_depth",
+        "cylinders",
+        "head"
+      ],
+      "additionalProperties": false
+    },
+    "head": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "chamber_volume": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "intake_runner_volume": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "intake_runner_cross_section_area": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "exhaust_runner_volume": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "exhaust_runner_cross_section_area": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "flip_display": {
+          "type": "boolean"
+        },
+        "intake_port_flow": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "exhaust_port_flow": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "valvetrain": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        }
+      },
+      "required": [
+        "id",
+        "chamber_volume",
+        "intake_runner_volume",
+        "intake_runner_cross_section_area",
+        "exhaust_runner_volume",
+        "exhaust_runner_cross_section_area",
+        "flip_display",
+        "intake_port_flow",
+        "exhaust_port_flow",
+        "valvetrain"
+      ],
+      "additionalProperties": false
+    },
+    "standard": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "kind": {
+          "const": "standard"
+        },
+        "intake_camshaft": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "exhaust_camshaft": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "intake_camshaft",
+        "exhaust_camshaft"
+      ],
+      "additionalProperties": false
+    },
+    "vtec": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "kind": {
+          "const": "vtec"
+        },
+        "intake_camshaft": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "exhaust_camshaft": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "vtec_intake_camshaft": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "vtec_exhaust_camshaft": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "min_rpm": {
+          "type": "number"
+        },
+        "min_speed": {
+          "type": "number"
+        },
+        "manifold_vacuum": {
+          "type": "number"
+        },
+        "min_throttle_position": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "intake_camshaft",
+        "exhaust_camshaft",
+        "vtec_intake_camshaft",
+        "vtec_exhaust_camshaft",
+        "min_rpm",
+        "min_speed",
+        "manifold_vacuum",
+        "min_throttle_position"
+      ],
+      "additionalProperties": false
+    },
+    "camshaft": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "advance": {
+          "type": "number"
+        },
+        "base_radius": {
+          "type": "number",
+          "minimum": 0
+        },
+        "lobe_profile": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "lobes": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 1,
+          "maxItems": 65536
+        }
+      },
+      "required": [
+        "id",
+        "advance",
+        "base_radius",
+        "lobe_profile",
+        "lobes"
+      ],
+      "additionalProperties": false
+    },
+    "intake": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "plenum_volume": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "plenum_cross_section_area": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "intake_flow_rate": {
+          "type": "number"
+        },
+        "idle_flow_rate": {
+          "type": "number"
+        },
+        "runner_flow_rate": {
+          "type": "number"
+        },
+        "molecular_afr": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "idle_throttle_plate_position": {
+          "type": "number"
+        },
+        "runner_length": {
+          "type": "number"
+        },
+        "velocity_decay": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "plenum_volume",
+        "plenum_cross_section_area",
+        "intake_flow_rate",
+        "idle_flow_rate",
+        "runner_flow_rate",
+        "molecular_afr",
+        "idle_throttle_plate_position",
+        "runner_length",
+        "velocity_decay"
+      ],
+      "additionalProperties": false
+    },
+    "exhaust_system": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "length": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "collector_cross_section_area": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "outlet_flow_rate": {
+          "type": "number"
+        },
+        "primary_tube_length": {
+          "type": "number"
+        },
+        "primary_flow_rate": {
+          "type": "number"
+        },
+        "audio_volume": {
+          "type": "number"
+        },
+        "velocity_decay": {
+          "type": "number"
+        },
+        "impulse_response": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        }
+      },
+      "required": [
+        "id",
+        "length",
+        "collector_cross_section_area",
+        "outlet_flow_rate",
+        "primary_tube_length",
+        "primary_flow_rate",
+        "audio_volume",
+        "velocity_decay",
+        "impulse_response"
+      ],
+      "additionalProperties": false
+    },
+    "impulse_response": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "volume": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "path",
+        "volume"
+      ],
+      "additionalProperties": false
+    },
+    "post": {
+      "type": "object",
+      "properties": {
+        "wire": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "angle": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "wire",
+        "angle"
+      ],
+      "additionalProperties": false
+    },
+    "wire": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "ignition": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "timing_curve": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "rev_limit": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "limiter_duration": {
+          "type": "number",
+          "minimum": 0
+        },
+        "posts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/post"
+          },
+          "minItems": 0,
+          "maxItems": 65536
+        }
+      },
+      "required": [
+        "id",
+        "timing_curve",
+        "rev_limit",
+        "limiter_duration",
+        "posts"
+      ],
+      "additionalProperties": false
+    },
+    "vehicle": {
+      "type": "object",
+      "properties": {
+        "mass": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "drag_coefficient": {
+          "type": "number"
+        },
+        "cross_sectional_area": {
+          "type": "number"
+        },
+        "diff_ratio": {
+          "type": "number"
+        },
+        "tire_radius": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "rolling_resistance": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "mass",
+        "drag_coefficient",
+        "cross_sectional_area",
+        "diff_ratio",
+        "tire_radius",
+        "rolling_resistance"
+      ],
+      "additionalProperties": false
+    },
+    "transmission": {
+      "type": "object",
+      "properties": {
+        "max_clutch_torque": {
+          "type": "number",
+          "minimum": 0
+        },
+        "gears": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 1,
+          "maxItems": 65536
+        }
+      },
+      "required": [
+        "max_clutch_torque",
+        "gears"
+      ],
+      "additionalProperties": false
+    },
+    "desktop": {
+      "type": "object",
+      "properties": {
+        "start_fullscreen": {
+          "type": "boolean"
+        },
+        "power_units": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 4096
+        },
+        "torque_units": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 4096
+        },
+        "speed_units": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 4096
+        },
+        "pressure_units": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 4096
+        },
+        "boost_units": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 4096
+        },
+        "color_background": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "color_foreground": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "color_shadow": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "color_highlight1": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "color_highlight2": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "color_pink": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "color_red": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "color_orange": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "color_yellow": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "color_blue": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "color_green": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        }
+      },
+      "required": [
+        "start_fullscreen",
+        "power_units",
+        "torque_units",
+        "speed_units",
+        "pressure_units",
+        "boost_units",
+        "color_background",
+        "color_foreground",
+        "color_shadow",
+        "color_highlight1",
+        "color_highlight2",
+        "color_pink",
+        "color_red",
+        "color_orange",
+        "color_yellow",
+        "color_blue",
+        "color_green"
+      ],
+      "additionalProperties": false
+    },
+    "initialization": {
+      "type": "object",
+      "properties": {
+        "profile": {
+          "const": "r2-piston-v1"
+        },
+        "crankcase_pa": {
+          "const": 101325
+        },
+        "chamber_pa": {
+          "const": 101325
+        },
+        "chamber_kelvin": {
+          "const": 298.15
+        }
+      },
+      "required": [
+        "profile",
+        "crankcase_pa",
+        "chamber_pa",
+        "chamber_kelvin"
+      ],
+      "additionalProperties": false
+    },
+    "components": {
+      "type": "object",
+      "properties": {
+        "functions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/function"
+          },
+          "minItems": 1,
+          "maxItems": 65536
+        },
+        "journals": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/rod_journal"
+          },
+          "minItems": 1,
+          "maxItems": 65536
+        },
+        "crankshafts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/crankshaft"
+          },
+          "minItems": 1,
+          "maxItems": 65536
+        },
+        "pistons": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/piston"
+          },
+          "minItems": 1,
+          "maxItems": 65536
+        },
+        "rods": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/connecting_rod"
+          },
+          "minItems": 1,
+          "maxItems": 65536
+        },
+        "fuels": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/fuel"
+          },
+          "minItems": 1,
+          "maxItems": 65536
+        },
+        "throttles": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/throttle"
+          },
+          "minItems": 1,
+          "maxItems": 65536
+        },
+        "banks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/cylinder_bank"
+          },
+          "minItems": 1,
+          "maxItems": 65536
+        },
+        "heads": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/head"
+          },
+          "minItems": 1,
+          "maxItems": 65536
+        },
+        "valvetrains": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/valvetrain"
+          },
+          "minItems": 1,
+          "maxItems": 65536
+        },
+        "camshafts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/camshaft"
+          },
+          "minItems": 1,
+          "maxItems": 65536
+        },
+        "intakes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/intake"
+          },
+          "minItems": 1,
+          "maxItems": 65536
+        },
+        "exhausts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/exhaust_system"
+          },
+          "minItems": 1,
+          "maxItems": 65536
+        },
+        "impulses": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/impulse_response"
+          },
+          "minItems": 1,
+          "maxItems": 65536
+        },
+        "wires": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/wire"
+          },
+          "minItems": 1,
+          "maxItems": 65536
+        },
+        "ignitions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ignition"
+          },
+          "minItems": 1,
+          "maxItems": 65536
+        }
+      },
+      "required": [
+        "functions",
+        "journals",
+        "crankshafts",
+        "pistons",
+        "rods",
+        "fuels",
+        "throttles",
+        "banks",
+        "heads",
+        "valvetrains",
+        "camshafts",
+        "intakes",
+        "exhausts",
+        "impulses",
+        "wires",
+        "ignitions"
+      ],
+      "additionalProperties": false
+    },
+    "throttle": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/direct_throttle"
+        },
+        {
+          "$ref": "#/$defs/governor"
+        }
+      ]
+    },
+    "valvetrain": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/standard"
+        },
+        {
+          "$ref": "#/$defs/vtec"
+        }
+      ]
+    },
+    "sampleFunction": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "filter_radius": {
+          "type": "number"
+        },
+        "input_scale": {
+          "const": 1
+        },
+        "output_scale": {
+          "const": 1
+        },
+        "samples": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/sample"
+          },
+          "minItems": 0,
+          "maxItems": 1048576
+        },
+        "kind": {
+          "const": "samples"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "filter_radius",
+        "input_scale",
+        "output_scale",
+        "samples"
+      ],
+      "additionalProperties": false
+    },
+    "harmonicCamLobe": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "kind": {
+          "const": "harmonic_cam_lobe"
+        },
+        "duration_at_50_thou_deg": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "max_lift_thou": {
+          "type": "number",
+          "exclusiveMinimum": 50
+        },
+        "gamma": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "steps": {
+          "type": "integer",
+          "minimum": 6,
+          "maximum": 524288
+        },
+        "max_lift_mm": {
+          "type": "number",
+          "exclusiveMinimum": 1.27
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "duration_at_50_thou_deg"
+      ],
+      "additionalProperties": false
+    },
+    "defaultTurbulence": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "kind": {
+          "const": "legacy_default_turbulence"
+        }
+      },
+      "required": [
+        "id",
+        "kind"
+      ],
+      "additionalProperties": false
+    },
+    "measuredPortFlow": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "kind": {
+          "const": "port_flow_28_inh2o"
+        },
+        "table": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "scale": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "table"
+      ],
+      "additionalProperties": false
+    },
+    "portFlowPoint": {
+      "type": "object",
+      "properties": {
+        "flow_scfm": {
+          "type": "number",
+          "minimum": 0
+        },
+        "lift": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "lift",
+        "flow_scfm"
+      ],
+      "additionalProperties": false
+    },
+    "portFlowTable": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "points": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/portFlowPoint"
+          },
+          "minItems": 1,
+          "maxItems": 1048576
+        },
+        "filter_radius": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "lift_unit": {
+          "type": "string",
+          "enum": [
+            "thou",
+            "mm",
+            "m"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "lift_unit",
+        "filter_radius",
+        "points"
+      ],
+      "additionalProperties": false
+    },
+    "portFlowScale": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "lift_scale": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "flow_attenuation": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "ignitionTimingPoint": {
+      "type": "object",
+      "properties": {
+        "rpm": {
+          "type": "number"
+        },
+        "advance_deg": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "rpm",
+        "advance_deg"
+      ],
+      "additionalProperties": false
+    },
+    "ignitionTiming": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "kind": {
+          "const": "ignition_timing"
+        },
+        "filter_radius_rpm": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "points": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ignitionTimingPoint"
+          },
+          "minItems": 1,
+          "maxItems": 1048576
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "filter_radius_rpm",
+        "points"
+      ],
+      "additionalProperties": false
+    },
+    "camSamplesPoint": {
+      "type": "object",
+      "properties": {
+        "angle_deg": {
+          "type": "number"
+        },
+        "lift_m": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "angle_deg",
+        "lift_m"
+      ],
+      "additionalProperties": false
+    },
+    "camSamples": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "kind": {
+          "const": "cam_samples"
+        },
+        "filter_radius_deg": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "points": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/camSamplesPoint"
+          },
+          "minItems": 1,
+          "maxItems": 1048576
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "filter_radius_deg",
+        "points"
+      ],
+      "additionalProperties": false
+    },
+    "fuelFlameSpeedPoint": {
+      "type": "object",
+      "properties": {
+        "turbulence_speed": {
+          "type": "number"
+        },
+        "flame_speed": {
+          "type": "number"
+        },
+        "flame_speed_multiplier": {
+          "type": "number"
+        },
+        "scale": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "turbulence_speed"
+      ],
+      "additionalProperties": false
+    },
+    "fuelFlameSpeed": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "kind": {
+          "const": "fuel_flame_speed"
+        },
+        "filter_radius": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "points": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/fuelFlameSpeedPoint"
+          },
+          "minItems": 1,
+          "maxItems": 1048576
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "filter_radius",
+        "points"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

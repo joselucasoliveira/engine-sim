@@ -268,10 +268,16 @@ TEST_F(MechanicalObservationTest, Isolation) {
 
 TEST_F(MechanicalObservationTest, ConvertedFixtureStructure) {
     const auto serialized = readFixture(lawful/"main.json");
-    const auto model = cfg::read_json(serialized);
+    const auto model = engine_sim::config_json::read_model(serialized);
     ASSERT_TRUE(std::holds_alternative<cfg::NormalizedDocument>(model));
     const auto &normalized = std::get<cfg::NormalizedDocument>(model);
-    EXPECT_EQ(cfg::write_json(normalized), serialized);
+    const auto authored = engine_sim::config_json::rewrite(serialized);
+    ASSERT_TRUE(std::holds_alternative<std::string>(authored));
+    EXPECT_EQ(std::get<std::string>(authored), serialized);
+    const auto v1 = cfg::write_json(normalized);
+    const auto expanded = cfg::read_json(v1);
+    ASSERT_TRUE(std::holds_alternative<cfg::NormalizedDocument>(expanded));
+    EXPECT_EQ(cfg::write_json(std::get<cfg::NormalizedDocument>(expanded)), v1);
     const auto &document = normalized.values();
     const auto &parts = document.components;
     EXPECT_EQ(document.engine.id, document.selected_engine);

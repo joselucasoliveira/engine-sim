@@ -11,14 +11,13 @@ import re
 
 KEYWORDS = {
     "$schema", "$id", "$defs", "$ref", "type", "const", "properties", "required",
-    "additionalProperties", "items", "oneOf", "minimum", "exclusiveMinimum", "maximum",
+    "additionalProperties", "items", "oneOf", "enum", "minimum", "exclusiveMinimum", "maximum",
     "minItems", "maxItems", "minLength", "maxLength",
 }
 TYPES = {"array", "boolean", "integer", "number", "object", "string", "null"}
 EXTENTS = {"minItems", "maxItems", "minLength", "maxLength"}
 BOUNDS = {"minimum", "exclusiveMinimum", "maximum"}
 DIALECT = "https://json-schema.org/draft/2020-12/schema"
-V1 = "urn:engine-sim:config:1"
 
 
 def require(condition, message):
@@ -47,7 +46,7 @@ def pointer_token(name):
 
 
 class Compiler:
-    def __init__(self, root, production):
+    def __init__(self, root, production, version=1):
         require(isinstance(root, dict), "Expected an object schema")
         defs = root.get("$defs", {})
         require(isinstance(defs, dict), "Expected an object for $defs")
@@ -59,10 +58,10 @@ class Compiler:
             self.visit(schema, i)
         self.check_expansions()
         if production:
-            require(root.get("$schema") == DIALECT and root.get("$id") == V1,
-                    "The v1 registry entry must declare its pinned identity and dialect")
-            require(root.get("properties", {}).get("format_version") == {"const": Decimal(1)}
-                    and "format_version" in root.get("required", []), "Missing exact v1 version discriminator")
+            require(root.get("$schema") == DIALECT and root.get("$id") == f"urn:engine-sim:config:{version}",
+                    "The registry entry must declare its pinned identity and dialect")
+            require(root.get("properties", {}).get("format_version") == {"const": Decimal(version)}
+                    and "format_version" in root.get("required", []), "Missing exact format version discriminator")
             self.check_variants()
 
     @staticmethod
@@ -99,6 +98,12 @@ class Compiler:
             if isinstance(value, Decimal):
                 require(self.decimal_is_admitted(value), "Numeric const exceeds the admitted decimal range")
             rule["const"] = value
+        if "enum" in schema:
+            choices = schema["enum"]
+            require(rule.get("type") == "string" and isinstance(choices, list) and
+                    0 < len(choices) <= 16 and all(isinstance(choice, str) for choice in choices) and
+                    len(set(choices)) == len(choices), "Expected unique string enum choices")
+            rule["choices"] = choices
         required = schema.get("required", [])
         require(isinstance(required, list) and all(isinstance(k, str) for k in required)
                 and len(required) == len(set(required)), "Invalid required list")
@@ -228,6 +233,8 @@ def generate(lines, factory, rules):
             elif key == "properties":
                 definitions = [f"{{{literal(k)}, {child}, {str(required).lower()}}}" for k, child, required in value]
                 cpp = "{" + ", ".join(definitions) + "}"
+            elif key == "choices":
+                cpp = "{" + ", ".join(map(literal, value)) + "}"
             elif key == "alternatives":
                 cpp = "{" + ", ".join(map(str, value)) + "}"
             elif key in BOUNDS:
@@ -242,6 +249,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("input", type=Path)
     parser.add_argument("output", type=Path)
+    parser.add_argument("--version", type=int, choices=(1, 2), default=1)
     modes = parser.add_mutually_exclusive_group(required=True)
     modes.add_argument("--expected-sha256")
     modes.add_argument("--development-suite", action="store_true")
@@ -267,11 +275,12 @@ def main():
     else:
         require(re.fullmatch(r"[0-9a-f]{64}", args.expected_sha256) and digest == args.expected_sha256,
                 "Schema SHA-256 differs from the pinned registry entry")
-        generate(lines, "make_v1_rules", Compiler(load(data), True).rules)
+        generate(lines, f"make_v{args.version}_rules", Compiler(load(data), True, args.version).rules)
+        suffix = "" if args.version == 1 else f"_v{args.version}"
         schema = data.decode("utf-8")
         chunks = schema.splitlines(keepends=True)
-        lines += [f'inline constexpr std::string_view embedded_schema_digest = "{digest}";',
-                  "inline constexpr std::string_view embedded_schema_bytes ="]
+        lines += [f'inline constexpr std::string_view embedded_schema{suffix}_digest = "{digest}";',
+                  f"inline constexpr std::string_view embedded_schema{suffix}_bytes ="]
         lines.extend(f"    {literal(chunk)}" for chunk in chunks)
         lines[-1] += ";"
     lines.append("}")

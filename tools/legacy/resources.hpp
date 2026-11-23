@@ -28,6 +28,7 @@ struct ResolvedSnapshot {
     std::vector<ResolvedImpulse> impulses;
     std::vector<PinnedWave> waves;
     std::vector<IgnoredInput> ignored_inputs;
+    std::vector<HarmonicOrigin> harmonics;
     std::vector<es_script::ScriptInput> consumed_scripts;
 };
 

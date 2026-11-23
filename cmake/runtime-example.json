@@ -1,5 +1,5 @@
 {
-  "license": "Original synthetic engine and impulse response under MIT. The installed example contains canonical JSON.",
+  "license": "Original synthetic engine and impulse response under MIT. The installed example contains authoring JSON.",
   "files": [
     {
       "path": "LICENSE",
@@ -7,11 +7,11 @@
     },
     {
       "path": "README.md",
-      "sha256": "2b31439f44a3005788747de74c49aa7ad5700783fd9dd0c507142feda37ac519"
+      "sha256": "8e133a64afc895d060d59ff8222232c34c56c0fa61c46ff24abd0c783d853cc2"
     },
     {
       "path": "main.json",
-      "sha256": "b0d67dae7bab867eed3f79fd9aae581b3eabaac329e0a769c1f82a3408e12bfe"
+      "sha256": "e443a08b0c57d24792905423bcae9f5d6d0a25a299d3b438a9350932ef6fbdf9"
     },
     {
       "path": "impulse.wav",

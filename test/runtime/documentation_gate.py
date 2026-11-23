@@ -16,7 +16,8 @@ from programmatic_gate import matching_graph
 
 SOURCE = Path(__file__).resolve().parents[2]
 DOCUMENTS = ("README.md", "BUILDING.md", "TESTING.md", "docs/engine-config.md",
-             "docs/engine-migration.md", "docs/legacy-converter.md", "docs/runtime-guide.md")
+             "docs/engine-migration.md", "docs/legacy-converter.md", "docs/runtime-guide.md",
+             "docs/engine-authoring.md", "docs/engine-authoring-catalog.md")
 SOLVER = "simple-2d-constraint-solver"
 GUIDE = "docs/runtime-guide.md"
 MIGRATION = "docs/engine-migration.md"
@@ -173,7 +174,6 @@ def migration(check, archive_cache):
     fixture = check.checkout / "examples/runtime/fixture"
     engine = output / "engine.json"
     digest = sha(engine)
-    assert engine.read_bytes() == (fixture / "main.json").read_bytes()
     assert digest == "b0d67dae7bab867eed3f79fd9aae581b3eabaac329e0a769c1f82a3408e12bfe"
     for name, status in (("converted", "converted"), ("validated", "validated-only")):
         record = read_json(output / f"{name}.run.json")
@@ -187,6 +187,9 @@ def migration(check, archive_cache):
     loader = check.build / "programmatic-client/engine-sim-file-loader"
     check.run("load-converted", loader, engine, fixture, 44100, "free", actual)
     assert actual.read_bytes() == (check.build / "typed.f32").read_bytes()
+    authored = check.build / "authored.f32"
+    check.run("load-catalog-fixture", loader, fixture / "main.json", fixture, 44100, "free", authored)
+    assert authored.read_bytes() == actual.read_bytes()
     assert actual.stat().st_size == 44100 * 2 * 4
     check.run("converter-recovery", sys.executable, "-B", check.checkout / "test/script/legacy_converter.py",
               cli, fixture, check.work, "cli")

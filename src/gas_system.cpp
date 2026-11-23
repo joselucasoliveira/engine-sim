@@ -1,4 +1,5 @@
 #include "../include/gas_system.h"
+#include "../include/legacy_curves.h"
 
 #include "../include/units.h"
 #include "../include/utilities.h"
@@ -128,46 +129,12 @@ double GasSystem::react(double n, const Mix &mix) {
     return a_n_fuel;
 }
 
-double GasSystem::flowConstant(
-    double targetFlowRate,
-    double P,
-    double pressureDrop,
-    double T,
-    double hcr)
-{
-    const double T_0 = T;
-    const double p_0 = P, p_T = P - pressureDrop; // p_0 = upstream pressure
-
-    const double chokedFlowLimit =
-        std::pow((2.0 / (hcr + 1)), hcr / (hcr - 1));
-    const double p_ratio = p_T / p_0;
-
-    double flowRate = 0;
-    if (p_ratio <= chokedFlowLimit) {
-        // Choked flow
-        flowRate = std::sqrt(hcr);
-        flowRate *= std::pow(2 / (hcr + 1), (hcr + 1) / (2 * (hcr - 1)));
-    }
-    else {
-        flowRate = (2 * hcr) / (hcr - 1);
-        flowRate *= (1 - std::pow(p_ratio, (hcr - 1) / hcr));
-        flowRate = std::sqrt(flowRate);
-        flowRate *= std::pow(p_ratio, 1 / hcr);
-    }
-
-    flowRate *= p_0 / std::sqrt(constants::R * T_0);
-
-    return targetFlowRate / flowRate;
+double GasSystem::flowConstant(double targetFlowRate, double P, double pressureDrop, double T, double hcr) {
+    return engine_sim::legacy_curves::flow_constant(targetFlowRate, P, pressureDrop, T, hcr);
 }
 
 double GasSystem::k_28inH2O(double flowRateScfm) {
-    return flowConstant(
-        units::flow(flowRateScfm, units::scfm),
-        units::pressure(1.0, units::atm),
-        units::pressure(28.0, units::inH2O),
-        units::celcius(25),
-        heatCapacityRatio(5)
-    );
+    return engine_sim::legacy_curves::port_flow_28_inh2o(flowRateScfm);
 }
 
 double GasSystem::k_carb(double flowRateScfm) {

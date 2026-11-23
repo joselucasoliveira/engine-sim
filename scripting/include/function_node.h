@@ -6,6 +6,9 @@
 #include "engine_context.h"
 
 #include "engine_sim.h"
+#include "legacy_curves.h"
+
+#include <optional>
 
 namespace es_script {
 
@@ -24,11 +27,20 @@ namespace es_script {
         void addSample(double x, double y) {
             requireFinite(x, "curve x");
             requireFinite(y, "curve y");
+            m_harmonic.reset();
             m_samples.push_back({ x, y });
         }
 
         void setFilterRadius(double filterRadius) {
+            m_harmonic.reset();
             m_filterRadius = filterRadius;
+        }
+
+        void generateHarmonic(const engine_sim::legacy_curves::HarmonicCamLobe &lobe) {
+            const bool replacesEmptyCurve = m_samples.empty();
+            lobe.sample([&](double x, double y) { addSample(x, y); });
+            setFilterRadius(lobe.step);
+            if (replacesEmptyCurve) m_harmonic = lobe.input;
         }
 
         virtual Function *generate(EngineContext *context) {
@@ -64,6 +76,7 @@ namespace es_script {
         }
 
         std::vector<Sample> m_samples;
+        std::optional<engine_sim::legacy_curves::HarmonicInputs> m_harmonic;
         double m_filterRadius = 0.0;
     };
 

@@ -23,7 +23,8 @@ ROOT_FILES = ("CMakeLists.txt", "CMakePresets.json", "cmake/Diagnostics.cmake",
 SOLVER = "simple-2d-constraint-solver"
 SOLVER_FILES = ("dependencies/CMakeLists.txt", "dependencies/submodules/CMakeLists.txt",
                 "cmake/LockedSources.cmake", "cmake/SolverCompatibility.h")
-JSON_FILES = ("modules/json", "schemas/engine-config-v1.schema.json", "cmake/compile_config_schema.py")
+JSON_FILES = ("modules/json", "schemas/engine-config-v1.schema.json", "schemas/engine-config-v2.schema.json",
+              "cmake/compile_config_schema.py", "include/legacy_curves.h", "include/units.h", "include/constants.h")
 SDK_FILES = ("LICENSE", "THIRD_PARTY_NOTICES.md", "cmake/RuntimeSdk.cmake", "cmake/runtime.elf.exports",
              "cmake/EngineSimRuntimeConfig.cmake.in", "cmake/InstallSdkPreflight.cmake.in", "cmake/runtime-sdk-notices.md",
              "modules/assembly", "include/engine_sim/runtime.h",

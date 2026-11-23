@@ -5,50 +5,58 @@
       "source": "assets/engines/atg-video-1/01_honda_trx520.mr",
       "model": "assets/engines/atg-video-1/01_honda_trx520.json",
       "selection": "main",
-      "coverage": "all-entry"
+      "coverage": "all-entry",
+      "v1_sha256": "92903e010e123d721bb7257349835aa08f0baceebcb11d4ca8cf42a86ecaf735"
     },
     {
       "source": "assets/engines/atg-video-1/02_kohler_ch750.mr",
       "model": "assets/engines/atg-video-1/02_kohler_ch750.json",
       "selection": "main",
-      "coverage": "deep"
+      "coverage": "deep",
+      "v1_sha256": "da71ee45143e5d5dd10e6146fb63cb8fe66f57ce153edd911ae572ff6f873374"
     },
     {
       "source": "assets/engines/atg-video-1/03_harley_davidson_shovelhead.mr",
       "model": "assets/engines/atg-video-1/03_harley_davidson_shovelhead.json",
       "selection": "main",
-      "coverage": "all-entry"
+      "coverage": "all-entry",
+      "v1_sha256": "6b54850ca245b9ee687294aa92aabb6e97f30748d57c7f9dafa84ceddb4a5196"
     },
     {
       "source": "assets/engines/atg-video-1/04_hayabusa.mr",
       "model": "assets/engines/atg-video-1/04_hayabusa.json",
       "selection": "main",
-      "coverage": "all-entry"
+      "coverage": "all-entry",
+      "v1_sha256": "4a44a0c39661f28d79c76486bfdf9ebc27dc456d1ed5c756983822d7840c6d1f"
     },
     {
       "source": "assets/engines/atg-video-1/05_honda_vtec.mr",
       "model": "assets/engines/atg-video-1/05_honda_vtec.json",
       "selection": "main",
       "coverage": "deep",
-      "deep_drive_rpm": 6200
+      "deep_drive_rpm": 6200,
+      "v1_sha256": "dcc0e4ec83494d342269ecfd7794d32530eb49ee6312157a7363dc8ddfc7e2b7"
     },
     {
       "source": "assets/engines/atg-video-1/06_subaru_ej25.mr",
       "model": "assets/engines/atg-video-1/06_subaru_ej25.json",
       "selection": "main",
-      "coverage": "deep"
+      "coverage": "deep",
+      "v1_sha256": "18211d2321ba9948454083730e8027f02a1404d673eb635b8794d8145ffc3608"
     },
     {
       "source": "assets/engines/atg-video-1/07_audi_i5.mr",
       "model": "assets/engines/atg-video-1/07_audi_i5.json",
       "selection": "main",
-      "coverage": "all-entry"
+      "coverage": "all-entry",
+      "v1_sha256": "684291a60c7a146f3fbab63481dd583a07f714b53222cc266802da5f13ccf87f"
     },
     {
       "source": "assets/engines/atg-video-1/08_radial_5.mr",
       "model": "assets/engines/atg-video-1/08_radial_5.json",
       "selection": "main",
-      "coverage": "deep"
+      "coverage": "deep",
+      "v1_sha256": "8d81ff7fa4a4089e3772fd4914c5f578c6e19e7bbbf9819fc832d3b9718c9762"
     }
   ]
 }

@@ -9,7 +9,8 @@
   "fixture": {
     "source": "examples/runtime/fixture/main.mr",
     "model": "examples/runtime/fixture/main.json",
-    "selection": "entry"
+    "selection": "entry",
+    "v1_sha256": "b0d67dae7bab867eed3f79fd9aae581b3eabaac329e0a769c1f82a3408e12bfe"
   },
   "default": "assets/main.json",
   "default_engine": "assets/engines/atg-video-2/01_subaru_ej25_eh.json",
@@ -114,5 +115,6 @@
     "examples/runtime/fixture/library/types/conversions.mr": "fixture_library",
     "examples/runtime/fixture/library/types/operations.mr": "fixture_library",
     "examples/runtime/fixture/main.mr": "sdk_fixture"
-  }
+  },
+  "authoring_version": 2
 }

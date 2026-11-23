@@ -68,7 +68,8 @@ class Gate:
         self.run([app, "--script", work / "unavailable.mr"], failure="engine-sim-convert")
         self.run([app, "--help"])
         smoke = args.source / "tools/run_desktop_smoke.py"
-        cases = [("default", start), ("alternate", alternate)]
+        authored = resources / "assets/engines/atg-video-2/07_gm_ls.json"
+        cases = [("default", start), ("alternate", alternate), ("authored", authored)]
         settings = sorted((resources / "assets/themes").glob("*.json"))
         need(len(settings) == 6, "desktop stage must supply six theme objects")
         for theme in settings:

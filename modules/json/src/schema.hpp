@@ -35,6 +35,7 @@ struct Rule {
     int reference = -1;
     int items = -1;
     std::vector<int> alternatives;
+    std::vector<std::string_view> choices;
     std::vector<Property> properties;
     bool closed = false;
     bool discriminated = false;
@@ -45,6 +46,7 @@ using Rules = std::vector<Rule>;
 
 // Shared keyword evaluator. Arbitrary rule inputs are built only by offline development tooling.
 std::optional<Diagnostic> validate_shape(const Rules &rules, Value value);
+std::optional<Diagnostic> validate_document(const ParsedJson &parsed, int &format, bool allow_authoring);
 std::optional<Diagnostic> validate_v1(const ParsedJson &parsed);
 void locate_diagnostic(const ParsedJson &parsed, Diagnostic &problem);
 

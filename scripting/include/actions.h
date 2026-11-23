@@ -457,29 +457,8 @@ namespace es_script {
             requirePositive(m_gamma, "cam gamma");
             requirePositive(m_lift, "cam lift");
             requireModel(m_steps > 5, "Cam requires more than five sampling steps");
-            const double angle = m_durationAt50Thou / 4;
-            const double s = std::pow(2 * units::distance(50, units::thou) / m_lift, 1 / m_gamma) - 1;
-            const double k = std::acos(s) / angle;
-            const double extents = constants::pi / k;
-
-            // pi / 2 = k * x
-
-            const double step = extents / (m_steps - 5.0);
-            for (int i = 0; i < m_steps; ++i) {
-                if (i == 0) {
-                    m_function->addSample(0.0, m_lift);
-                }
-                else {
-                    const double x = i * step;
-                    const double lift = (x >= extents)
-                        ? 0.0
-                        : m_lift * std::pow(0.5 + 0.5 * std::cos(k * x), m_gamma);
-                    m_function->addSample(x, lift);
-                    m_function->addSample(-x, lift);
-                }
-            }
-
-            m_function->setFilterRadius(step);
+            m_function->generateHarmonic(engine_sim::legacy_curves::harmonic_cam_lobe(
+                {m_durationAt50Thou, m_gamma, m_lift, m_steps}));
         }
 
     protected:

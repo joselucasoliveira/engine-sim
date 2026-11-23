@@ -24,7 +24,8 @@ NOTICE_INPUTS = {
 def check_payload(source, build, prefix, variant):
     names = {
         Path("include/engine_sim/runtime.h"): source / "include/engine_sim/runtime.h",
-        DATA / "schema/engine-config-v1.schema.json": source / "schemas/engine-config-v1.schema.json",
+        **{DATA / "schema" / name: source / "schemas" / name
+           for name in ("engine-config-v1.schema.json", "engine-config-v2.schema.json")},
         **{DATA / "licenses" / name: source / origin for name, origin in NOTICE_INPUTS.items()},
         **{Path(f"lib/cmake/EngineSimRuntime/{name}"): origin for name, origin in (
             ("EngineSimRuntimeConfig.cmake", build / "sdk-config/Release/EngineSimRuntimeConfig.cmake"),

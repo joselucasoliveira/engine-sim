@@ -178,7 +178,7 @@ void transactional(const Fixture &fixture) {
             struct Invalid { std::string_view bytes; es_status status; const char *code; };
             const Invalid failures[]{
                 {"{", ES_CONFIG, "CFG_SYNTAX"},
-                {"{\"format_version\":2}", ES_VERSION, "CFG_VERSION"},
+                {"{\"format_version\":3}", ES_VERSION, "CFG_VERSION"},
                 {"{\"format_version\":1}", ES_CONFIG, "CFG_SHAPE"},
                 {"{\"format_version\":1,\"format_version\":1}", ES_CONFIG, "CFG_DUPLICATE_KEY"},
             };
@@ -361,7 +361,7 @@ void public_abi(const Fixture &fixture) {
           ES_CAPACITY, ES_DIAG_API, "API_CAPACITY");
     check(es_load_json_bytes(runtime.get(), &one, (16u << 20) + 1, root.c_str(), &detail, &error),
           ES_CONFIG, ES_DIAG_PARSE, "CFG_LIMIT");
-    check(load("{\"format_version\":2}"), ES_VERSION, ES_DIAG_SCHEMA, "CFG_VERSION");
+    check(load("{\"format_version\":3}"), ES_VERSION, ES_DIAG_SCHEMA, "CFG_VERSION");
     require(std::string_view(detail.pointer) == "/format_version", "Expected the rejected version pointer");
     const auto versionFailure = detail;
     es_diagnostic separate{};

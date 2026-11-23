@@ -149,7 +149,7 @@ ResolveResult resolve(Snapshot input, const fs::path &requested_root) {
         }
     }
     return ResolvedSnapshot{std::get<cfg::NormalizedDocument>(std::move(model)), std::move(root),
-        std::move(rebased.origins), std::move(rebased.waves), std::move(input.ignored_inputs),
+        std::move(rebased.origins), std::move(rebased.waves), std::move(input.ignored_inputs), std::move(input.harmonics),
         std::move(input.consumed_scripts)};
 }
 

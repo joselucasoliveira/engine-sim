@@ -20,17 +20,28 @@ def replace(source, old, new):
 
 
 def parser(source):
-    authored, needle, normalized = source.partition("ModelResult read_normalized")
-    if not needle:
-        raise ValueError("Normalized parser entry point missing")
-    normalized = replace(normalized, "parse(input)", measured("tokenize_parse", "parse(input)"))
-    normalized = replace(normalized, "validate_v1(parsed)", measured("schema", "validate_v1(parsed)"))
-    return authored + needle + replace(normalized, "decode<Document>({parsed, 0})",
-                                       measured("document_projection", "decode<Document>({parsed, 0})"))
+    for entry, signature in (
+        ("ModelResult read_normalized", "validate_v1(parsed)"),
+        ("Result read_versioned", "validate_document(parsed, format, true)"),
+    ):
+        preceding, needle, body = source.partition(entry)
+        if not needle:
+            raise ValueError(f"JSON reader entry point missing: {entry}")
+        start, end, following = body.partition("\n}\n")
+        if not end:
+            raise ValueError(f"JSON reader body missing: {entry}")
+        start = replace(start, "parse(input)", measured("tokenize_parse", "parse(input)"))
+        start = replace(start, signature, measured("schema", signature))
+        source = preceding + needle + start + end + following
+    source = replace(source, "normalize(decode<Document>({parsed, 0}))",
+                     "normalize(" + measured("document_projection", "decode<Document>({parsed, 0})") + ")")
+    return replace(source, "decode<Document>(root)", measured("document_projection", "decode<Document>(root)"))
 
 
 def schema(source):
-    return replace(source, "make_v1_rules()", measured("shared_schema", "make_v1_rules()"))
+    for registry in ("make_v1_rules()", "make_v2_rules()"):
+        source = replace(source, registry, measured("shared_schema", registry))
+    return source
 
 
 def normalization(source):

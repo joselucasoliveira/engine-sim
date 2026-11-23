@@ -91,6 +91,11 @@ def inside(mode, work):
     sample = work / "example-source"
     resources = work / "Resources Ω"
     original = resources / "main.json"
+    expansion_prefix = work / ("Json SDK Ω" if mode == "model" else "Runtime static Ω")
+    writer = build("authored-expansion", work / "authored-expansion-source", expansion_prefix)
+    expanded = work / "effective-v1.json"
+    run("expand-authored-model", writer / "expand-authored", "--expand", original, expanded)
+    assert sha(expanded) == "b0d67dae7bab867eed3f79fd9aae581b3eabaac329e0a769c1f82a3408e12bfe"
     if mode == "model":
         model_prefix = work / "Model SDK Ω"
         header_source = work / "header-source"
@@ -117,7 +122,7 @@ def inside(mode, work):
         for archive in ("libengine-sim-json.a", "libengine-sim-config.a"):
             assert sum(item.endswith(archive) for item in model_link) == 1
         report = {"canonical_sha256": sha(work / "first.json"),
-                  "graph_nodes": matching_graph(work / "first.json", original)}
+                  "graph_nodes": matching_graph(work / "first.json", expanded)}
     else:
         comparisons = []
         for variant in ("static", "shared"):
@@ -138,7 +143,7 @@ def inside(mode, work):
                     assert json.loads(first) == json.loads(second)
                     assert typed.stat().st_size == rate * 8 and sha(typed) == sha(file)
                     comparisons.append({"variant": variant, "rate": rate, "mode": mode_name, "pcm_sha256": sha(file),
-                                        "model_sha256": sha(generated), "nodes": matching_graph(generated, original),
+                                        "model_sha256": sha(generated), "nodes": matching_graph(generated, expanded),
                                         "telemetry": json.loads(second)})
             reverse = build(variant + "-runtime-first", work / "reverse-source", prefix)
             for archive in ("libengine-sim-json.a", "libengine-sim-config.a"):
@@ -167,6 +172,14 @@ def project(audit, mode, root):
         shutil.copyfile(args.source / "examples/runtime/fixture" / name, directory / name)
     shutil.copytree(args.source / SAMPLE, payload / "example-source")
     shutil.copyfile(__file__, payload / "gate.py")
+    expander = payload / "authored-expansion-source"
+    expander.mkdir()
+    shutil.copyfile(args.source / "examples/config/roundtrip.cpp", expander / "main.cpp")
+    (expander / "CMakeLists.txt").write_text(
+        'cmake_minimum_required(VERSION 3.25)\nproject(AuthoredExpansion LANGUAGES CXX)\n'
+        'find_package(EngineSimConfig 1 CONFIG REQUIRED COMPONENTS Json)\n'
+        'add_executable(expand-authored main.cpp)\n'
+        'target_link_libraries(expand-authored PRIVATE EngineSim::Json)\n', encoding="utf-8")
 
     def install(build, prefix, component):
         audit.run("install-" + component, [args.cmake, "--install", build, "--config", "Release",

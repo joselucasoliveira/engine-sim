@@ -17,4 +17,16 @@ ModelResult read_json(std::string_view bytes);
 std::string write_json(const NormalizedDocument &config);
 
 }
+
+namespace engine_sim::config_json {
+
+// Prepare either JSON format and return the effective, version-independent model.
+config_v1::ModelResult read_model(std::string_view bytes);
+
+// Preserve authored v2 content, including omitted defaults and explicit tables.
+// Expanded v1 content continues to use the canonical v1 writer.
+using RewriteResult = std::variant<std::string, config_v1::Diagnostic>;
+RewriteResult rewrite(std::string_view bytes);
+
+}
 #endif

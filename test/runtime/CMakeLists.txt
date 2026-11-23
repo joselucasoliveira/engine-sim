@@ -344,6 +344,21 @@ if (TARGET engine-sim-runtime AND TARGET engine-sim-runtime-json-private)
 
 endif ()
 
+if (TARGET engine-sim-runtime AND TARGET engine-sim-config-roundtrip AND ENGINE_SIM_BUILD_RUNTIME_EXAMPLES)
+    add_executable(engine-sim-authoring-reload-test authoring_reload.cpp)
+    target_link_libraries(engine-sim-authoring-reload-test PRIVATE
+        EngineSim::Runtime engine-sim-runtime-json-private engine-sim-runtime-backend)
+    engine_sim_diagnose(engine-sim-authoring-reload-test TRUE)
+    add_test(NAME AuthoringHarmonicEdit COMMAND "${Python3_EXECUTABLE}" -B
+        "${PROJECT_SOURCE_DIR}/test/config/authoring_edit.py" --repo "${PROJECT_SOURCE_DIR}"
+        --writer "$<TARGET_FILE:engine-sim-config-roundtrip>" --reload "$<TARGET_FILE:engine-sim-authoring-reload-test>")
+    add_test(NAME AuthoringCatalogParity COMMAND "${Python3_EXECUTABLE}" -B
+        "${PROJECT_SOURCE_DIR}/test/config/authoring_catalog.py" verify --repo "${PROJECT_SOURCE_DIR}"
+        --writer "$<TARGET_FILE:engine-sim-config-roundtrip>" --renderer "$<TARGET_FILE:engine-sim-render>")
+    set_tests_properties(AuthoringHarmonicEdit PROPERTIES LABELS authoring TIMEOUT 60)
+    set_tests_properties(AuthoringCatalogParity PROPERTIES LABELS authoring TIMEOUT 600)
+endif ()
+
 if (TARGET engine-sim-mechanical-observation-test AND TARGET engine-sim-runtime-json-private)
     target_link_libraries(engine-sim-mechanical-observation-test PRIVATE engine-sim-runtime-json-private EngineSim::Json)
     add_test(NAME ConvertedFixtureStructure COMMAND engine-sim-mechanical-observation-test

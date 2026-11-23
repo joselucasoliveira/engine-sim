@@ -1,7 +1,9 @@
 # Migrate an engine from script to JSON
 
-Engine Simulator loads [format-v1 JSON](engine-config.md) in the desktop,
-the device-free SDK and the capture tool. Migrate a trusted `.mr` script
+Engine Simulator loads [expanded v1 JSON](engine-config.md) and
+[authoring v2 JSON](engine-authoring.md) in the desktop, the device-free SDK
+and the capture tool. The [catalog summary](engine-authoring-catalog.md)
+lists the presets and the verification against their v1 reference models. Migrate a trusted `.mr` script
 once with the separately built [converter](legacy-converter.md).
 Keep the original script, library and lawful resources for future edits.
 A converted file describes one evaluated engine and its selected vehicle,

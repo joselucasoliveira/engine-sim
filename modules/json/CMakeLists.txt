@@ -25,8 +25,16 @@ execute_process(
         "${schema_generated}/config_schema_v1.hpp" --expected-sha256 "${schema_digest}"
     COMMAND_ERROR_IS_FATAL ANY)
 
+set(authoring_schema "${CMAKE_CURRENT_SOURCE_DIR}/../../schemas/engine-config-v2.schema.json")
+set(authoring_digest "f426331842dc488b1eda9c8e359db2dab67c8ea1c71035a3281bc0d1981d4d5b")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${authoring_schema}")
+execute_process(
+    COMMAND "${Python3_EXECUTABLE}" -B "${schema_compiler}" "${authoring_schema}"
+        "${schema_generated}/config_schema_v2.hpp" --version 2 --expected-sha256 "${authoring_digest}"
+    COMMAND_ERROR_IS_FATAL ANY)
+
 add_library(engine-sim-json STATIC src/lexical.cpp src/schema.cpp src/decode.cpp src/write.cpp)
-target_include_directories(engine-sim-json PRIVATE "${schema_generated}")
+target_include_directories(engine-sim-json PRIVATE "${schema_generated}" "${CMAKE_CURRENT_SOURCE_DIR}/../../include")
 add_library(EngineSim::Json ALIAS engine-sim-json)
 target_include_directories(engine-sim-json SYSTEM PRIVATE "${json_vendor}")
 target_include_directories(engine-sim-json PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>")

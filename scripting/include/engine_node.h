@@ -2,6 +2,7 @@
 #define ATG_ENGINE_SIM_ENGINE_NODE_H
 
 #include "object_reference_node.h"
+#include "legacy_curves.h"
 
 #include "crankshaft_node.h"
 #include "cylinder_bank_node.h"
@@ -118,11 +119,11 @@ namespace es_script {
             m_ignitionModule->generate(engine, &context);
             
             Function *meanPistonSpeedToTurbulence = engine->createResource<Function>();
-            meanPistonSpeedToTurbulence->initialize(30, 1);
-            for (int i = 0; i < 30; ++i) {
-                const double s = (double)i;
-                meanPistonSpeedToTurbulence->addSample(s, s * 0.5);
-            }
+            using DefaultTurbulence = engine_sim::legacy_curves::DefaultTurbulence;
+            meanPistonSpeedToTurbulence->initialize(DefaultTurbulence::samples, DefaultTurbulence::radius);
+            DefaultTurbulence::sample([&](double x, double y) {
+                meanPistonSpeedToTurbulence->addSample(x, y);
+            });
 
             Fuel *fuel = engine->getFuel();
             m_fuel->generate(fuel, &context);

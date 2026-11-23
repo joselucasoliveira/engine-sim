@@ -5,37 +5,43 @@
       "source": "assets/engines/atg-video-2/01_subaru_ej25_eh.mr",
       "model": "assets/engines/atg-video-2/01_subaru_ej25_eh.json",
       "selection": "main",
-      "coverage": "deep"
+      "coverage": "deep",
+      "v1_sha256": "33f828f5065bdc66429cf039284609740d379e291478d5670c81861f6af5c22c"
     },
     {
       "source": "assets/engines/atg-video-2/02_subaru_ej25_uh.mr",
       "model": "assets/engines/atg-video-2/02_subaru_ej25_uh.json",
       "selection": "main",
-      "coverage": "deep"
+      "coverage": "deep",
+      "v1_sha256": "70b2002b3ca57d02f049d573211f3f8aa782decf03c11dcfa0bfa95ceca35fc1"
     },
     {
       "source": "assets/engines/atg-video-2/03_2jz.mr",
       "model": "assets/engines/atg-video-2/03_2jz.json",
       "selection": "main",
-      "coverage": "all-entry"
+      "coverage": "all-entry",
+      "v1_sha256": "63e7ad573727f97b395cf2e1d69b127667efe0c4972b9134fe9d1bdb50400a24"
     },
     {
       "source": "assets/engines/atg-video-2/04_60_degree_v6.mr",
       "model": "assets/engines/atg-video-2/04_60_degree_v6.json",
       "selection": "main",
-      "coverage": "deep"
+      "coverage": "deep",
+      "v1_sha256": "e18a5eb1d110a5a50c7cb346a53d5d4be1f99a4f386a8eefe5b0ba69a339ac22"
     },
     {
       "source": "assets/engines/atg-video-2/05_odd_fire_v6.mr",
       "model": "assets/engines/atg-video-2/05_odd_fire_v6.json",
       "selection": "main",
-      "coverage": "deep"
+      "coverage": "deep",
+      "v1_sha256": "300cba7048550bbd1d686f613d16b0eb2c45146a64af7890aed8d01be0440fe3"
     },
     {
       "source": "assets/engines/atg-video-2/06_even_fire_v6.mr",
       "model": "assets/engines/atg-video-2/06_even_fire_v6.json",
       "selection": "main",
-      "coverage": "deep"
+      "coverage": "deep",
+      "v1_sha256": "63fbedf87e498fddf69fe2ffd4465c6839cea8f59bb8fcd863d13f152af5e711"
     }
   ],
   "comparisons": [
