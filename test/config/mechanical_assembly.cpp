@@ -188,8 +188,8 @@ void placement_cases(cfg::Document fixture) {
     const auto model=as_model(with_second_bank(fixture,Route::different_cranks));
     using Stop=std::pair<Phase,std::size_t>;
     const std::vector<Stop> expected{
-        {Phase::engine,0},{Phase::crankshaft,0},{Phase::crankshaft,1},{Phase::bank,0},{Phase::bank,1},
-        {Phase::cylinder,0},{Phase::cylinder,1},{Phase::links,0},{Phase::geometry,0}
+        {Phase::engine,0},{Phase::crankshaft,0},{Phase::crankshaft,1},{Phase::bank,0},{Phase::cylinder,0},
+        {Phase::bank,1},{Phase::cylinder,1},{Phase::links,0},{Phase::geometry,0}
     };
     std::vector<Stop> actual;
     const auto pass=assembly::build_mechanics(model,[&](Phase phase,std::size_t index) {

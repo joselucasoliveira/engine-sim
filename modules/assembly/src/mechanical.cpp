@@ -24,8 +24,8 @@ int index(std::size_t count) {
 
 class Builder {
 public:
-    Builder(const cfg::NormalizedDocument &model, const MechanicalCheckpoint &checkpoint)
-        : m_document(model.values()), m_topology(model.topology()), m_checkpoint(checkpoint) {
+    Builder(const cfg::NormalizedDocument &model, MechanicalBuildOptions &options)
+        : m_document(model.values()), m_topology(model.topology()), m_options(options) {
         const auto &definitions=m_document.components.journals;
         m_journals.reserve(definitions.size());
         for (const auto &journal:definitions) m_journals.emplace(journal.id.value, &journal);
@@ -36,8 +36,13 @@ public:
         allocate(*engine);
         checkpoint(MechanicalPhase::engine, 0);
         crankshafts(*engine);
-        banks(*engine);
-        cylinders(*engine);
+        auto cylinder = m_topology.cylinders.begin();
+        for (std::size_t i = 0; i < m_topology.banks.size(); ++i) {
+            const auto count = bank(*engine, i);
+            for (std::size_t local = 0; local < count; ++local, ++cylinder)
+                assemble_cylinder(*engine, *cylinder);
+            if (m_options.bank_ready) m_options.bank_ready(*engine, i);
+        }
         connect_rods(*engine);
         checkpoint(MechanicalPhase::links, 0);
         return engine;
@@ -45,7 +50,7 @@ public:
 
 private:
     void checkpoint(MechanicalPhase phase, std::size_t item) const {
-        if (m_checkpoint) m_checkpoint(phase,item);
+        if (m_options.checkpoint) m_options.checkpoint(phase,item);
     }
 
     double source_angle(const cfg::Ref<cfg::RodJournalTag> &id) const {
@@ -71,6 +76,7 @@ private:
         values.initialHighFrequencyGain=source.hf_gain.value;
         values.initialJitter=source.jitter.value;
         values.initialNoise=source.noise.value;
+        values.throttle=m_options.throttle.release();
         engine.initialize(values);
     }
 
@@ -95,62 +101,57 @@ private:
         }
     }
 
-    void banks(Engine &engine) const {
-        for (std::size_t i=0;i<m_topology.banks.size();++i) {
-            const auto &source=m_document.components.banks.at(m_topology.banks[i]);
-            CylinderBank::Parameters values{};
-            // R2 positions every bank relative to crank zero. Individual
-            // cylinders retain their own validated crank and master journal.
-            values.crankshaft=engine.getCrankshaft(0);
-            values.positionX=source.position_x.value;
-            values.positionY=source.position_y.value;
-            values.angle=source.angle.value;
-            values.bore=source.bore.value;
-            values.deckHeight=source.deck_height.value;
-            values.displayDepth=source.display_depth.value;
-            values.cylinderCount=index(source.cylinders.size());
-            values.index=index(i);
-            engine.getCylinderBank(index(i))->initialize(values);
-            checkpoint(MechanicalPhase::bank,i);
-        }
+    std::size_t bank(Engine &engine, std::size_t i) const {
+        const auto &source=m_document.components.banks.at(m_topology.banks[i]);
+        CylinderBank::Parameters values{};
+        // R2 positions every bank relative to crank zero. Individual
+        // cylinders retain their own validated crank and master journal.
+        values.crankshaft=engine.getCrankshaft(0);
+        values.positionX=source.position_x.value;
+        values.positionY=source.position_y.value;
+        values.angle=source.angle.value;
+        values.bore=source.bore.value;
+        values.deckHeight=source.deck_height.value;
+        values.displayDepth=source.display_depth.value;
+        values.cylinderCount=index(source.cylinders.size());
+        values.index=index(i);
+        engine.getCylinderBank(index(i))->initialize(values);
+        checkpoint(MechanicalPhase::bank,i);
+        return source.cylinders.size();
     }
 
-    void cylinders(Engine &engine) const {
-        // Normalization has already preindexed every crank and slave journal
-        // for the selected, bank-major cylinder stream.
-        for (const auto &route:m_topology.cylinders) {
-            const auto &part=route.index;
-            auto *piston=engine.getPiston(index(part.global));
-            auto *rod=engine.getConnectingRod(index(part.global));
-            const auto &original_piston=m_document.components.pistons.at(route.piston_definition);
-            Piston::Parameters piston_values{};
-            piston_values.Rod=rod;
-            piston_values.Bank=engine.getCylinderBank(index(part.bank));
-            piston_values.CylinderIndex=index(part.local);
-            piston_values.BlowbyFlowCoefficient=original_piston.blowby.value;
-            piston_values.CompressionHeight=original_piston.compression_height.value;
-            piston_values.WristPinPosition=original_piston.wrist_pin_position.value;
-            piston_values.Displacement=original_piston.displacement.value;
-            piston_values.mass=original_piston.mass.value;
-            piston->initialize(piston_values);
+    void assemble_cylinder(Engine &engine, const cfg::ResolvedCylinder &route) const {
+        const auto &part=route.index;
+        auto *piston=engine.getPiston(index(part.global));
+        auto *rod=engine.getConnectingRod(index(part.global));
+        const auto &original_piston=m_document.components.pistons.at(route.piston_definition);
+        Piston::Parameters piston_values{};
+        piston_values.Rod=rod;
+        piston_values.Bank=engine.getCylinderBank(index(part.bank));
+        piston_values.CylinderIndex=index(part.local);
+        piston_values.BlowbyFlowCoefficient=original_piston.blowby.value;
+        piston_values.CompressionHeight=original_piston.compression_height.value;
+        piston_values.WristPinPosition=original_piston.wrist_pin_position.value;
+        piston_values.Displacement=original_piston.displacement.value;
+        piston_values.mass=original_piston.mass.value;
+        piston->initialize(piston_values);
 
-            const auto &source=m_document.components.rods.at(route.rod_definition);
-            ConnectingRod::Parameters values{};
-            values.mass=source.mass.value;
-            values.momentOfInertia=source.moment_of_inertia.value;
-            values.centerOfMass=source.center_of_mass.value;
-            values.length=source.length.value;
-            values.rodJournals=index(source.journals.size());
-            values.slaveThrow=source.slave_throw.value;
-            values.piston=piston;
-            if (const auto *direct=std::get_if<cfg::CrankJournalIndex>(&part.journal))
-                values.crankshaft=engine.getCrankshaft(index(direct->crankshaft));
-            values.journal=std::visit([](const auto &owner) { return index(owner.journal); },part.journal);
-            rod->initialize(values);
-            for (std::size_t j=0;j<source.journals.size();++j)
-                rod->setRodJournalAngle(index(j),source_angle(source.journals[j])+constants::pi/2);
-            checkpoint(MechanicalPhase::cylinder,part.global);
-        }
+        const auto &source=m_document.components.rods.at(route.rod_definition);
+        ConnectingRod::Parameters values{};
+        values.mass=source.mass.value;
+        values.momentOfInertia=source.moment_of_inertia.value;
+        values.centerOfMass=source.center_of_mass.value;
+        values.length=source.length.value;
+        values.rodJournals=index(source.journals.size());
+        values.slaveThrow=source.slave_throw.value;
+        values.piston=piston;
+        if (const auto *direct=std::get_if<cfg::CrankJournalIndex>(&part.journal))
+            values.crankshaft=engine.getCrankshaft(index(direct->crankshaft));
+        values.journal=std::visit([](const auto &owner) { return index(owner.journal); },part.journal);
+        rod->initialize(values);
+        for (std::size_t j=0;j<source.journals.size();++j)
+            rod->setRodJournalAngle(index(j),source_angle(source.journals[j])+constants::pi/2);
+        checkpoint(MechanicalPhase::cylinder,part.global);
     }
 
     void connect_rods(Engine &engine) const {
@@ -165,13 +166,20 @@ private:
 
     const cfg::Document &m_document;
     const cfg::ResolvedTopology &m_topology;
-    const MechanicalCheckpoint &m_checkpoint;
+    MechanicalBuildOptions &m_options;
     std::unordered_map<std::string_view,const cfg::RodJournal *> m_journals;
 };
 }
 
+std::unique_ptr<Engine> assemble_mechanics(const config_v1::NormalizedDocument &model,
+                                           MechanicalBuildOptions options) {
+    return Builder(model, options).build();
+}
+
 MechanicalResult build_mechanics(config_v1::NormalizedDocument model, const MechanicalCheckpoint &checkpoint) {
-    auto engine=Builder(model,checkpoint).build();
+    MechanicalBuildOptions options;
+    options.checkpoint = checkpoint;
+    auto engine=assemble_mechanics(model, std::move(options));
     try {
         // The legacy sweep uses exactly 1000 crank angles and the legacy
         // rod-placement calculation. Chamber checks occur after gas assembly.

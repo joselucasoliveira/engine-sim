@@ -110,4 +110,15 @@ if (TARGET engine-sim-assembly)
     add_test(NAME CanonicalMechanicalAssembly COMMAND engine-sim-mechanical-assembly-test assembly "${assembly_fixture}")
     add_test(NAME CanonicalRodPlacement COMMAND engine-sim-mechanical-assembly-test placement "${assembly_fixture}")
     set_tests_properties(CanonicalMechanicalAssembly CanonicalRodPlacement PROPERTIES LABELS r25-assembly TIMEOUT 60)
+
+    add_executable(engine-sim-simulation-assembly-test simulation_assembly.cpp)
+    target_link_libraries(engine-sim-simulation-assembly-test PRIVATE engine-sim-assembly engine-sim EngineSim::Json)
+    target_include_directories(engine-sim-simulation-assembly-test PRIVATE
+        "${PROJECT_SOURCE_DIR}/include" "${PROJECT_SOURCE_DIR}/modules/assembly/src")
+    set_target_properties(engine-sim-simulation-assembly-test PROPERTIES
+        CXX_STANDARD 17 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO)
+    engine_sim_diagnose(engine-sim-simulation-assembly-test TRUE)
+    add_test(NAME CanonicalInductionAssembly COMMAND engine-sim-simulation-assembly-test induction "${assembly_fixture}")
+    add_test(NAME CanonicalInitialization COMMAND engine-sim-simulation-assembly-test initialization "${assembly_fixture}")
+    set_tests_properties(CanonicalInductionAssembly CanonicalInitialization PROPERTIES LABELS r25-assembly TIMEOUT 60)
 endif ()

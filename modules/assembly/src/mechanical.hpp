@@ -23,8 +23,17 @@ struct MechanicalCandidate {
 using MechanicalResult = std::variant<MechanicalCandidate, config_v1::Diagnostic>;
 
 // Construct and check mechanical geometry before any simulator is activated.
+struct MechanicalBuildOptions {
+    std::unique_ptr<Throttle> throttle;
+    // Complete the current bank before assembling cylinders in the next bank.
+    std::function<void(Engine &, std::size_t)> bank_ready;
+    MechanicalCheckpoint checkpoint;
+};
+
 MechanicalResult build_mechanics(config_v1::NormalizedDocument model,
                                  const MechanicalCheckpoint &checkpoint = {});
+std::unique_ptr<Engine> assemble_mechanics(const config_v1::NormalizedDocument &model,
+                                           MechanicalBuildOptions options);
 
 }
 #endif
