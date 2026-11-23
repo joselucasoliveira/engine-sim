@@ -20,7 +20,9 @@ The exercised lavapipe build reports a default-worker TSan race also reproduced 
 
 ## Runtime data and display text
 
-The app uses the inherited scene, engine scripts, impulse responses, font and original solver/synthesis chain. Source audio is mono S16 at 44.1 kHz. SDL may convert to the device's format at the final boundary. Software counters describe source submission and input consumption; physical playback, latency and listening require independent evidence.
+The app loads `assets/main.json` from the desktop resource root by default. Select another canonical model with `--model /absolute/path/engine.json`. Use `--resources /absolute/path/bundle` for the desktop resource bundle containing `assets/` and the model's referenced impulse responses under `es/sound-library/`. The model contains the active desktop settings. To apply a supplied theme, place its complete settings object in the model's `desktop` property. The [offline converter](legacy-converter.md) exports JSON from existing engine scripts.
+
+The desktop bundle contains the inherited scene, selected canonical models, themes, impulse responses and fonts. Source audio is mono S16 at 44.1 kHz. SDL may convert to the device's format at the final boundary. Software counters describe source submission and input consumption; physical playback, latency and listening require independent evidence.
 
 The inherited Silkscreen font has glyphs 32 through 127. UI text keeps those glyphs, normalizes line endings/tabs and displays one `?` for an unsupported valid UTF-8 code point. Malformed bytes are handled safely. Raw load diagnostics retain their complete text in the model and standard error. An unsuccessful reload retains the current running engine and its audio session; a later successful reload replaces it.
 

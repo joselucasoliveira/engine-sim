@@ -8,6 +8,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <sstream>
 #include <thread>
 
 namespace {
@@ -248,20 +249,24 @@ public:
 TEST(DesktopAudio, ActualNineCylinderSourcePreservesOrderAcrossRejectedAndAcceptedReload) {
     const char *root = std::getenv("ENGINE_SIM_TEST_RESOURCES"); ASSERT_NE(root,nullptr);
     const auto resources = std::filesystem::canonical(root);
-    const auto script = std::filesystem::absolute("audio entry.mr");
-    const std::string valid = "import \"engine_sim.mr\"\nimport \"engines/atg-video-2/09_radial_9.mr\"\nmain()\n";
-    { std::ofstream out(script); out << valid; }
+    const auto model = std::filesystem::absolute("audio entry.json");
+    std::ifstream source(resources / "assets/engines/atg-video-2/09_radial_9.json", std::ios::binary);
+    ASSERT_TRUE(source);
+    std::ostringstream data;
+    data << source.rdbuf();
+    const auto valid = data.str();
+    { std::ofstream out(model, std::ios::binary); out << valid; }
     Observation observed; auto recording = std::make_shared<host_test::Recording>();
     auto backend = std::make_unique<AudioHost>(recording, observed); auto *host = backend.get();
-    EngineSimApplication app; app.initialize(std::move(backend), {resources, script});
+    EngineSimApplication app; app.initialize(std::move(backend), {resources, {}, model});
     auto *original = app.getSimulator(); ASSERT_NE(original,nullptr); ASSERT_EQ(original->getEngine()->getCylinderCount(),9);
     EXPECT_FALSE(app.loadEngine(nullptr,nullptr,nullptr)); EXPECT_EQ(app.getSimulator(),original); EXPECT_TRUE(host->audio.running());
     host->fixture.inputs[10].press(desktop::Key::Return);
     host->fixture.inputs[20].press(desktop::Key::Return);
     host->fixture.onFrame = [&](std::size_t frame) {
-        if (frame == 10) { std::ofstream out(script); out << "import \"engine_sim.mr\"\nmissing_audio_fixture_node()\n"; }
+        if (frame == 10) { std::ofstream out(model); out << "{\"components\":"; }
         if (frame == 11) { EXPECT_EQ(app.getSimulator(),original); EXPECT_TRUE(host->audio.running()); }
-        if (frame == 20) { std::ofstream out(script); out << valid; }
+        if (frame == 20) { std::ofstream out(model, std::ios::binary); out << valid; }
         if (frame == 21) { EXPECT_NE(app.getSimulator(),original); EXPECT_TRUE(host->audio.running()); }
     };
     app.run();

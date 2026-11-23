@@ -10,6 +10,8 @@ namespace desktop {
 class RuntimeHost {
 public:
     static constexpr std::uint32_t MaxRenderFrames = 4410;
+    static std::unique_ptr<RuntimeHost> prepareModel(const std::filesystem::path &entry,
+                                                     const std::filesystem::path &root);
     static std::unique_ptr<RuntimeHost> prepare(const es_script::PreparationContext &recipe);
     static std::unique_ptr<RuntimeHost> adopt(EngineDefinition definition);
     std::unique_ptr<RuntimeHost> resetCandidate() const;
@@ -35,6 +37,7 @@ private:
     friend struct engine_sim::RuntimeTestAccess;
     RuntimeHost();
     static std::unique_ptr<RuntimeHost> fromPrepared(engine_sim::PreparedEngine prepared);
+    static std::unique_ptr<RuntimeHost> fromSession(std::unique_ptr<EngineSession> session, engine_sim::Runtime::Recipe recipe);
     engine_sim::Runtime m_runtime;
     std::unique_ptr<EngineViews> m_views;
     std::unique_ptr<EngineCommands> m_commands;

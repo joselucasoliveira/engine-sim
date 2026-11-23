@@ -30,27 +30,51 @@ def records(options):
     selected = [row for row in manifest["files"] if (row["component"] == "base" or options.desktop)
                 and options.platform in row.get("platforms", [options.platform])]
     destinations = set()
-    pending = []
     checked = []
+    recordings = []
+    models = set()
+    required_impulses = set()
+
+    def check_input(row, root, relative, destination):
+        source = (root / relative).resolve()
+        if not source.is_relative_to(root) or not source.is_file():
+            raise ValueError(f"missing allowlisted runtime input: {source}")
+        data = source.read_bytes()
+        if hashlib.sha256(data).hexdigest() != row["sha256"]:
+            raise ValueError(f"runtime input differs from its recorded identity: {source}")
+        if row["distribution"] not in {"permitted", "local-validation-only"}:
+            raise ValueError(f"unrecognized distribution disposition: {source}")
+        if options.desktop and row.get("model"):
+            models.add(destination.as_posix())
+            required_impulses.update(item["path"] for item in json.loads(data)["components"]["impulses"])
+        checked.append((row, source, destination))
+
     for row in selected:
         root = roots[row["source"]].resolve()
         relative = Path(row["path"])
         destination = Path(row["destination"])
         if relative.is_absolute() or destination.is_absolute() or ".." in relative.parts or ".." in destination.parts:
             raise ValueError("runtime allowlist contains a non-relative path")
-        source = (root / relative).resolve()
-        if not source.is_relative_to(root) or not source.is_file():
-            raise ValueError(f"missing allowlisted runtime input: {source}")
+        if options.desktop and (relative.suffix.lower() == ".mr" or destination.suffix.lower() == ".mr"):
+            continue
         if destination.as_posix() in destinations:
             raise ValueError(f"duplicate runtime destination: {destination}")
         destinations.add(destination.as_posix())
-        if digest(source) != row["sha256"]:
-            raise ValueError(f"runtime input differs from its recorded identity: {source}")
-        if row["distribution"] == "local-validation-only":
-            pending.append(row["path"])
-        elif row["distribution"] != "permitted":
-            raise ValueError(f"unrecognized distribution disposition: {source}")
-        checked.append((row, source, destination))
+        entry = (row, root, relative, destination)
+        if options.desktop and destination.suffix.lower() == ".wav":
+            recordings.append(entry)
+        else:
+            check_input(*entry)
+    if options.desktop:
+        if "assets/main.json" not in models:
+            raise ValueError("the desktop allowlist must contain the canonical default model")
+        absent = required_impulses - {entry[3].as_posix() for entry in recordings}
+        if absent:
+            raise ValueError("desktop model impulse responses are absent from the allowlist: " + ", ".join(sorted(absent)))
+        for entry in recordings:
+            if entry[3].as_posix() in required_impulses:
+                check_input(*entry)
+    pending = [row["path"] for row, _, _ in checked if row["distribution"] == "local-validation-only"]
     if pending and not options.local_validation:
         raise ValueError("redistribution staging is blocked by unresolved impulse-recording clearance: "
                          + ", ".join(pending) + ". Use the explicit local-validation mode for a private copy.")
@@ -72,6 +96,9 @@ def main():
     options.source = options.source.resolve()
     options.delta = options.delta or options.source / "dependencies/submodules/delta-studio"
     options.destination = external(options.destination, options.source)
+    if options.desktop and any(path.suffix.lower() == ".mr" for path in options.destination.rglob("*")
+                               if path.is_file() or path.is_symlink()):
+        raise ValueError("use a script-free desktop staging destination")
     if options.inventory:
         if any(options.destination.rglob("LOCAL_VALIDATION_ONLY.txt")):
             options.local_validation = True

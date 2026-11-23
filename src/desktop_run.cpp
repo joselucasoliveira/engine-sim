@@ -22,6 +22,32 @@ std::string jsonString(const std::string &value) {
     }
     out << '"'; return out.str();
 }
+std::string jsonSettings(const ApplicationSettings &settings) {
+    std::ostringstream out;
+    out << "{\"start_fullscreen\": " << (settings.startFullscreen ? "true" : "false")
+        << ", \"power_units\": " << jsonString(settings.powerUnits)
+        << ", \"torque_units\": " << jsonString(settings.torqueUnits)
+        << ", \"speed_units\": " << jsonString(settings.speedUnits)
+        << ", \"pressure_units\": " << jsonString(settings.pressureUnits)
+        << ", \"boost_units\": " << jsonString(settings.boostUnits)
+        << ", \"color_background\": " << settings.colorBackground
+        << ", \"color_foreground\": " << settings.colorForeground
+        << ", \"color_shadow\": " << settings.colorShadow
+        << ", \"color_highlight1\": " << settings.colorHighlight1
+        << ", \"color_highlight2\": " << settings.colorHighlight2
+        << ", \"color_pink\": " << settings.colorPink
+        << ", \"color_red\": " << settings.colorRed
+        << ", \"color_orange\": " << settings.colorOrange
+        << ", \"color_yellow\": " << settings.colorYellow
+        << ", \"color_blue\": " << settings.colorBlue
+        << ", \"color_green\": " << settings.colorGreen << '}';
+    return out.str();
+}
+void hashSample(std::uint64_t &digest, std::int16_t sample) noexcept {
+    const auto value = static_cast<std::uint16_t>(sample);
+    digest ^= value & 255; digest *= 1099511628211ULL;
+    digest ^= value >> 8; digest *= 1099511628211ULL;
+}
 bool within(const fs::path &path, const fs::path &root) {
     const auto relative = path.lexically_relative(root);
     return path == root || (!relative.empty() && *relative.begin() != "..");
@@ -40,15 +66,15 @@ void protectOutput(const fs::path &file, const fs::path &resources = {}) {
 }
 std::uint64_t fileDigest(const fs::path &path) {
     std::ifstream file(path, std::ios::binary);
-    if (!file) throw DesktopError("script", "cannot read " + path.u8string());
+    if (!file) throw DesktopError("model", "cannot read " + path.u8string());
     std::uint64_t result = 14695981039346656037ULL;
     std::array<char,4096> block{}; std::size_t size = 0;
     while (file.read(block.data(),block.size()) || file.gcount()) {
         size += static_cast<std::size_t>(file.gcount());
-        if (size > 4 * 1024 * 1024) throw DesktopError("script", "smoke entry exceeds four MiB");
+        if (size > 16 * 1024 * 1024) throw DesktopError("model", "smoke model exceeds 16 MiB");
         for (std::streamsize i=0; i<file.gcount(); ++i) { result ^= static_cast<unsigned char>(block[i]); result *= 1099511628211ULL; }
     }
-    if (!file.eof()) throw DesktopError("script", "failed while reading " + path.u8string());
+    if (!file.eof()) throw DesktopError("model", "failed while reading " + path.u8string());
     return result;
 }
 class ObservedApplication final : public EngineSimApplication {
@@ -71,13 +97,19 @@ private:
         ++evidence->processCalls;
         evidence->simulationSteps += getSimulator()->getFrameIterationCount();
         auto *engine = getSimulator()->getEngine(); evidence->cylinders = engine->getCylinderCount();
+        evidence->pacing = audioStatistics();
+        if (settingsGeneration != viewGeneration()) {
+            settingsGeneration = viewGeneration();
+            evidence->settings = *getAppSettings();
+            evidence->engineName = engine->getName();
+        }
         const double rpm = engine->getRpm();
         if (!std::isfinite(rpm)) throw DesktopError("smoke simulation", "nonfinite engine speed");
         evidence->peakRpm = std::max(evidence->peakRpm,rpm);
         if (m_targetSpeedSetting==1.0) evidence->throttleChanged=true;
     }
     std::shared_ptr<RunEvidence> evidence;
-    std::uint64_t previous=0;
+    std::uint64_t previous=0, settingsGeneration=0;
 };
 }
 RunOptions parseRunOptions(const std::vector<std::string> &arguments) {
@@ -87,7 +119,9 @@ RunOptions parseRunOptions(const std::vector<std::string> &arguments) {
         if (!seen.insert(name).second) throw DesktopError("arguments", "duplicate " + name);
         if (name == "--help") { options.help = true; continue; }
         if (name == "--smoke") { options.smoke = true; continue; }
-        if (name != "--frames" && name != "--report" && name != "--audio-mode" && name != "--resources" && name != "--script")
+        if (name == "--script")
+            throw DesktopError("arguments", "Convert scripts with engine-sim-convert, then pass the JSON file with --model");
+        if (name != "--frames" && name != "--report" && name != "--audio-mode" && name != "--resources" && name != "--model")
             throw DesktopError("arguments", "unknown option " + name);
         if (++i == arguments.size() || arguments[i].empty()) throw DesktopError("arguments", name + " requires a value");
         const auto &value = arguments[i];
@@ -98,15 +132,15 @@ RunOptions parseRunOptions(const std::vector<std::string> &arguments) {
             if (options.frames<60 || options.frames>10000) throw DesktopError("arguments", "frames must be between 60 and 10000");
         } else if (name == "--report") options.report = fs::u8path(value);
         else if (name == "--resources") options.resources.resources = fs::u8path(value);
-        else if (name == "--script") options.resources.script = fs::u8path(value);
+        else if (name == "--model") options.resources.model = fs::u8path(value);
         else if (value == "virtual") options.virtualAudio = true;
         else if (value != "device") throw DesktopError("arguments", "audio mode must be device or virtual");
     }
     if (options.help) return options;
     if (options.smoke) {
         protectOutput(options.report,options.resources.resources);
-        if (!options.resources.script.empty() && !options.resources.script.is_absolute())
-            throw DesktopError("arguments", "smoke script must be an absolute path");
+        if (!options.resources.model.empty() && !options.resources.model.is_absolute())
+            throw DesktopError("arguments", "smoke model must be an absolute path");
     } else if (!options.report.empty() || seen.count("--frames")) throw DesktopError("arguments", "report and frames require --smoke");
     return options;
 }
@@ -135,9 +169,7 @@ bool RunEvidence::key(Key key,bool value,bool edge) {
 void RunEvidence::source(const AudioSegments &segments) {
     const auto record = [this](const std::int16_t *samples,AudioOffset count) {
         for (AudioOffset i=0;i<count;++i) {
-            const auto value = static_cast<std::uint16_t>(samples[i]);
-            sourceDigest ^= value & 255; sourceDigest *= 1099511628211ULL;
-            sourceDigest ^= value >> 8; sourceDigest *= 1099511628211ULL;
+            hashSample(sourceDigest, samples[i]);
             ++sourceFrames; if (samples[i]) ++nonzeroSource;
         }
     };
@@ -177,7 +209,8 @@ void RunEvidence::validate() const {
     if (frames!=options.frames || processCalls+2!=frames || !simulationSteps || cylinders<=0 || peakRpm<=0 || !modelPackets || !generatedPackets || !textPackets
         || screenshots!=2 || !coloredPixels || !resized || edge(Key::A)<2 || edge(Key::Tab)!=2 || edge(Key::Return)!=1 || edge(Key::Right)!=1
         || !held[static_cast<std::size_t>(Key::S)] || !held[static_cast<std::size_t>(Key::R)]
-        || !sourceFrames || !nonzeroSource || !nonzeroFedToBackend || !audioConsumedInput || !audioPumpedSource || !tornDown || acceptedReloads!=1 || !throttleChanged)
+        || !sourceFrames || !preparedFrames || pacing.sourceFaults || !nonzeroSource || !nonzeroFedToBackend
+        || !audioConsumedInput || !audioPumpedSource || !tornDown || acceptedReloads!=1 || !throttleChanged)
         throw DesktopError("smoke validation","required simulation, native input, presentation, PCM or teardown evidence is missing");
     if (!options.virtualAudio && (audioDriver=="dummy" || audioDriver=="virtual-clocked-sink"))
         throw DesktopError("smoke validation","device mode cannot use a virtual endpoint");
@@ -196,8 +229,14 @@ void RunEvidence::writeReport() const {
         << ",\n  \"device_frequency\": " << deviceFrequency << ",\n  \"device_channels\": " << deviceChannels
         << ",\n  \"device_format\": " << deviceFormat << ",\n  \"device_quantum\": " << deviceQuantum
         << ",\n  \"source_format\": \"44100 Hz, mono signed 16-bit PCM\""
-        << ",\n  \"script\": " << jsonString(resolvedScript.u8string()) << ",\n  \"resources\": " << jsonString(resourceRoot.u8string())
-        << ",\n  \"script_fnv1a64\": " << jsonString(std::to_string(scriptDigest)) << ",\n  \"source_pcm_fnv1a64\": " << jsonString(std::to_string(sourceDigest))
+        << ",\n  \"model\": " << jsonString(resolvedModel.u8string()) << ",\n  \"resources\": " << jsonString(resourceRoot.u8string())
+        << ",\n  \"engine_name\": " << jsonString(engineName) << ",\n  \"desktop\": " << jsonSettings(settings)
+        << ",\n  \"model_fnv1a64\": " << jsonString(std::to_string(modelDigest)) << ",\n  \"source_pcm_fnv1a64\": " << jsonString(std::to_string(sourceDigest))
+        << ",\n  \"prepared_pcm_frames\": " << preparedFrames
+        << ",\n  \"prepared_pcm_fnv1a64\": " << jsonString(std::to_string(preparedDigest))
+        << ",\n  \"pacer_consumed_source\": " << pacing.consumedSource
+        << ",\n  \"pacer_starvation_silence\": " << pacing.starvationSilence
+        << ",\n  \"pacer_discarded\": " << pacing.discarded << ",\n  \"pacer_source_faults\": " << pacing.sourceFaults
         << ",\n  \"presented_frames\": " << frames << ",\n  \"process_calls\": " << processCalls << ",\n  \"simulation_steps\": " << simulationSteps
         << ",\n  \"cylinders\": " << cylinders << ",\n  \"peak_rpm\": " << peakRpm << ",\n  \"model_packets\": " << modelPackets
         << ",\n  \"generated_packets\": " << generatedPackets << ",\n  \"text_packets\": " << textPackets
@@ -223,14 +262,20 @@ int runApplication(const std::vector<std::string> &arguments,
     std::shared_ptr<RunEvidence> evidence;
     try {
         const auto options=parseRunOptions(arguments);
-        if (options.help) { std::cout << "Engine Simulator [--resources ROOT] [--script FILE] [--audio-mode device|virtual]\n"
-            "  --smoke --frames 240 --report ABSOLUTE_NEW_JSON [--script ABSOLUTE_MR]\n"; return 0; }
+        if (options.help) { std::cout << "Engine Simulator [--resources ROOT] [--model FILE] [--audio-mode device|virtual]\n"
+            "  The default model is assets/main.json under the resource root.\n"
+            "  --smoke --frames 240 --report ABSOLUTE_NEW_JSON [--model ABSOLUTE_MODEL_JSON]\n"; return 0; }
         if (options.smoke) { evidence=std::make_shared<RunEvidence>(); evidence->options=options; }
         ObservedApplication app(evidence);
         if (evidence) {
             const auto paths=engine_sim::ResourcePaths::resolve(engine_sim::executablePath(),options.resources,true);
-            evidence->resolvedScript=paths.script; evidence->resourceRoot=paths.root;
-            protectOutput(options.report,paths.root); evidence->scriptDigest=fileDigest(paths.script);
+            evidence->resolvedModel=paths.model; evidence->resourceRoot=paths.root;
+            protectOutput(options.report,paths.root); evidence->modelDigest=fileDigest(paths.model);
+            app.setAudioObservation({[](void *context, const std::int16_t *samples, std::size_t count) noexcept {
+                auto &run = *static_cast<RunEvidence *>(context);
+                for (std::size_t i = 0; i < count; ++i) hashSample(run.preparedDigest, samples[i]);
+                run.preparedFrames += count;
+            }, evidence.get()});
             evidence->onFrame=[&app](unsigned frame) { app.pauseForSmoke(frame); };
         }
         auto host=factory(options); host->setRunEvidence(evidence);

@@ -213,9 +213,8 @@ def main():
                 if profile != "desktop":
                     raise ValueError("smoke requires a desktop preset")
                 app = output / ("stage/EngineSim.app/Contents/MacOS/EngineSim" if platform.system() == "Darwin" else "stage/bin/engine-sim-app" + (".exe" if windows else ""))
-                script = output / ("stage/EngineSim.app/Contents/Resources/assets/main.mr" if platform.system() == "Darwin" else "stage/share/engine-sim/assets/main.mr")
                 command("desktop-smoke", [sys.executable, "-B", str(SOURCE / "tools/run_desktop_smoke.py"), "--app", str(app),
-                    "--script", str(script), "--out", str(output / "smoke"), "--audio-mode", args.audio_mode])
+                    "--out", str(output / "smoke"), "--audio-mode", args.audio_mode])
                 report["smoke_receipt_sha256"] = sha256(output / "smoke/receipt.json")
                 report["application_sha256"] = sha256(app)
                 if platform.system() == "Linux":

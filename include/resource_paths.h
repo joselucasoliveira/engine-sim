@@ -15,6 +15,7 @@ public:
 
 struct ResourceOptions {
     std::filesystem::path resources, script;
+    std::filesystem::path model{};
 };
 
 std::filesystem::path executablePath();
@@ -22,11 +23,12 @@ std::vector<std::string> processArguments(int argc, char **argv);
 ResourceOptions parseResourceOptions(const std::vector<std::string> &arguments, bool allowOtherOptions = false);
 
 struct ResourcePaths {
-    std::filesystem::path root, assets, library, desktop, script;
+    std::filesystem::path root, assets, library, desktop, script, model;
     static std::filesystem::path defaultRoot(const std::filesystem::path &executable);
     static ResourcePaths resolve(const std::filesystem::path &executable, const ResourceOptions &options,
                                 bool readLegacyConfiguration = false);
     void validateBase() const;
+    void validateDesktop() const;
     void validateLegacyDesktop() const;
     std::filesystem::path scene() const { return assets / "assets.ysce"; }
     std::filesystem::path font() const { return desktop / "fonts/Silkscreen/slkscr.ttf"; }

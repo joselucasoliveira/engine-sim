@@ -218,17 +218,7 @@ if (TARGET engine-sim-runtime)
         ENVIRONMENT "ENGINE_SIM_TEST_SOURCE=${PROJECT_SOURCE_DIR};ENGINE_SIM_TEST_MECHANICAL_FIXTURE=${mechanical_fixture}")
 endif ()
 
-if (TARGET engine-sim-runtime AND TARGET engine-sim-assembly)
-    add_library(engine-sim-runtime-json-private STATIC "${PROJECT_SOURCE_DIR}/src/runtime/json_runtime.cpp")
-    target_include_directories(engine-sim-runtime-json-private
-        PUBLIC "${PROJECT_SOURCE_DIR}/src/runtime"
-        PRIVATE "${PROJECT_SOURCE_DIR}/modules/assembly/src")
-    target_link_libraries(engine-sim-runtime-json-private
-        PUBLIC EngineSim::Runtime EngineSim::Config
-        PRIVATE engine-sim-assembly engine-sim-runtime-backend engine-sim-script-interpreter EngineSim::Json)
-    target_compile_features(engine-sim-runtime-json-private PRIVATE cxx_std_17)
-    engine_sim_diagnose(engine-sim-runtime-json-private TRUE)
-
+if (TARGET engine-sim-runtime AND TARGET engine-sim-runtime-json-private)
     add_executable(engine-sim-render-json-test "${PROJECT_SOURCE_DIR}/examples/runtime/render.cpp")
     target_compile_definitions(engine-sim-render-json-test PRIVATE ENGINE_SIM_RENDER_JSON_TEST)
     target_link_libraries(engine-sim-render-json-test PRIVATE engine-sim-runtime-json-private)

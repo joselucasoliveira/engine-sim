@@ -94,7 +94,7 @@ if (BUILD_TESTING)
 endif ()
 
 add_subdirectory(modules/config)
-if (BUILD_TESTING OR ENGINE_SIM_BUILD_RUNTIME OR ENGINE_SIM_BUILD_LEGACY_CONVERTER)
+if (BUILD_TESTING OR ENGINE_SIM_BUILD_RUNTIME OR ENGINE_SIM_BUILD_LEGACY_CONVERTER OR ENGINE_SIM_BUILD_DESKTOP)
     add_subdirectory(modules/json)
 endif ()
 if (BUILD_TESTING)
@@ -167,8 +167,10 @@ add_library(engine-sim STATIC
 find_package(Threads REQUIRED)
 target_link_libraries(engine-sim PUBLIC simple-2d-constraint-solver PRIVATE Threads::Threads)
 target_compile_features(engine-sim PUBLIC cxx_std_17)
-if (BUILD_TESTING)
+if (BUILD_TESTING OR ENGINE_SIM_BUILD_DESKTOP)
     add_subdirectory(modules/assembly)
+endif ()
+if (BUILD_TESTING)
     add_subdirectory(test/config)
 endif ()
 if (NOT ENGINE_SIM_BUILD_RUNTIME)
@@ -259,6 +261,22 @@ if (PIRANHA_ENABLED AND (ENGINE_SIM_BUILD_RUNTIME OR ENGINE_SIM_BUILD_DESKTOP OR
     engine_sim_diagnose(engine-sim-runtime-backend TRUE)
 endif ()
 
+if (TARGET engine-sim-runtime-backend AND TARGET engine-sim-assembly AND
+        (BUILD_TESTING OR ENGINE_SIM_BUILD_DESKTOP))
+    add_library(engine-sim-runtime-json-private STATIC src/runtime/json_runtime.cpp)
+    target_include_directories(engine-sim-runtime-json-private
+        PUBLIC "${PROJECT_SOURCE_DIR}/src/runtime"
+        PRIVATE "${PROJECT_SOURCE_DIR}/modules/assembly/src")
+    target_link_libraries(engine-sim-runtime-json-private
+        PUBLIC EngineSim::Config
+        PRIVATE engine-sim-assembly engine-sim-runtime-backend engine-sim-script-interpreter EngineSim::Json)
+    if (ENGINE_SIM_BUILD_RUNTIME)
+        target_link_libraries(engine-sim-runtime-json-private PUBLIC EngineSim::Runtime)
+    endif ()
+    target_compile_features(engine-sim-runtime-json-private PRIVATE cxx_std_17)
+    engine_sim_diagnose(engine-sim-runtime-json-private TRUE)
+endif ()
+
 if ((BUILD_TESTING AND ENGINE_SIM_BUILD_HOST_TESTS) OR ENGINE_SIM_BUILD_DESKTOP)
     add_library(engine-sim-host STATIC src/desktop_math.cpp src/desktop_host.cpp src/desktop_audio_pacer.cpp)
     target_include_directories(engine-sim-host PUBLIC include)
@@ -270,7 +288,8 @@ endif ()
 
 if (PIRANHA_ENABLED AND ((BUILD_TESTING AND ENGINE_SIM_BUILD_HOST_TESTS) OR ENGINE_SIM_BUILD_DESKTOP))
     add_library(engine-sim-desktop-runtime STATIC src/runtime/desktop_runtime.cpp src/desktop_engine_views.cpp)
-    target_link_libraries(engine-sim-desktop-runtime PRIVATE engine-sim-runtime-backend engine-sim-script-interpreter)
+    target_link_libraries(engine-sim-desktop-runtime PRIVATE
+        engine-sim-runtime-backend engine-sim-script-interpreter engine-sim-runtime-json-private)
     target_compile_features(engine-sim-desktop-runtime PRIVATE cxx_std_17)
     engine_sim_diagnose(engine-sim-desktop-runtime TRUE)
     if (NOT MSVC)
@@ -515,6 +534,22 @@ if (PIRANHA_ENABLED AND CMAKE_EXPORT_COMPILE_COMMANDS AND NOT MSVC)
 endif ()
 
 include(cmake/RuntimeInstall.cmake)
+if (BUILD_TESTING AND TARGET engine-sim-app AND TARGET engine-sim-pacing-test AND TARGET engine-sim-host-application-test)
+    find_package(Python3 3.9 COMPONENTS Interpreter REQUIRED)
+    set(desktop_gate "${Python3_EXECUTABLE}" -B "${PROJECT_SOURCE_DIR}/test/desktop_canonical_gate.py")
+    add_test(NAME DesktopCanonicalSelection COMMAND ${desktop_gate} select
+        --source "${PROJECT_SOURCE_DIR}" --cmake "${CMAKE_COMMAND}" --build "${PROJECT_BINARY_DIR}" --config "$<CONFIG>")
+    set(desktop_gate_audio)
+    if (TARGET engine-sim-sdl-audio-test)
+        set(desktop_gate_audio --audio "$<TARGET_FILE:engine-sim-sdl-audio-test>")
+    endif ()
+    add_test(NAME DesktopReloadPacing COMMAND ${desktop_gate} reload
+        --source "${PROJECT_SOURCE_DIR}" --pacing "$<TARGET_FILE:engine-sim-pacing-test>"
+        --host "$<TARGET_FILE:engine-sim-host-application-test>" ${desktop_gate_audio})
+    set_tests_properties(DesktopCanonicalSelection DesktopReloadPacing PROPERTIES
+        LABELS r25-desktop TIMEOUT 240 RUN_SERIAL TRUE)
+endif ()
+
 if (TARGET engine-sim-runtime)
     include(cmake/RuntimeSdk.cmake)
 endif ()

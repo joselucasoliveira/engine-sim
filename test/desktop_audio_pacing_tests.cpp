@@ -281,7 +281,14 @@ fs::path runtimeFixture() {
 es_script::PreparationContext recipeAt(const fs::path &root) { return {root/"main.mr",root/"library",root}; }
 struct DesktopFiles {
     fs::path root=fs::current_path()/fs::u8path("owner space Ω-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
-    DesktopFiles() { fs::copy(runtimeFixture(),root,fs::copy_options::recursive); }
+    explicit DesktopFiles(bool canonical = false) {
+        if (!canonical) {
+            fs::copy(runtimeFixture(),root,fs::copy_options::recursive);
+            return;
+        }
+        fs::create_directory(root);
+        for (const auto *name : {"main.json", "impulse.wav"}) fs::copy_file(runtimeFixture()/name, root/name);
+    }
     ~DesktopFiles() { std::error_code error;fs::remove_all(root,error); }
 };
 float runtimeSample(desktop::RuntimeHost &host) {
@@ -291,7 +298,8 @@ float runtimeSample(desktop::RuntimeHost &host) {
 }
 
 TEST(RuntimeDesktop, StoppedPartialAndWrappedDeviceRequestsUseOnlyCommittedRuntimePcm) {
-    auto host=desktop::RuntimeHost::prepare(recipeAt(runtimeFixture()));
+    DesktopFiles files(true);
+    auto host=desktop::RuntimeHost::prepareModel(files.root/"main.json", files.root);
     host->commands().setStarter(true);host->commands().setIgnition(true);host->commands().setDemand(.25);host->commands().flush();
     std::vector<std::int16_t> expected;
     AudioPacer pacer([&] { const auto sample=runtimeSample(*host);expected.push_back(static_cast<std::int16_t>(sample*32768));return sample; });
@@ -306,6 +314,8 @@ TEST(RuntimeDesktop, StoppedPartialAndWrappedDeviceRequestsUseOnlyCommittedRunti
     EXPECT_EQ(pacer.statistics().requestedSource,pacer.statistics().generatedSource);
     EXPECT_EQ(host->counts().frames,filled+2000);EXPECT_EQ(host->telemetry().frames,host->counts().frames);
     ASSERT_LE(device.submitted.size(),expected.size());EXPECT_TRUE(std::equal(device.submitted.begin(),device.submitted.end(),expected.begin()));
+    ASSERT_LE(device.played.size(),device.submitted.size());
+    EXPECT_TRUE(std::equal(device.played.begin(),device.played.end(),device.submitted.begin()));
     EXPECT_EQ(device.silence,0u);EXPECT_EQ(pacer.statistics().discarded,0u);EXPECT_EQ(pacer.statistics().sourceFaults,0u);
     EXPECT_LE(pacer.statistics().maximumQueued,AudioPacer::Target);
     const auto queues = [&] {
@@ -314,10 +324,33 @@ TEST(RuntimeDesktop, StoppedPartialAndWrappedDeviceRequestsUseOnlyCommittedRunti
     }();
     EXPECT_EQ(queues.droppedInput, 0u);
     EXPECT_EQ(queues.droppedOutput, 0u);
+    if (const auto *destination = std::getenv("ENGINE_SIM_DESKTOP_PCM_EVIDENCE")) {
+        const auto folder = fs::u8path(destination);
+        const auto save = [&](const char *name, const std::vector<std::int16_t> &samples) {
+            std::ofstream output(folder/name, std::ios::binary);
+            for (const auto sample : samples) {
+                const auto word = static_cast<std::uint16_t>(sample);
+                output.put(static_cast<char>(word & 255));
+                output.put(static_cast<char>(word >> 8));
+            }
+            output.close();
+            EXPECT_TRUE(output);
+        };
+        save("prepared.le16", expected);
+        save("submitted.le16", device.submitted);
+        save("consumed.le16", device.played);
+        std::ofstream state(folder/"state.txt");
+        state << host->counts().frames << ' ' << host->counts().ticks << ' ' << host->counts().nativeFrames
+              << ' ' << pacer.statistics().consumedSource << ' ' << pacer.statistics().discarded << '\n';
+        state << std::hexfloat << host->telemetry().crank_rad_s << ' ' << host->telemetry().cycle_rad << '\n';
+        EXPECT_TRUE(state);
+    }
 }
 
 TEST(RuntimeDesktop, PartitionsRateChangesAndNamedCommandsPreservePcmAndPhysicalPhase) {
-    auto a=desktop::RuntimeHost::prepare(recipeAt(runtimeFixture())),b=desktop::RuntimeHost::prepare(recipeAt(runtimeFixture()));
+    DesktopFiles files(true);
+    auto a=desktop::RuntimeHost::prepareModel(files.root/"main.json", files.root);
+    auto b=desktop::RuntimeHost::prepareModel(files.root/"main.json", files.root);
     const std::array<std::uint32_t,9> events{0,1,147,160,1600,4409,6000,7000,10000};
     const auto render=[&](desktop::RuntimeHost &host,bool chopped) {
         std::vector<float> output(12000);std::size_t first=0;
@@ -347,8 +380,8 @@ TEST(RuntimeDesktop, PartitionsRateChangesAndNamedCommandsPreservePcmAndPhysical
 }
 
 TEST(RuntimeDesktop, ResetCandidateVerifiesOwnedInputsAndRetiresPreviousGenerationOnPublication) {
-    DesktopFiles files;const auto recipe=recipeAt(files.root);
-    auto host=desktop::RuntimeHost::prepare(recipe);
+    DesktopFiles files(true);const auto model=files.root/"main.json";
+    auto host=desktop::RuntimeHost::prepareModel(model, files.root);
     host->commands().setStarter(true);host->commands().setIgnition(true);host->commands().flush();
     std::array<float,441> samples{};std::uint32_t written=0;host->render(samples.data(),samples.size(),written);
     auto previous=host->views().at<Engine>();auto replacement=host->resetCandidate();
@@ -357,7 +390,7 @@ TEST(RuntimeDesktop, ResetCandidateVerifiesOwnedInputsAndRetiresPreviousGenerati
     {auto phase=host->views().present();EXPECT_TRUE(previous->getIgnitionModule()->m_enabled);}
     host=std::move(replacement);EXPECT_FALSE(previous.valid());
     {auto phase=host->views().present();EXPECT_THROW(previous->getRpm(),std::logic_error);}
-    auto reference=desktop::RuntimeHost::prepare(recipe);
+    auto reference=desktop::RuntimeHost::prepareModel(model, files.root);
     written=0;host->render(samples.data(),samples.size(),written);
     std::array<float,441> expected{};written=0;reference->render(expected.data(),expected.size(),written);EXPECT_EQ(samples,expected);
     const auto frames=host->counts().frames;auto current=host->views().at<Engine>();
@@ -373,14 +406,25 @@ TEST(RuntimeDesktop, ResetCandidateVerifiesOwnedInputsAndRetiresPreviousGenerati
 
 TEST(RuntimeDesktop, PrivatePreparationAdmitsLegacyRatesWithoutChangingPublicLimitsOrSeed) {
     DesktopFiles files;const auto recipe=recipeAt(files.root);
+    DesktopFiles canonical(true);
     std::ifstream source(files.root/"main.mr");std::ostringstream contents;contents<<source.rdbuf();source.close();const auto original=contents.str();
+    std::ifstream modelFile(canonical.root/"main.json");std::ostringstream json;json<<modelFile.rdbuf();modelFile.close();
+    const auto model = json.str();
+    const std::string knob = "\"simulation_frequency\":10000.0";
+    const auto setting = model.find(knob);ASSERT_NE(setting,std::string::npos);
     const auto field=original.find("simulation_frequency: 10000");ASSERT_NE(field,std::string::npos);
     for (double declared:{400.0,400000.0,400.75,400000.75,10000.75}) {
         const auto frequency=static_cast<unsigned>(declared);
         auto text=original;text.replace(field,std::string("simulation_frequency: 10000").size(),"simulation_frequency: "+std::to_string(declared));
         {std::ofstream target(files.root/"main.mr");target<<text;}
+        auto adjusted = model;
+        adjusted.replace(setting, knob.size(), "\"simulation_frequency\":" + std::to_string(declared));
+        {std::ofstream target(canonical.root/"main.json");target<<adjusted;}
         EXPECT_THROW(engine_sim::prepareEngine(recipe),EngineLoadError);
-        auto host=desktop::RuntimeHost::prepare(recipe);EXPECT_EQ(host->simulator()->getSimulationFrequency(),frequency);
+        auto legacy=desktop::RuntimeHost::prepare(recipe);
+        auto host=desktop::RuntimeHost::prepareModel(canonical.root/"main.json", canonical.root);
+        EXPECT_EQ(host->simulator()->getSimulationFrequency(),frequency);
+        EXPECT_EQ(host->simulator()->getSimulationFrequency(),legacy->simulator()->getSimulationFrequency());
         auto view=host->views().at<Engine>();const auto generation=view.generation();
         float sample;std::uint32_t written=0;host->render(&sample,1,written);EXPECT_EQ(written,1u);
         if(frequency==400) {
@@ -398,7 +442,8 @@ TEST(RuntimeDesktop, PrivatePreparationAdmitsLegacyRatesWithoutChangingPublicLim
 
 TEST(RuntimeDesktop, FaultsPublishOnlyCompletedFramesAndNeverAdvanceWhileAViewIsLeased) {
     static_assert(desktop::RuntimeHost::MaxRenderFrames==AudioPacer::Capacity);
-    auto host=desktop::RuntimeHost::prepare(recipeAt(runtimeFixture()));
+    DesktopFiles files(true);
+    auto host=desktop::RuntimeHost::prepareModel(files.root/"main.json", files.root);
     std::uint32_t empty=0;host->render(nullptr,0,empty);EXPECT_EQ(host->counts().frames,0u);
     float canary=123;EXPECT_THROW(host->render(&canary,desktop::RuntimeHost::MaxRenderFrames+1,empty),std::length_error);
     EXPECT_FLOAT_EQ(canary,123);EXPECT_EQ(host->counts().frames,0u);EXPECT_EQ(host->telemetry().state,ES_READY);
@@ -412,7 +457,8 @@ TEST(RuntimeDesktop, FaultsPublishOnlyCompletedFramesAndNeverAdvanceWhileAViewIs
     EXPECT_TRUE(std::all_of(output.begin()+written,output.end(),[](float sample){return sample==123;}));
     const auto frames=host->counts().frames;written=0;EXPECT_THROW(host->render(output.data(),1,written),engine_sim::SimulationFault);
     EXPECT_EQ(written,0u);EXPECT_EQ(host->counts().frames,frames);
-    auto transported=desktop::RuntimeHost::prepare(recipeAt(runtimeFixture()));engine_sim::RuntimeTestAccess::corruptDesktopBody(*transported);
+    auto transported=desktop::RuntimeHost::prepareModel(files.root/"main.json", files.root);
+    engine_sim::RuntimeTestAccess::corruptDesktopBody(*transported);
     Device device;AudioPacer pacer([&] {return runtimeSample(*transported);});
     EXPECT_FALSE(pacer.service(device,1,false));EXPECT_EQ(pacer.statistics().sourceFaults,1u);
     EXPECT_EQ(pacer.statistics().generatedSource,4u);EXPECT_EQ(device.submitted.size(),4u);

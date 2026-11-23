@@ -81,7 +81,7 @@
       "source": "project",
       "path": "assets/engines/atg-video-1/README.md",
       "destination": "assets/engines/atg-video-1/README.md",
-      "sha256": "58b517ceef8b93b7361afd2a559bd2a66dd950cef7b0ce5af62d185acd6d3a45",
+      "sha256": "6113001dae7307f9a209cbafa5c43ed0b911d016f917ba037700a8b9147e62b6",
       "license": "Project MIT, retained upstream example attribution",
       "distribution": "permitted",
       "component": "base"
@@ -207,7 +207,7 @@
       "source": "project",
       "path": "assets/engines/atg-video-2/README.md",
       "destination": "assets/engines/atg-video-2/README.md",
-      "sha256": "aec90ac06a5bc42efff5e296588ca9c442af6d8d21f8ad9d0ead3cdbeb76f328",
+      "sha256": "a7893da59185f92e92df75e9cd95a5dc808bcb50e5fd16f97d58ff197a0da36b",
       "license": "Project MIT, retained upstream example attribution",
       "distribution": "permitted",
       "component": "base"
@@ -657,7 +657,7 @@
       "source": "project",
       "path": "THIRD_PARTY_NOTICES.md",
       "destination": "licenses/THIRD_PARTY_NOTICES.md",
-      "sha256": "d4e4e0efb983ffe80d83b87f7f343b46d1ed7cd24d802df8c4075ca4e4d0dcd5",
+      "sha256": "9b829b672c9a75717d11b3b331b617b88183756c17f2a3f5d5e55ac4edabea63",
       "license": "Project notices",
       "distribution": "permitted",
       "component": "base"
@@ -895,6 +895,329 @@
       "destination": "licenses/stb_truetype-MIT.txt",
       "sha256": "b10585c53736871946f332cf905f2d50a57510af0922f5739fa4b25444aa690d",
       "license": "MIT, Sean Barrett, copyright 2017",
+      "distribution": "permitted",
+      "component": "desktop"
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/atg-video-1/01_honda_trx520.json",
+      "destination": "assets/engines/atg-video-1/01_honda_trx520.json",
+      "sha256": "92903e010e123d721bb7257349835aa08f0baceebcb11d4ca8cf42a86ecaf735",
+      "license": "Project MIT, canonical conversion of the corresponding project source",
+      "distribution": "permitted",
+      "component": "desktop",
+      "model": true
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/atg-video-1/02_kohler_ch750.json",
+      "destination": "assets/engines/atg-video-1/02_kohler_ch750.json",
+      "sha256": "da71ee45143e5d5dd10e6146fb63cb8fe66f57ce153edd911ae572ff6f873374",
+      "license": "Project MIT, canonical conversion of the corresponding project source",
+      "distribution": "permitted",
+      "component": "desktop",
+      "model": true
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/atg-video-1/03_harley_davidson_shovelhead.json",
+      "destination": "assets/engines/atg-video-1/03_harley_davidson_shovelhead.json",
+      "sha256": "6b54850ca245b9ee687294aa92aabb6e97f30748d57c7f9dafa84ceddb4a5196",
+      "license": "Project MIT, canonical conversion of the corresponding project source",
+      "distribution": "permitted",
+      "component": "desktop",
+      "model": true
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/atg-video-1/04_hayabusa.json",
+      "destination": "assets/engines/atg-video-1/04_hayabusa.json",
+      "sha256": "4a44a0c39661f28d79c76486bfdf9ebc27dc456d1ed5c756983822d7840c6d1f",
+      "license": "Project MIT, canonical conversion of the corresponding project source",
+      "distribution": "permitted",
+      "component": "desktop",
+      "model": true
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/atg-video-1/05_honda_vtec.json",
+      "destination": "assets/engines/atg-video-1/05_honda_vtec.json",
+      "sha256": "dcc0e4ec83494d342269ecfd7794d32530eb49ee6312157a7363dc8ddfc7e2b7",
+      "license": "Project MIT, canonical conversion of the corresponding project source",
+      "distribution": "permitted",
+      "component": "desktop",
+      "model": true
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/atg-video-1/06_subaru_ej25.json",
+      "destination": "assets/engines/atg-video-1/06_subaru_ej25.json",
+      "sha256": "18211d2321ba9948454083730e8027f02a1404d673eb635b8794d8145ffc3608",
+      "license": "Project MIT, canonical conversion of the corresponding project source",
+      "distribution": "permitted",
+      "component": "desktop",
+      "model": true
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/atg-video-1/07_audi_i5.json",
+      "destination": "assets/engines/atg-video-1/07_audi_i5.json",
+      "sha256": "684291a60c7a146f3fbab63481dd583a07f714b53222cc266802da5f13ccf87f",
+      "license": "Project MIT, canonical conversion of the corresponding project source",
+      "distribution": "permitted",
+      "component": "desktop",
+      "model": true
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/atg-video-1/08_radial_5.json",
+      "destination": "assets/engines/atg-video-1/08_radial_5.json",
+      "sha256": "8d81ff7fa4a4089e3772fd4914c5f578c6e19e7bbbf9819fc832d3b9718c9762",
+      "license": "Project MIT, canonical conversion of the corresponding project source",
+      "distribution": "permitted",
+      "component": "desktop",
+      "model": true
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/atg-video-2/01_subaru_ej25_eh.json",
+      "destination": "assets/engines/atg-video-2/01_subaru_ej25_eh.json",
+      "sha256": "33f828f5065bdc66429cf039284609740d379e291478d5670c81861f6af5c22c",
+      "license": "Project MIT, canonical conversion of the corresponding project source",
+      "distribution": "permitted",
+      "component": "desktop",
+      "model": true
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/atg-video-2/02_subaru_ej25_uh.json",
+      "destination": "assets/engines/atg-video-2/02_subaru_ej25_uh.json",
+      "sha256": "70b2002b3ca57d02f049d573211f3f8aa782decf03c11dcfa0bfa95ceca35fc1",
+      "license": "Project MIT, canonical conversion of the corresponding project source",
+      "distribution": "permitted",
+      "component": "desktop",
+      "model": true
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/atg-video-2/03_2jz.json",
+      "destination": "assets/engines/atg-video-2/03_2jz.json",
+      "sha256": "63e7ad573727f97b395cf2e1d69b127667efe0c4972b9134fe9d1bdb50400a24",
+      "license": "Project MIT, canonical conversion of the corresponding project source",
+      "distribution": "permitted",
+      "component": "desktop",
+      "model": true
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/atg-video-2/04_60_degree_v6.json",
+      "destination": "assets/engines/atg-video-2/04_60_degree_v6.json",
+      "sha256": "e18a5eb1d110a5a50c7cb346a53d5d4be1f99a4f386a8eefe5b0ba69a339ac22",
+      "license": "Project MIT, canonical conversion of the corresponding project source",
+      "distribution": "permitted",
+      "component": "desktop",
+      "model": true
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/atg-video-2/05_odd_fire_v6.json",
+      "destination": "assets/engines/atg-video-2/05_odd_fire_v6.json",
+      "sha256": "300cba7048550bbd1d686f613d16b0eb2c45146a64af7890aed8d01be0440fe3",
+      "license": "Project MIT, canonical conversion of the corresponding project source",
+      "distribution": "permitted",
+      "component": "desktop",
+      "model": true
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/atg-video-2/06_even_fire_v6.json",
+      "destination": "assets/engines/atg-video-2/06_even_fire_v6.json",
+      "sha256": "63fbedf87e498fddf69fe2ffd4465c6839cea8f59bb8fcd863d13f152af5e711",
+      "license": "Project MIT, canonical conversion of the corresponding project source",
+      "distribution": "permitted",
+      "component": "desktop",
+      "model": true
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/atg-video-2/07_gm_ls.json",
+      "destination": "assets/engines/atg-video-2/07_gm_ls.json",
+      "sha256": "f3d5f7958d1759cd7214b41373747b4304ca4cb7c441b3a5cd8973c31e4a44fe",
+      "license": "Project MIT, canonical conversion of the corresponding project source",
+      "distribution": "permitted",
+      "component": "desktop",
+      "model": true
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/atg-video-2/08_ferrari_f136_v8.json",
+      "destination": "assets/engines/atg-video-2/08_ferrari_f136_v8.json",
+      "sha256": "d75f16819c766d66b10c82dcdfcac2cff1f5266bdc888c5e8a0e892854a2104a",
+      "license": "Project MIT, canonical conversion of the corresponding project source",
+      "distribution": "permitted",
+      "component": "desktop",
+      "model": true
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/atg-video-2/09_radial_9.json",
+      "destination": "assets/engines/atg-video-2/09_radial_9.json",
+      "sha256": "c7cfd6104a211daa083fa53cab79380d683d3bd1ba362e2a3daff8ea282c3c13",
+      "license": "Project MIT, canonical conversion of the corresponding project source",
+      "distribution": "permitted",
+      "component": "desktop",
+      "model": true
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/atg-video-2/10_lfa_v10.json",
+      "destination": "assets/engines/atg-video-2/10_lfa_v10.json",
+      "sha256": "ac3e50784a911da2a12706d58462c8d272716816c5ab5bcbece171a44c010ef2",
+      "license": "Project MIT, canonical conversion of the corresponding project source",
+      "distribution": "permitted",
+      "component": "desktop",
+      "model": true
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/atg-video-2/11_merlin_v12.json",
+      "destination": "assets/engines/atg-video-2/11_merlin_v12.json",
+      "sha256": "91296e6547e94a6887e46d70801caf401ad855385e97b243325b09231f6559c0",
+      "license": "Project MIT, canonical conversion of the corresponding project source",
+      "distribution": "permitted",
+      "component": "desktop",
+      "model": true
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/atg-video-2/12_ferrari_412_t2.json",
+      "destination": "assets/engines/atg-video-2/12_ferrari_412_t2.json",
+      "sha256": "db929a7e7ff925216094c6d5250041fe57c79b5d459021a02687a2c42c40cf41",
+      "license": "Project MIT, canonical conversion of the corresponding project source",
+      "distribution": "permitted",
+      "component": "desktop",
+      "model": true
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/audi/i5.json",
+      "destination": "assets/engines/audi/i5.json",
+      "sha256": "d345878da37e989d8aff3a875f24651976ea2f8ceb678b496abc5c3959a12220",
+      "license": "Project MIT, canonical conversion of the corresponding project source",
+      "distribution": "permitted",
+      "component": "desktop",
+      "model": true
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/bmw/M52B28.json",
+      "destination": "assets/engines/bmw/M52B28.json",
+      "sha256": "ad7604d090c98ce72db5d0f5d89592d5e022c64f6ee07c26ada93890fa46f6ae",
+      "license": "Project MIT, canonical conversion of the corresponding project source",
+      "distribution": "permitted",
+      "component": "desktop",
+      "model": true
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/chevrolet/chev_truck_454.json",
+      "destination": "assets/engines/chevrolet/chev_truck_454.json",
+      "sha256": "e3ddfeda659d573b116df1129ac33adc759274c3c19aa43bb2eca8bc5e19daf2",
+      "license": "Project MIT, canonical conversion of the corresponding project source",
+      "distribution": "permitted",
+      "component": "desktop",
+      "model": true
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/chevrolet/engine_03_for_e1.json",
+      "destination": "assets/engines/chevrolet/engine_03_for_e1.json",
+      "sha256": "8b12c2916957811cc19fcf5437c3fb92b00d05e187b820f1a97517e6e60f1d64",
+      "license": "Project MIT, canonical conversion of the corresponding project source",
+      "distribution": "permitted",
+      "component": "desktop",
+      "model": true
+    },
+    {
+      "source": "project",
+      "path": "assets/engines/kohler/kohler_ch750.json",
+      "destination": "assets/engines/kohler/kohler_ch750.json",
+      "sha256": "5094add34a23f2ffca6834a4842079ba04518984f5b3ce6bbc9a99ba626201ca",
+      "license": "Project MIT, canonical conversion of the corresponding project source",
+      "distribution": "permitted",
+      "component": "desktop",
+      "model": true
+    },
+    {
+      "source": "project",
+      "path": "assets/main.json",
+      "destination": "assets/main.json",
+      "sha256": "e75d6c0633ffa630709fb7360aa2cc344d72d93327cb00091ec4effba1d93b1b",
+      "license": "Project MIT, canonical conversion of the corresponding project source",
+      "distribution": "permitted",
+      "component": "desktop",
+      "model": true
+    },
+    {
+      "source": "project",
+      "path": "assets/themes/amateur.json",
+      "destination": "assets/themes/amateur.json",
+      "sha256": "e045d29ed4d6b28b2c97d4a2bede87cee5a8b3aaae33e72ce093297893e50597",
+      "license": "Project MIT, canonical conversion of the corresponding project source",
+      "distribution": "permitted",
+      "component": "desktop"
+    },
+    {
+      "source": "project",
+      "path": "assets/themes/bubble_gum.json",
+      "destination": "assets/themes/bubble_gum.json",
+      "sha256": "2c82338a7224b117b09a72c1b2ab3c35a10057ba50db8d12e59c32cffe75a883",
+      "license": "Project MIT, canonical conversion of the corresponding project source",
+      "distribution": "permitted",
+      "component": "desktop"
+    },
+    {
+      "source": "project",
+      "path": "assets/themes/default.json",
+      "destination": "assets/themes/default.json",
+      "sha256": "c0ff8752d6d4e9c6aa1545765a28493977199123b00c5648594105fe76da3c3c",
+      "license": "Project MIT, canonical conversion of the corresponding project source",
+      "distribution": "permitted",
+      "component": "desktop"
+    },
+    {
+      "source": "project",
+      "path": "assets/themes/minimalistic.json",
+      "destination": "assets/themes/minimalistic.json",
+      "sha256": "66b0e7b24d28338fdd6985251e558f4b383c5a6ef34f112079623af30beeb8f2",
+      "license": "Project MIT, canonical conversion of the corresponding project source",
+      "distribution": "permitted",
+      "component": "desktop"
+    },
+    {
+      "source": "project",
+      "path": "assets/themes/night_vision.json",
+      "destination": "assets/themes/night_vision.json",
+      "sha256": "83bf13821f0b4e26f9db731580d6b00772ae696be8dda2d243b04d8543c0dd24",
+      "license": "Project MIT, canonical conversion of the corresponding project source",
+      "distribution": "permitted",
+      "component": "desktop"
+    },
+    {
+      "source": "project",
+      "path": "assets/themes/paper.json",
+      "destination": "assets/themes/paper.json",
+      "sha256": "fcb367f4efba4e4fb9afbf9d7f054a3ad2432d7e6fce84036e6b8f5a8bba34e9",
+      "license": "Project MIT, canonical conversion of the corresponding project source",
+      "distribution": "permitted",
+      "component": "desktop"
+    },
+    {
+      "source": "project",
+      "path": "modules/json/third_party/nlohmann/LICENSE.MIT",
+      "destination": "licenses/nlohmann-json-MIT.txt",
+      "sha256": "46a65cffd1ea955132d95a8dd921640714a8d6b537d2e4e482d31145ae95b603",
+      "license": "MIT, nlohmann/json 3.12.0",
       "distribution": "permitted",
       "component": "desktop"
     }

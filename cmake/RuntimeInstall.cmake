@@ -31,7 +31,9 @@ if (TARGET engine-sim-capture OR TARGET engine-sim-app)
             DESTINATION share/engine-sim/tools/capture COMPONENT Runtime)
     endif ()
     if (TARGET engine-sim-app)
-        install(TARGETS engine-sim-app RUNTIME DESTINATION bin BUNDLE DESTINATION . COMPONENT Runtime)
+        install(TARGETS engine-sim-app
+            RUNTIME DESTINATION bin COMPONENT Runtime
+            BUNDLE DESTINATION . COMPONENT Runtime)
         install(FILES "${PROJECT_SOURCE_DIR}/tools/run_desktop_smoke.py"
             DESTINATION share/engine-sim/tools COMPONENT Runtime)
         if (WIN32)

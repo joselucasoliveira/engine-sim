@@ -1,5 +1,7 @@
 #ifndef ENGINE_SIM_DESKTOP_RUN_H
 #define ENGINE_SIM_DESKTOP_RUN_H
+#include "application_settings.h"
+#include "desktop_audio_pacer.h"
 #include "desktop_host.h"
 #include <chrono>
 #include <functional>
@@ -21,15 +23,19 @@ struct RunEvidence {
     std::uint64_t processCalls = 0, simulationSteps = 0, screenshots = 0, coloredPixels = 0;
     std::uint64_t audioConsumedInput = 0, audioPumpedSource = 0, silenceFrames = 0, queueMaximum = 0;
     std::uint64_t nonzeroFedToBackend = 0;
-    std::uint64_t scriptDigest = 0;
+    std::uint64_t modelDigest = 0;
+    std::uint64_t preparedFrames = 0, preparedDigest = 14695981039346656037ULL;
     std::uint64_t acceptedReloads = 0;
     double peakRpm = 0;
     int cylinders = 0;
     bool resized = false, tornDown = false, success = false, throttleChanged = false;
     std::string videoDriver, renderer, audioDriver, audioDevice, error;
+    std::string engineName;
+    ApplicationSettings settings;
+    AudioPacer::Statistics pacing;
     int deviceFrequency = 0, deviceChannels = 0, deviceQuantum = 0;
     unsigned deviceFormat = 0;
-    std::filesystem::path resolvedScript, resourceRoot;
+    std::filesystem::path resolvedModel, resourceRoot;
     std::function<void(unsigned)> onFrame;
     void beforeFrame(Host &host);
     void afterFrame(Host &host);

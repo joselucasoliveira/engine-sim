@@ -11,6 +11,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <sstream>
 #include <set>
 #include <thread>
 #include <type_traits>
@@ -72,8 +73,15 @@ protected:
         fs::create_directory(value->outputDirectory);
         value->inputs.resize(frames); return value;
     }
+    std::string readModel(const fs::path &name) {
+        std::ifstream stream(resources / name, std::ios::binary);
+        if (!stream) throw std::runtime_error("Missing canonical desktop test model");
+        std::ostringstream data;
+        data << stream.rdbuf();
+        return data.str();
+    }
     fs::path entry(const std::string &text) {
-        const auto file=scratch/fs::u8path("custom entry \xCE\xA9.mr"); write(file,text); return file;
+        const auto file=scratch/fs::u8path("custom entry \xCE\xA9.json"); write(file,text); return file;
     }
     void write(const fs::path &file,const std::string &text) {
         std::ofstream stream(file,std::ios::binary); stream<<text; ASSERT_TRUE(stream);
@@ -202,13 +210,13 @@ TEST_F(HostApplication, ResizeFullscreenWheelAndMouseKeepLogicalCoordinates) {
 }
 
 TEST_F(HostApplication, FailedReturnReloadKeepsSessionAndSuccessfulReturnReplacesIt) {
-    const std::string valid="import \"engine_sim.mr\"\nimport \"engines/atg-video-2/01_subaru_ej25_eh.mr\"\nmain()\n";
-    const auto script=entry(valid); Application app; auto backend=host(4); auto *control=backend.get();
+    const auto valid = readModel("assets/engines/atg-video-2/01_subaru_ej25_eh.json");
+    const auto modelFile=entry(valid); Application app; auto backend=host(4); auto *control=backend.get();
     backend->inputs[1].press(Key::Return); backend->inputs[2].press(Key::Return);
-    app.initialize(std::move(backend),{resources,script}); auto *original=app.getSimulator();
+    app.initialize(std::move(backend),{resources, {}, modelFile}); auto *original=app.getSimulator();
     control->onFrame=[&](std::size_t frame) {
-        if (frame==1) write(script,"import \"engine_sim.mr\"\nmissing_contract_node()\n");
-        if (frame==2) { EXPECT_EQ(app.getSimulator(),original); write(script,valid); }
+        if (frame==1) write(modelFile, "{\"components\":");
+        if (frame==2) { EXPECT_EQ(app.getSimulator(),original); write(modelFile, valid); }
         if (frame==3) EXPECT_NE(app.getSimulator(),original);
     };
     app.run(); EXPECT_EQ(recording->audioModes,(std::vector<bool>{true,false,true}));
@@ -229,16 +237,16 @@ TEST_F(HostApplication, PartialStartupAndAudioFailureRetireSessionBeforeHost) {
 
 TEST_F(HostApplication, KohlerAndNineCylinderSessionsRenderProducePcmAndRelease) {
     const std::array<std::pair<const char *,int>,3> engines{{
-        {"engines/atg-video-1/02_kohler_ch750.mr",2},
-        {"engines/atg-video-2/09_radial_9.mr",9},
-        {"engines/atg-video-2/09_radial_9.mr",9}}};
+        {"assets/engines/atg-video-1/02_kohler_ch750.json",2},
+        {"assets/engines/atg-video-2/09_radial_9.json",9},
+        {"assets/engines/atg-video-2/09_radial_9.json",9}}};
     for (const auto &engine : engines) {
         SCOPED_TRACE(engine.first);
-        const auto script=entry("import \"engine_sim.mr\"\nimport \""+std::string(engine.first)+"\"\nmain()\n");
+        const auto modelFile = resources / engine.first;
         Application app; auto backend=host(40); auto data=recording;
         for (auto &input : backend->inputs) input.hold(Key::S);
         backend->inputs[0].press(Key::A);
-        app.initialize(std::move(backend),{resources,script});
+        app.initialize(std::move(backend),{resources, {}, modelFile});
         ASSERT_EQ(app.getSimulator()->getEngine()->getCylinderCount(),engine.second);
         data->onShutdown=[&] { EXPECT_EQ(app.getSimulator(),nullptr); };
         app.run(); EXPECT_EQ(data->frames.size(),40U); EXPECT_GT(data->pcm.size(),0U);
@@ -284,16 +292,21 @@ TEST_F(ViewsApplication, HandlesRequireOwnerPhaseAndRetireBeforeTheirGraph) {
 }
 
 TEST_F(ViewsApplication, FailedDetachedViewsKeepPaletteGenerationControlsAndDrawableGeometry) {
-    const std::string valid="import \"engine_sim.mr\"\nimport \"engines/atg-video-2/01_subaru_ej25_eh.mr\"\nmain()\n";
-    const auto script=entry(valid); Application app; auto backend=host(4); auto *control=backend.get();
+    const auto valid = readModel("assets/engines/atg-video-2/01_subaru_ej25_eh.json");
+    const auto modelFile=entry(valid); Application app; auto backend=host(4); auto *control=backend.get();
     backend->inputs[0].press(Key::A).hold(Key::S);
     backend->inputs[1].press(Key::Return); backend->inputs[2].press(Key::Return);
-    app.initialize(std::move(backend),{resources,script});
+    app.initialize(std::move(backend),{resources, {}, modelFile});
     auto old=app.engineObservation(); const auto generation=app.viewGeneration();
     const auto palette=app.getAppSettings()->colorForeground;
     control->onFrame=[&](std::size_t frame) {
         if (frame==1) {
-            write(script,valid+"import \"themes/paper.mr\"\nuse_paper_theme(color: 0x123456)\n");
+            auto changed = valid;
+            const std::string property = "\"color_foreground\":16777215";
+            const auto at = changed.find(property);
+            ASSERT_NE(at, std::string::npos);
+            changed.replace(at, property.size(), "\"color_foreground\":1193046");
+            write(modelFile, changed);
             app.failViews=true;
         }
         if (frame==2) {

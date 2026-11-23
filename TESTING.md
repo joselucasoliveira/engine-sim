@@ -59,13 +59,13 @@ Run an already installed application from an unrelated working directory:
 ```sh
 python3 -B /absolute/installation/share/engine-sim/tools/run_desktop_smoke.py \
   --app /absolute/installation/bin/engine-sim-app \
-  --script /absolute/installation/share/engine-sim/assets/main.mr \
+  --model /absolute/installation/share/engine-sim/assets/main.json \
   --out /absolute/external/installed-smoke --frames 240 --audio-mode virtual
 ```
 
-The helper checks process exit and timeout, independent script/application hashes, actual frame readbacks and teardown. It requires ignition/starter/throttle, layout changes, resize, a successful Return reload and real solver/PCM progress. Its bounded internal pause fixture exercises a Right-key single step; this adds no interactive pause binding. Use `--audio-mode device` separately for a real endpoint. Virtual audio uses an explicitly selected software sink and never substitutes silently for a failed device. The source is mono signed 16-bit PCM at 44.1 kHz; SDL converts only at the final native boundary. Input-consumption counters are not physical playback or acoustic clocks.
+The helper checks process exit and timeout, independent model and application hashes, actual frame readbacks and teardown. It requires ignition/starter/throttle, layout changes, resize, a successful Return reload and real solver/PCM progress. Its bounded internal pause fixture exercises a Right-key single step; this adds no interactive pause binding. Use `--audio-mode device` separately for a real endpoint. Virtual audio uses an explicitly selected software sink and never substitutes silently for a failed device. The source is mono signed 16-bit PCM at 44.1 kHz; SDL converts only at the final native boundary. Input-consumption counters are not physical playback or acoustic clocks.
 
-Keep source-hidden relocated, missing/corrupt script, IR, font, scene and shader checks distinct. Failed reload must keep the running session; a later accepted reload must replace and retire it cleanly. The visible diagnostic regression covers spaces, UTF-8 and multiline messages with the info panel shown.
+Keep source-hidden relocated, missing or corrupt model, IR, font, scene and shader checks distinct. Failed reload must keep the running session; a later accepted reload must replace and retire it cleanly. The visible diagnostic regression covers spaces, UTF-8 and multiline messages with the info panel shown.
 
 ## Signal and timing comparisons
 

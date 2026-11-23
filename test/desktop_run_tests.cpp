@@ -8,17 +8,23 @@
 
 namespace {
 TEST(DesktopRun, NormalArgumentsRetainExplicitResourceAndAudioSelection) {
-    const auto options=desktop::parseRunOptions({"app","--resources","resources","--script","entry.mr","--audio-mode","virtual"});
+    const auto options=desktop::parseRunOptions({"app","--resources","resources","--model","entry.json","--audio-mode","virtual"});
     EXPECT_FALSE(options.smoke); EXPECT_TRUE(options.virtualAudio);
-    EXPECT_EQ(options.resources.resources,"resources"); EXPECT_EQ(options.resources.script,"entry.mr");
+    EXPECT_EQ(options.resources.resources,"resources"); EXPECT_EQ(options.resources.model,"entry.json");
     EXPECT_TRUE(desktop::parseRunOptions({"app","--help"}).help);
 }
 TEST(DesktopRun, RejectsUnknownDuplicateUnboundedAndIncompleteArguments) {
     for (const auto &args : std::vector<std::vector<std::string>>{
         {"app","--unknown"},{"app","--smoke","--smoke"},{"app","--frames","0"},
         {"app","--frames","10001"},{"app","--frames","2x"},{"app","--frames","60"},
-        {"app","--report"},{"app","--audio-mode","silent"},{"app","--script","a","--script","b"}})
+        {"app","--report"},{"app","--audio-mode","silent"},{"app","--model","a","--model","b"}})
         EXPECT_THROW(desktop::parseRunOptions(args),desktop::DesktopError);
+    try {
+        (void)desktop::parseRunOptions({"app","--script","entry.mr"});
+        FAIL() << "Desktop accepted a script";
+    } catch (const desktop::DesktopError &error) {
+        EXPECT_NE(std::string(error.what()).find("engine-sim-convert"), std::string::npos);
+    }
 }
 TEST(DesktopRun, ReportsRequireFreshAbsolutePathsOutsideResources) {
     namespace fs=std::filesystem;

@@ -1,4 +1,5 @@
 #include "json_runtime.hpp"
+#include "json_session.hpp"
 #include "runtime.hpp"
 #include "preparation.hpp"
 #include "simulation_fault.h"
@@ -37,11 +38,8 @@ struct JsonRuntimeAccess {
         return slot ? slot->get() : nullptr;
     }
 
-    static void adopt(Runtime &runtime, assembly::PreparedSession prepared, JsonRecipe recipe,
-                      const json_runtime::Checkpoint &checkpoint) {
-        recipe.resources = std::move(prepared.inputs);
-        auto immutable = std::make_shared<const JsonRecipe>(std::move(recipe));
-        runtime.adoptSession(std::move(prepared.session), std::move(immutable), runtime.m_config.mode, false, {},
+    static void adopt(Runtime &runtime, json_runtime::PreparedModel prepared, const json_runtime::Checkpoint &checkpoint) {
+        runtime.adoptSession(std::move(prepared.session), std::move(prepared.recipe), runtime.m_config.mode, false, {},
                              [&] { if (checkpoint) checkpoint(json_runtime::Phase::snapshot); });
     }
 };
@@ -139,7 +137,8 @@ Outcome read_document(JsonRecipe &recipe, const JsonRecipe *expected) {
     return {};
 }
 
-Outcome activate(Runtime &runtime, JsonRecipe recipe, const JsonRecipe *expected, const Checkpoint &checkpoint) {
+PreparedModelResult prepare(JsonRecipe recipe, const JsonRecipe *expected,
+                            assembly::PreparationProfile profile, const Checkpoint &checkpoint) {
     if (checkpoint) checkpoint(Phase::document);
     auto parsed = cfg::read_json(recipe.bytes);
     if (auto *problem = std::get_if<cfg::Diagnostic>(&parsed)) {
@@ -147,21 +146,46 @@ Outcome activate(Runtime &runtime, JsonRecipe recipe, const JsonRecipe *expected
         return std::move(*problem);
     }
     if (checkpoint) checkpoint(Phase::normalized);
-    const auto config = JsonRuntimeAccess::config(runtime);
-    const auto mode = config.mode == ES_DRIVEN ? assembly::Mode::driven : assembly::Mode::free;
-    const assembly::PreparationProfile profile{mode, config.simulation_hz, config.starter_torque_nm, config.seed};
     auto result = assembly::prepare_session(std::get<cfg::NormalizedDocument>(parsed), recipe.root, profile,
                                             recipe.resolved_entry.u8string(), expected ? &expected->resources : nullptr);
     if (auto *problem = std::get_if<cfg::Diagnostic>(&result)) return std::move(*problem);
     if (checkpoint) checkpoint(Phase::prepared);
+    auto prepared = std::get<assembly::PreparedSession>(std::move(result));
+    recipe.resources = std::move(prepared.inputs);
+    return PreparedModel{std::move(prepared.session), std::make_shared<const JsonRecipe>(std::move(recipe))};
+}
+
+Outcome activate(Runtime &runtime, JsonRecipe recipe, const JsonRecipe *expected, const Checkpoint &checkpoint) {
+    const auto config = JsonRuntimeAccess::config(runtime);
+    const auto mode = config.mode == ES_DRIVEN ? assembly::Mode::driven : assembly::Mode::free;
+    auto prepared = prepare(std::move(recipe), expected, {mode, config.simulation_hz, config.starter_torque_nm, config.seed},
+                            checkpoint);
+    if (auto *problem = std::get_if<cfg::Diagnostic>(&prepared)) return std::move(*problem);
     try {
-        JsonRuntimeAccess::adopt(runtime, std::get<assembly::PreparedSession>(std::move(result)),
-                                 std::move(recipe), checkpoint);
+        JsonRuntimeAccess::adopt(runtime, std::get<PreparedModel>(std::move(prepared)), checkpoint);
     } catch (const SimulationFault &) {
         return issue("CFG_INITIALIZE", "initialize", "Initial session snapshot could not be constructed");
     }
     return {};
 }
+}
+
+PreparedModelResult prepare_desktop(const fs::path &entry, const fs::path &root, std::uint64_t seed) {
+    if (!absolute_path(root))
+        return issue("API_INVALID", "api", "An absolute resource root is required", root);
+    JsonRecipe recipe;
+    recipe.entry = entry;
+    recipe.root = root;
+    if (auto problem = read_document(recipe, nullptr)) return std::move(*problem);
+    return prepare(std::move(recipe), nullptr, {assembly::Mode::desktop, 0, 0, seed}, {});
+}
+
+PreparedModelResult reset_desktop(const JsonRecipe &saved, std::uint64_t seed) {
+    JsonRecipe recipe;
+    recipe.entry = saved.entry;
+    recipe.root = saved.root;
+    if (auto problem = read_document(recipe, &saved)) return std::move(*problem);
+    return prepare(std::move(recipe), &saved, {assembly::Mode::desktop, 0, 0, seed}, {});
 }
 
 es_status load_file(es_runtime *runtime, const fs::path &entry, const fs::path &root,

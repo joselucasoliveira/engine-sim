@@ -1,4 +1,6 @@
 #include <gtest/gtest.h>
+#include <fstream>
+#include <sstream>
 #include "engine_sim_application.h"
 #include "rendering_host.h"
 #include <chrono>
@@ -19,7 +21,7 @@ protected:
     void SetUp() override {
         const char *root=std::getenv("ENGINE_SIM_RENDER_RESOURCES");ASSERT_NE(root,nullptr);
         paths=engine_sim::ResourcePaths::resolve(engine_sim::executablePath(),{fs::u8path(root),{}},false);
-        paths.validateBase();scene=engine_sim::readCompiledScene(paths.scene());ASSERT_EQ(scene.meshes.size(),9U);
+        paths.validateDesktop();scene=engine_sim::readCompiledScene(paths.scene());ASSERT_EQ(scene.meshes.size(),9U);
         const auto cwd=fs::canonical(fs::current_path());ASSERT_NE(cwd,paths.root);
         ASSERT_TRUE(!fs::exists(cwd/"CMakeLists.txt"));
         scratch=cwd/(std::string(testing::UnitTest::GetInstance()->current_test_info()->name())+"-"
@@ -95,8 +97,8 @@ TEST_F(DesktopRender, ActualApplicationRendersAllScreensAndNineCylinderEngine) {
     for (bool radial:{false,true}) {
         EngineSimApplication app;auto data=std::make_shared<render_test::Output>();const auto directory=scratch/(radial?"radial":"default");fs::create_directory(directory);
         auto host=std::make_unique<render_test::RenderingHost>(data,directory,radial?40:4);host->tabs=!radial;host->startEngine=radial;
-        auto options=engine_sim::ResourceOptions{paths.root,{}};
-        if(radial){options.script=directory/"radial.mr";std::ofstream s(options.script);s<<"import \"engine_sim.mr\"\nimport \"engines/atg-video-2/09_radial_9.mr\"\nmain()\n";}
+        auto options=engine_sim::ResourceOptions{paths.root,{}, {}};
+        if (radial) options.model = paths.assets / "engines/atg-video-2/09_radial_9.json";
         app.initialize(std::move(host),options);ASSERT_EQ(app.getSimulator()->getEngine()->getCylinderCount(),radial?9:4);
         data->onShutdown=[&]{EXPECT_EQ(app.getSimulator(),nullptr);};app.run();app.destroy();
         EXPECT_EQ(data->shutdowns,1);EXPECT_EQ(data->gpu.submittedFrames,radial?40U:4U);EXPECT_EQ(data->gpu.presentedFrames,radial?40U:4U);
@@ -109,8 +111,12 @@ TEST_F(DesktopRender, ActualApplicationRendersAllScreensAndNineCylinderEngine) {
 }
 TEST_F(DesktopRender, VisibleLoadDiagnosticRetainsRunningRadialAndRecoversOnNativeReturn) {
     EngineSimApplication app;auto data=std::make_shared<render_test::Output>();
-    const auto entry=scratch/fs::u8path("entry Ω ç.mr");
-    const std::string source="import \"engine_sim.mr\"\nimport \"engines/atg-video-2/09_radial_9.mr\"\nmain()\n";
+    const auto entry=scratch/fs::u8path("entry Ω ç.json");
+    std::ifstream modelFile(paths.assets / "engines/atg-video-2/09_radial_9.json", std::ios::binary);
+    ASSERT_TRUE(modelFile);
+    std::ostringstream dataBytes;
+    dataBytes << modelFile.rdbuf();
+    const auto source = dataBytes.str();
     std::ofstream(entry)<<source;
     auto host=std::make_unique<render_test::RenderingHost>(data,scratch,24);host->startEngine=true;
     const Simulator *original=nullptr;bool rejected=false,recovered=false;
@@ -133,14 +139,14 @@ TEST_F(DesktopRender, VisibleLoadDiagnosticRetainsRunningRadialAndRecoversOnNati
             EXPECT_EQ(app.getSimulator()->getEngine()->getCylinderCount(),9);
         }
     };
-    app.initialize(std::move(host),{paths.root,entry});original=app.getSimulator();
+    app.initialize(std::move(host),{paths.root,{},entry});original=app.getSimulator();
     ASSERT_NE(original,nullptr);ASSERT_EQ(original->getEngine()->getCylinderCount(),9);
     data->onShutdown=[&]{EXPECT_EQ(app.getSimulator(),nullptr);};
     app.run();app.destroy();EXPECT_TRUE(rejected);EXPECT_TRUE(recovered);EXPECT_EQ(data->shutdowns,1);
     EXPECT_EQ(data->gpu.presentedFrames,24U);EXPECT_GT(data->gpu.glyphs,100U);
     bool diagnostic=false;
     for (const auto &label:data->labels) {
-        if (label.find("entry ? ?.mr")!=std::string::npos) diagnostic=true;
+        if (label.find("entry ? ?.json")!=std::string::npos) diagnostic=true;
         for (unsigned char byte:label) EXPECT_TRUE(byte=='\n' || (byte>=32 && byte<=127));
     }
     EXPECT_TRUE(diagnostic);

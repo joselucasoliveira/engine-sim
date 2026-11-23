@@ -138,7 +138,7 @@ void EngineSimApplication::initialize(std::unique_ptr<desktop::Host> host,
     if (!host) throw std::invalid_argument("Application requires an explicit desktop host");
     m_destroyed = false;
     m_resources = engine_sim::ResourcePaths::resolve(engine_sim::executablePath(), resources, true);
-    m_resources.validateBase();
+    m_resources.validateDesktop();
     const auto scene = engine_sim::readCompiledScene(m_resources.scene());
     m_assetPath = m_resources.assets.u8string();
     m_host = std::move(host);
@@ -154,7 +154,7 @@ void EngineSimApplication::initialize(std::unique_ptr<desktop::Host> host,
 
 void EngineSimApplication::initialize() {
     m_shaders.SetClearColor(desktop::color::srgbiToLinear(0x34, 0x98, 0xdb));
-    if (!loadScript()) throw std::runtime_error(m_loadError);
+    if (!loadModel()) throw std::runtime_error(m_loadError);
 
     m_host->openAudio();
     m_audioOpen = true;
@@ -290,7 +290,7 @@ void EngineSimApplication::run() {
         }
 
         if (m_host->ProcessKeyDown(desktop::Key::Return)) {
-            if (loadScript()) {
+            if (loadModel()) {
                 m_host->setAudioPlaying(false);
                 m_host->setAudioPlaying(true);
             }
@@ -576,17 +576,13 @@ const SimulationObject::ViewParameters &
     return m_viewParameters;
 }
 
-bool EngineSimApplication::loadScript() {
-#ifdef ATG_ENGINE_SIM_PIRANHA_ENABLED
+bool EngineSimApplication::loadModel() {
     try {
         if (m_engineViews) m_engineViews->requireQuiescent();
-        return loadRuntime(desktop::RuntimeHost::prepare({m_resources.script, m_resources.library, m_resources.assets}),
-            m_resources.script.u8string());
+        return loadRuntime(desktop::RuntimeHost::prepareModel(m_resources.model, m_resources.root),
+                           m_resources.model.u8string());
     }
     catch (const std::exception &error) { reportLoadFailure(error.what()); }
-#else
-    reportLoadFailure("compile: ../assets/main.mr: Script support is disabled");
-#endif
     return false;
 }
 

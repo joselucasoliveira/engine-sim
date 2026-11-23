@@ -129,14 +129,20 @@ ResourcePaths ResourcePaths::resolve(const fs::path &executable, const ResourceO
         paths.library = paths.root / "es";
     }
     paths.script = options.script.empty() ? paths.assets / "main.mr" : absolutePath(options.script);
+    paths.model = options.model.empty() ? paths.assets / "main.json" : absolutePath(options.model);
     return paths;
 }
 
 void ResourcePaths::validateBase() const {
     requireDirectory(assets); requireDirectory(library); requireFile(script);
 }
+void ResourcePaths::validateDesktop() const {
+    requireDirectory(assets);
+    requireFile(model);
+    requireFile(scene());
+}
 void ResourcePaths::validateLegacyDesktop() const {
-    validateBase(); requireFile(scene()); requireFile(font());
+    validateDesktop(); requireFile(font());
     for (const auto *name : {"delta_console_shader.fx", "delta_engine_shader.fx", "delta_saq_shader.fx"}) {
         requireFile(desktop / "shaders/hlsl" / name);
     }
