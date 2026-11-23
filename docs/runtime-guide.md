@@ -82,6 +82,75 @@ The SDK uses the shared MSVC CRT. On macOS use native arm64 Xcode tools. ELF/Dar
 their ordinary loader search path when moved. These prepared recipes do not
 replace the [per-platform execution status](platforms.md#device-free-runtime-sdk).
 
+## Build and load an engine from C++ values
+
+`ConfigSDK` installs the C++17 headers and static archives. Use the same compiler,
+standard library and build configuration for the SDK and its clients.
+`find_package(EngineSimConfig 1.0 CONFIG REQUIRED COMPONENTS Config)` exposes
+`EngineSim::Config` for typed values, validation and normalized topology.
+The `Json` component exposes `EngineSim::Json` for canonical serialization
+and parsing. The Config-only producer uses `-DENGINE_SIM_CONFIG_JSON=OFF`.
+
+For a standalone model and JSON SDK, run the following with an external
+`ES_OUT`. The [example](../examples/runtime/programmatic/model.cpp) validates
+a typed single-cylinder engine, prints the bad journal location, repairs it
+and writes canonical JSON.
+
+```sh
+export CONFIG_PREFIX="$ES_OUT/config-sdk"
+cmake --preset config -DENGINE_SIM_INSTALL_CONFIG_SDK=ON
+cmake --build --preset config --config Release
+cmake --install "$ES_OUT/config" --config Release --prefix "$CONFIG_PREFIX" --component ConfigSDK
+cmake -G Ninja -S examples/runtime/programmatic -B "$ES_OUT/model-client" \
+  -DCMAKE_PREFIX_PATH="$CONFIG_PREFIX" -DENGINE_SIM_PROGRAMMATIC_RUNTIME=OFF
+cmake --build "$ES_OUT/model-client" --config Release
+"$ES_OUT/model-client/engine-sim-model" "$ES_OUT/typed-model.json"
+```
+
+For a client that also renders, install both components from the same producer
+into one prefix. A static build shares the Config and Json archives in that
+prefix. To use the shared runtime, use `runtime-shared` and a separate prefix.
+The C ABI remains the binary interface for embedding.
+
+```sh
+export SDK_PREFIX="$ES_OUT/programmatic-sdk"
+export PROGRAMMATIC_CLIENT="$ES_OUT/programmatic-client"
+cmake --preset runtime-static -DENGINE_SIM_INSTALL_CONFIG_SDK=ON \
+  -DENGINE_SIM_INSTALL_RUNTIME_EXAMPLE=ON
+cmake --build --preset runtime-static --config Release
+cmake --install "$ES_OUT/runtime-static" --config Release --prefix "$SDK_PREFIX" --component RuntimeSDK
+cmake --install "$ES_OUT/runtime-static" --config Release --prefix "$SDK_PREFIX" --component ConfigSDK
+cmake -G Ninja -S examples/runtime/programmatic -B "$PROGRAMMATIC_CLIENT" -DCMAKE_PREFIX_PATH="$SDK_PREFIX"
+cmake --build "$PROGRAMMATIC_CLIENT" --config Release
+export FIXTURE="$SDK_PREFIX/share/engine-sim-runtime/example"
+"$PROGRAMMATIC_CLIENT/engine-sim-programmatic" "$FIXTURE" 44100 free \
+  "$ES_OUT/model.json" "$ES_OUT/typed.f32"
+"$PROGRAMMATIC_CLIENT/engine-sim-file-loader" "$FIXTURE/main.json" "$FIXTURE" 44100 free \
+  "$ES_OUT/file.f32"
+cmp "$ES_OUT/typed.f32" "$ES_OUT/file.f32"
+```
+
+Both programs accept 44100 or 48000 and `free` or `driven`. They write two
+seconds of mono PCM as native-endian float32 samples, report telemetry and
+reset the same engine. The C++ example passes an owned string to
+`es_load_json_bytes`. Serialization allocates the string and the load parses,
+validates and pins its own copy with the explicit asset root. The caller can
+release the string as soon as the load returns. File loads pin the entry
+identity and reject changed input bytes on reset.
+
+For a script, use a separately built [legacy converter](legacy-converter.md).
+This example converts the licensed single-cylinder fixture. Set
+`CONVERTER` to the absolute path to `engine-sim-convert`.
+
+```sh
+export SCRIPT_FIXTURE="$PWD/examples/runtime/fixture"
+"$CONVERTER" --entry "$SCRIPT_FIXTURE/main.mr" --library-root "$SCRIPT_FIXTURE/library" \
+  --asset-root "$SCRIPT_FIXTURE" --resource-root "$SCRIPT_FIXTURE" \
+  --output "$ES_OUT/converted.json" --manifest "$ES_OUT/conversion.json"
+"$PROGRAMMATIC_CLIENT/engine-sim-file-loader" "$ES_OUT/converted.json" "$SCRIPT_FIXTURE" \
+  44100 free "$ES_OUT/converted.f32"
+```
+
 ## Complete C usage and exact event times
 
 The [C11 consumer](../examples/runtime/consumer/consumer.c) includes initialization,

@@ -46,10 +46,17 @@ if ("@engine_sim_sdk_kind@" STREQUAL "STATIC")
     set(_engine_sim_links)
     foreach(name IN LISTS _engine_sim_archives)
         set(target "EngineSimRuntime::Private_${name}")
-        add_library(${target} STATIC IMPORTED)
-        set_target_properties(${target} PROPERTIES
-            IMPORTED_LOCATION "${_engine_sim_archive_${name}}"
-            IMPORTED_LINK_INTERFACE_LANGUAGES CXX)
+        if (TARGET ${target})
+            get_target_property(_engine_sim_existing_archive ${target} IMPORTED_LOCATION)
+            if (NOT _engine_sim_existing_archive STREQUAL "${_engine_sim_archive_${name}}")
+                message(FATAL_ERROR "EngineSim Runtime and C++ Config SDKs must use the same installation prefix: ${name}")
+            endif ()
+        else ()
+            add_library(${target} STATIC IMPORTED)
+            set_target_properties(${target} PROPERTIES
+                IMPORTED_LOCATION "${_engine_sim_archive_${name}}"
+                IMPORTED_LINK_INTERFACE_LANGUAGES CXX)
+        endif ()
         string(CONCAT _engine_sim_link "$" "<LINK_ONLY:${target}>")
         list(APPEND _engine_sim_links "${_engine_sim_link}")
     endforeach ()

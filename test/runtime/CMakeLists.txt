@@ -193,6 +193,13 @@ if (TARGET engine-sim-runtime)
         add_test(NAME RelocatedRuntimeShared COMMAND ${sdk_relocation} --variant shared)
         set_tests_properties(RelocatedRuntimeStatic RelocatedRuntimeShared PROPERTIES
             RUN_SERIAL TRUE LABELS r25-sdk-relocation TIMEOUT 1500)
+        set(config_consumer "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/programmatic_gate.py"
+            --source "${PROJECT_SOURCE_DIR}" --deps-root "${ENGINE_SIM_PRESET_ROOT}"
+            --cmake "${CMAKE_COMMAND}" --compiler "${CMAKE_CXX_COMPILER}")
+        add_test(NAME InstalledConfigConsumer COMMAND ${config_consumer} model)
+        add_test(NAME InstalledProgrammaticEngine COMMAND ${config_consumer} runtime)
+        set_tests_properties(InstalledConfigConsumer InstalledProgrammaticEngine PROPERTIES
+            RUN_SERIAL TRUE LABELS r25-config-sdk TIMEOUT 600)
     endif ()
 
     foreach(variant IN ITEMS static shared)

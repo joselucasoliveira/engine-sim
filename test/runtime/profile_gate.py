@@ -196,7 +196,8 @@ class Audit:
         assert not (work / "unexpected.json").exists()
         observer = self.module("physics", "physics", (*SOLVER_FILES, "modules/config", "modules/physics",
                                "modules/assembly/src", *sources(physics.SOURCES), *headers(physics.HEADERS),
-                               "test/runtime/physics_consumer.cpp", "test/runtime/physics_scenario.hpp"),
+                               "test/runtime/physics_consumer.cpp", "test/runtime/physics_scenario.hpp",
+                               "examples/runtime/programmatic/model.hpp"),
                                "EngineSim::Physics", "test/runtime/physics_consumer.cpp", (SOLVER,))
         self.run("physics-consumer", [observer, self.root / "physics/trace.le64"], cwd=observer.parent)
         dsp = self.module("synthesis", "synthesis", ("modules/synthesis", *sources(synthesis.SOURCES),

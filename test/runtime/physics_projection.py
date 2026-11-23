@@ -30,6 +30,7 @@ def verify_physics(args, work, trace, deny):
         "modules/assembly/src/definition.cpp", "modules/assembly/src/definition.hpp",
         "dependencies/submodules/CMakeLists.txt", "cmake/LockedSources.cmake", "cmake/SolverCompatibility.h",
         "cmake/dependencies.lock.json", "test/runtime/physics_consumer.cpp", "test/runtime/physics_scenario.hpp",
+        "examples/runtime/programmatic/model.hpp",
         *(f"src/{name}.cpp" for name in SOURCES), *(f"include/{name}.h" for name in HEADERS),
     )
     for name in files:
