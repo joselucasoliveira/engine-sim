@@ -44,3 +44,18 @@ endif ()
 add_test(NAME ConfigReferenceRules COMMAND engine-sim-config-graph-test references)
 add_test(NAME ConfigTopologyRules COMMAND engine-sim-config-graph-test topology)
 set_tests_properties(ConfigReferenceRules ConfigTopologyRules PROPERTIES LABELS r25-config TIMEOUT 60)
+
+if (TARGET engine-sim-json)
+    add_executable(engine-sim-json-lexical-test json_lexical.cpp)
+    target_link_libraries(engine-sim-json-lexical-test PRIVATE EngineSim::Json EngineSim::Config)
+    target_include_directories(engine-sim-json-lexical-test PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../modules/json/src")
+    set_target_properties(engine-sim-json-lexical-test PROPERTIES
+        CXX_STANDARD 17 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO)
+    if (COMMAND engine_sim_diagnose)
+        engine_sim_diagnose(engine-sim-json-lexical-test TRUE)
+    endif ()
+    add_test(NAME ConfigJsonLexical COMMAND engine-sim-json-lexical-test lexical)
+    add_test(NAME ConfigJsonLimits COMMAND engine-sim-json-lexical-test limits)
+    set_tests_properties(ConfigJsonLexical ConfigJsonLimits PROPERTIES LABELS r25-config TIMEOUT 60)
+endif ()

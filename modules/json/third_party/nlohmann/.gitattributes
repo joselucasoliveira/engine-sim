@@ -1,0 +1,3 @@
+# Match the lock on every checkout, including the license's first-line space.
+LICENSE.MIT -text whitespace=-blank-at-eol
+json.hpp -text

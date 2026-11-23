@@ -13,6 +13,7 @@ Ange Yaghi created the original Engine Simulator. This fork retains the original
 | stb_truetype 1.24 | MIT alternative, copyright 2017 Sean Barrett. The bundled copy retains the original Delta Studio and Open Engine Simulator rasterizer code, with one indentation correction. | [MIT notice](assets/licenses/stb_truetype-MIT.txt) · Full alternatives remain in the header |
 | Silkscreen regular | Jason Kottke's original font-specific license. The font and its notice are copied without modification. | [Original license](<assets/fonts/Silkscreen/Kottke Silkscreen License.txt>) |
 | Discord RPC | MIT, copyright 2017 Discord, Inc. The inherited wrapper credits SanGawku. | [RPC notice](dependencies/discord/LICENSE) |
+| nlohmann/json 3.12.0 | MIT, copyright Niels Lohmann and contributors. The private single header retains the embedded attribution. | [Pinned source](https://github.com/nlohmann/json/tree/55f93686c01528224f448c19128836e7df245f72) · [MIT license](modules/json/third_party/nlohmann/LICENSE.MIT) |
 | GoogleTest | BSD-style license. This is a test framework and is excluded from runtime installation. | [GoogleTest](https://github.com/google/googletest) · The locked source archive includes `LICENSE` |
 
 The runtime asset allowlist records the origin, hash, accompanying license and distribution status of each selected file. The installation includes notices for the material it uses. Optional video and Discord integrations are excluded from the default runtime installation.
