@@ -354,3 +354,11 @@ if (TARGET engine-sim-mechanical-observation-test AND TARGET engine-sim-runtime-
         PROPERTIES LABELS r25-corpus TIMEOUT 90
         ENVIRONMENT "ENGINE_SIM_TEST_SOURCE=${PROJECT_SOURCE_DIR};ENGINE_SIM_TEST_MECHANICAL_FIXTURE=${mechanical_fixture}")
 endif ()
+
+# GNU ELF observers cover diagnostic-only linked symbols on the LP64 ABI.
+if (TARGET engine-sim-runtime AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SIZEOF_VOID_P EQUAL 8
+        AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|aarch64)$"
+        AND CMAKE_CXX_COMPILER_ID MATCHES "^(GNU|Clang)$" AND ENGINE_SIM_SANITIZER STREQUAL "none")
+    find_package(Python3 3.9 REQUIRED COMPONENTS Interpreter)
+    add_subdirectory(realtime-probe)
+endif ()

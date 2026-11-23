@@ -347,3 +347,46 @@ export ENGINE_SIM_PROFILE_CACHE=/absolute/cache
 ctest --test-dir "$ES_OUT/runtime-test" -C Release --no-tests=error \
   -R '^(DocumentedQuickstarts|MigrationGuideExamples)$'
 ```
+
+## Cold processing and forbidden-operation probes
+
+Run the Linux ELF test-only probes with the unsanitized, optimized
+runtime-test preset and its default static v2 runtime. The C11 and C++17
+compiler controls try the configured compilers and available Clang on this
+host. They report effect checking and RealtimeSanitizer support only when the
+safe and deliberately allocating cases behave as expected.
+
+~~~sh
+cmake --preset runtime-test
+cmake --build --preset runtime-test --config Release
+ctest --preset runtime-test -R '^(R3ProbeCoverage|R3RawFirstUseObservation)$'
+~~~
+
+Set ES_FLEET_EVIDENCE to an existing fresh external evidence directory to
+retain per-child commands, output, binary hashes, dependency maps and
+disassembly. R3ProbeCoverage starts a new process for each named control
+and arms the fixed thread-local record on its processing thread. The control
+runs through the same C entry for copy, zero and each adverse operation. The
+static link wraps references in linked objects. The shared artifacts wrap
+references in the callee and a second DSO, with caller attribution to the DSO
+that issues the call. Each positive control requires its own operation and
+caller record. The release-only controls free memory allocated before the
+guard was armed. Exception controls check both the observed throw entry
+and cleanup during unwinding.
+
+The probe measures linked calls named in operations.inc and snprintf.
+It cannot intercept internal or hidden calls in prelinked libstdc++ or libc,
+including their own heap and unwinder internals. The C++ operator and C
+storage controls identify call sites separately. Calls on other threads,
+inlined operations, custom allocators, and other native linkages need
+independent review and evidence. The first-use observer neither changes
+shipping library flags nor measures release timing.
+
+R3RawFirstUseObservation loads the MIT fixture on a preparation thread and
+renders on a new serial owner at 44.1 kHz and 48 kHz in FREE and DRIVEN.
+It compares the first 256 frames, the next 256, first use after reset and
+replacement, and a separate one-frame partition through the first tick.
+A private Kohler CH750 diagnostic checks the raw v2 fault prefix and its
+last good snapshot. The observations retain observed operation symbols,
+first call addresses and counts per interval. The plain numerical control
+uses the same v2 library without the link wrappers.
