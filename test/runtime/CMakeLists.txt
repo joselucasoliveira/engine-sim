@@ -186,6 +186,13 @@ if (TARGET engine-sim-runtime)
         set_tests_properties(ProfileDependencyIsolation CombinedProfileClosure PROPERTIES RUN_SERIAL TRUE TIMEOUT 1200)
         set_tests_properties(CombinedProfileClosure PROPERTIES
             DEPENDS ProfileDependencyIsolation LABELS "r25-profile-combined" TIMEOUT 1800)
+        set(sdk_relocation "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/relocation_gate.py"
+            --source "${PROJECT_SOURCE_DIR}" --deps-root "${ENGINE_SIM_PRESET_ROOT}"
+            --compiler "${CMAKE_CXX_COMPILER}" --cmake "${CMAKE_COMMAND}" --ctest "${CMAKE_CTEST_COMMAND}")
+        add_test(NAME RelocatedRuntimeStatic COMMAND ${sdk_relocation} --variant static)
+        add_test(NAME RelocatedRuntimeShared COMMAND ${sdk_relocation} --variant shared)
+        set_tests_properties(RelocatedRuntimeStatic RelocatedRuntimeShared PROPERTIES
+            RUN_SERIAL TRUE LABELS r25-sdk-relocation TIMEOUT 1500)
     endif ()
 
     foreach(variant IN ITEMS static shared)

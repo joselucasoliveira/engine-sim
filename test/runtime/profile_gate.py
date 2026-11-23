@@ -24,7 +24,8 @@ SOLVER_FILES = ("dependencies/CMakeLists.txt", "dependencies/submodules/CMakeLis
                 "cmake/LockedSources.cmake", "cmake/SolverCompatibility.h")
 JSON_FILES = ("modules/json", "schemas/engine-config-v1.schema.json", "cmake/compile_config_schema.py")
 SDK_FILES = ("LICENSE", "THIRD_PARTY_NOTICES.md", "cmake/RuntimeSdk.cmake", "cmake/runtime.elf.exports",
-             "cmake/EngineSimRuntimeConfig.cmake.in", "modules/assembly", "include/engine_sim/runtime.h",
+             "cmake/EngineSimRuntimeConfig.cmake.in", "cmake/InstallSdkPreflight.cmake.in", "cmake/runtime-sdk-notices.md",
+             "modules/assembly", "include/engine_sim/runtime.h",
              *(f"src/runtime/{path}" for path in (
                  "api.cpp", "api_text.hpp", "json_runtime.cpp", "json_runtime.hpp", "json_session.hpp",
                  "runtime.cpp", "runtime.hpp", "concrete_validation.hpp", "shaft_drive.hpp")))
@@ -38,6 +39,8 @@ OPTIONAL_INPUT = re.compile(
 OPTIONAL_SYMBOL = re.compile(r"piranha::|boost::filesystem|\bSDL_[A-Za-z]|\bDiscord_[A-Za-z]|"
                              r"\bav(codec|format)_|\bydsWindows|CompiledScene::|processArguments\(")
 BASE_ENV = ("CC", "CXX", "PATH", "BISON_PKGDATADIR", "M4", "LC_ALL", "TZ")
+SEARCH_ENV = ("CPATH", "C_INCLUDE_PATH", "CPLUS_INCLUDE_PATH", "LIBRARY_PATH", "CMAKE_PREFIX_PATH",
+              "CMAKE_LIBRARY_PATH", "CMAKE_INCLUDE_PATH", "CMAKE_MODULE_PATH", "PKG_CONFIG_PATH", "PKG_CONFIG_LIBDIR")
 NO_NETWORK = re.compile(r"(socket\(AF_INET6?[,)]|sa_family=AF_INET6?[,}])")
 PARSER_PROCESS = re.compile(r'execve\("[^"\n]*/(?:flex|bison|b2)(?:[".-])')
 
@@ -63,6 +66,7 @@ class Audit:
         self.args = args
         self.root = root
         self.commands = []
+        self.env = {key: value for key, value in os.environ.items() if key not in SEARCH_ENV}
 
     def run(self, label, argv, *, cwd=None, env=None, expected=None, trace=False, minimal=False):
         argv = list(map(str, argv))
@@ -73,7 +77,8 @@ class Audit:
         system_calls = self.root / (Path(log).stem + ".strace")
         if tracer:
             argv = [tracer, "-f", "-q", "-s", "4096", "-e", "trace=file,process,network", "-o", str(system_calls), *argv]
-        result = subprocess.run(argv, cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        result = subprocess.run(argv, cwd=cwd, env=env if env is not None else self.env,
+                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         (self.root / log).write_bytes(result.stdout)
         self.commands.append({"argv": argv, "cwd": str(cwd), "exit": result.returncode, "log": log})
         write_json(self.root / "commands.json", self.commands)
@@ -136,7 +141,7 @@ class Audit:
         cc = f"-DCMAKE_CXX_COMPILER={self.args.compiler}"
         # Always use the same generator, compiler, output policy and locale for
         # compared producers. No package discovery or fetch can use network.
-        env = dict(os.environ, ES_OUT=str(out), LC_ALL="C", TZ="UTC")
+        env = dict(self.env, ES_OUT=str(out), LC_ALL="C", TZ="UTC")
         traces = [f"--trace-source={source / path}" for path in
                   ("CMakeLists.txt", "cmake/LockedSources.cmake", "cmake/BoostFilesystem.cmake",
                    "cmake/Piranha.cmake", "cmake/RuntimeSdk.cmake")]
@@ -145,6 +150,7 @@ class Audit:
                                         ("Boost", "FLEX", "BISON", "SDL2", "SDL2_image", "SDL3"))
         self.run(f"configure-{preset}", [self.args.cmake, "--preset", preset, "-G", "Ninja",
                 cc, "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON", "-DFETCHCONTENT_FULLY_DISCONNECTED=ON",
+                "-DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF", "-DCMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY=OFF",
                 "--trace-expand", "--trace-format=json-v1", f"--trace-redirect={build}/configure-trace.jsonl",
                 *traces, *off, *options], cwd=source, env=env, trace=True, minimal=not optional)
         return build
@@ -260,7 +266,7 @@ class Audit:
         proof = read_json(consumer / "inside-result.json")
         assert proof["status"] == "pass", proof
         if os.environ.get("ENGINE_SIM_STRACE"):
-            for name in ("runtime-c-consumer", "runtime-cxx-consumer"):
+            for name in ("runtime-c-consumer", "runtime-cxx-consumer", "runtime-matrix-c", "runtime-matrix-cxx"):
                 trace = (consumer / f"{name}.strace").read_text(errors="replace")
                 assert trace.count("execve(") == 1 and not NO_NETWORK.search(trace)
                 assert "main.json" in trace and ".mr\"" not in trace and not OPTIONAL_INPUT.search(trace)

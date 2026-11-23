@@ -82,6 +82,11 @@ def render(library,entry,root,rate,mode,seed,frames,events,*,use_bytes=False):
         telemetry=Telemetry();telemetry.size=C.sizeof(telemetry);telemetry.abi=ABI;check(lib.es_get_telemetry(handle,C.byref(telemetry),C.byref(error)))
         assert telemetry.frames==frames and telemetry.native_frames==(frames*44100+rate-1)//rate and telemetry.ticks==frames*telemetry.simulation_hz//rate
         result={name:getattr(telemetry,name) for name,_ in Telemetry._fields_}
+        invalid=(C.c_uint8*1)(ord('{'))
+        assert lib.es_load_json_bytes(handle,invalid,len(invalid),asset_root,C.byref(detail),C.byref(error))==12
+        assert detail.stage==1 and detail.code==b'CFG_SYNTAX'
+        check(lib.es_get_telemetry(handle,C.byref(telemetry),C.byref(error)))
+        assert {name:getattr(telemetry,name) for name,_ in Telemetry._fields_}==result
         check(lib.es_reset_detailed(handle,C.byref(detail),C.byref(error)))
         assert detail.stage==0 and detail.line==2**64-1
         check(lib.es_unload(handle,C.byref(error)));check(lib.es_unload(handle,C.byref(error)))

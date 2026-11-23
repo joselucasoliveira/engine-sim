@@ -1,0 +1,23 @@
+# Verify all SDK install inputs before the first file is copied.
+function(engine_sim_verify_sdk_input path expected)
+    if (NOT EXISTS "${path}" OR IS_DIRECTORY "${path}" OR IS_SYMLINK "${path}")
+        message(FATAL_ERROR "Missing or unsupported SDK install input: ${path}")
+    endif ()
+    file(SHA256 "${path}" actual)
+    if (NOT actual STREQUAL expected)
+        message(FATAL_ERROR "SDK input changed since configure: ${path}")
+    endif ()
+endfunction()
+
+@engine_sim_sdk_checks@
+# The prefix byte preserves a leading newline in CMake's bracket argument.
+set(engine_sim_config_bytes [===[x@engine_sim_sdk_config@]===])
+string(SUBSTRING "${engine_sim_config_bytes}" 1 -1 engine_sim_config_bytes)
+string(SHA256 engine_sim_config_digest "${engine_sim_config_bytes}")
+engine_sim_verify_sdk_input("${CMAKE_CURRENT_LIST_DIR}/EngineSimRuntimeConfig.cmake" "${engine_sim_config_digest}")
+set(engine_sim_sdk_build_inputs [===[@engine_sim_sdk_built@]===])
+foreach(path IN LISTS engine_sim_sdk_build_inputs)
+    if (NOT EXISTS "${path}" OR IS_DIRECTORY "${path}")
+        message(FATAL_ERROR "Missing built SDK artifact: ${path}")
+    endif ()
+endforeach ()

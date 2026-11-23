@@ -13,6 +13,7 @@ static int run_case(char **paths, uint32_t rate, uint32_t mode) {
     es_error error;
     es_controls control;
     es_telemetry telemetry;
+    es_diagnostic diagnostic;
     es_runtime *handle = NULL;
     float pcm[257];
     uint32_t position = 0;
@@ -22,6 +23,7 @@ static int run_case(char **paths, uint32_t rate, uint32_t mode) {
     memset(&error, 0, sizeof error);
     memset(&control, 0, sizeof control);
     memset(&telemetry, 0, sizeof telemetry);
+    memset(&diagnostic, 0, sizeof diagnostic);
     if (es_api_version() != ES_ABI_V2 || (es_capabilities() & UINT32_C(127)) != UINT32_C(127)) goto done;
     if (es_config_init(ES_ABI_V2, (uint32_t)sizeof config, &config, &error) != ES_OK) goto done;
     config.output_hz = rate;
@@ -65,6 +67,17 @@ static int run_case(char **paths, uint32_t rate, uint32_t mode) {
     printf("{\"rate\":%u,\"mode\":%u,\"frames\":%" PRIu64 ",\"ticks\":%" PRIu64 ",\"native_frames\":%" PRIu64
         ",\"pcm_fnv1a\":\"%016" PRIx64 "\",\"rpm\":%.17g,\"energy\":%.17g}\n",
         rate, mode, telemetry.frames, telemetry.ticks, telemetry.native_frames, fingerprint, telemetry.measured_rpm, energy);
+    {
+        const uint8_t invalid[] = {'{'};
+        const es_telemetry before = telemetry;
+        diagnostic.size = (uint32_t)sizeof diagnostic;
+        diagnostic.abi = ES_ABI_V2;
+        if (es_load_json_bytes(handle, invalid, sizeof invalid, paths[2], &diagnostic, &error) != ES_CONFIG ||
+            diagnostic.stage != ES_DIAG_PARSE || strcmp(diagnostic.code, "CFG_SYNTAX") != 0 ||
+            es_get_telemetry(handle, &telemetry, &error) != ES_OK || telemetry.state != before.state ||
+            telemetry.frames != before.frames || telemetry.ticks != before.ticks ||
+            telemetry.native_frames != before.native_frames || telemetry.crank_rad_s != before.crank_rad_s) goto done;
+    }
     if (es_reset(handle, &error) != ES_OK || es_get_telemetry(handle, &telemetry, &error) != ES_OK || telemetry.frames != 0 ||
         telemetry.ticks != 0 || telemetry.native_frames != 0 || es_unload(handle, &error) != ES_OK || es_unload(handle, &error) != ES_OK) goto done;
     result = 0;

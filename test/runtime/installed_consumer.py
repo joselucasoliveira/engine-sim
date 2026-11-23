@@ -49,7 +49,8 @@ def inside(prefix, fixture, work, variant, report):
     cmake = shutil.which('cmake')
     build = work/'consumer-build'
     command([cmake,'-S',work/'consumer-source','-B',build,'-DCMAKE_BUILD_TYPE=Release',f'-DCMAKE_PREFIX_PATH={prefix}',
-             '-DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF','-DCMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY=OFF','-DENGINE_SIM_CONSUMER_INSPECT=ON'],work,report)
+             '-DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF','-DCMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY=OFF',
+             '-DCMAKE_EXPORT_COMPILE_COMMANDS=ON','-DENGINE_SIM_CONSUMER_INSPECT=ON'],work,report)
     command([cmake,'--build',build,'--config','Release','--parallel','2','--verbose'],work,report)
     env = os.environ.copy()
     properties = (build/'imported-properties.txt').read_text(encoding='utf-8')
@@ -73,20 +74,26 @@ def inside(prefix, fixture, work, variant, report):
     if platform.system() == 'Windows':
         env['PATH'] = str(location.parent)+os.pathsep+env.get('PATH','')
     extension = '.exe' if platform.system()=='Windows' else ''
-    for name in ('runtime-c-consumer','runtime-cxx-consumer'):
-        invocation = [executable(build,name),fixture/'main.json',fixture]
+    unrelated = work / 'unrelated cwd'
+    unrelated.mkdir()
+
+    def runtime_command(directory, name):
+        invocation = [executable(directory,name),fixture/'main.json',fixture]
         tracer = os.environ.get('ENGINE_SIM_STRACE')
         if tracer and platform.system() == 'Linux':
             trace = work / f'{name}.strace'
             invocation = [tracer,'-f','-q','-s','4096','-e','trace=file,process,network','-o',trace,*invocation]
-        command(invocation,work,report,env)
+        return command(invocation,unrelated,report,env)
+
+    for name in ('runtime-c-consumer','runtime-cxx-consumer'):
+        runtime_command(build, name)
     matrix_build = work / 'matrix-build'
     command([cmake,'-S',work/'matrix-source','-B',matrix_build,'-DCMAKE_BUILD_TYPE=Release',f'-DCMAKE_PREFIX_PATH={prefix}',
              '-DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF','-DCMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY=OFF'],work,report)
     command([cmake,'--build',matrix_build,'--config','Release','--parallel','2','--verbose'],work,report)
     matrices = []
     for name in ('runtime-matrix-c','runtime-matrix-cxx'):
-        output = command([executable(matrix_build,name),fixture/'main.json',fixture],work,report,env)
+        output = runtime_command(matrix_build, name)
         rows = [json.loads(line) for line in output.splitlines()]
         assert {(row['rate'],row['mode']) for row in rows} == {(rate,mode) for rate in (44100,48000) for mode in (0,1)}
         assert len(rows) == 4
