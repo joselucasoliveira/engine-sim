@@ -3,6 +3,8 @@
 
 #include <engine_sim/config-v1.hpp>
 
+#include <utility>
+
 namespace engine_sim::config_v1::detail {
 
 // Defaults and binary64 representation are checked here. The graph validator
@@ -16,6 +18,7 @@ public:
     ~DefaultedValues() = default;
 
     const Document &values() const noexcept { return m_values; }
+    Document take() && noexcept { return std::move(m_values); }
 
 private:
     explicit DefaultedValues(Document input);
