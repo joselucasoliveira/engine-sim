@@ -147,8 +147,8 @@ bool Simulator::simulateStep() {
         return false;
     }
 
-    advanceTick(true);
-    m_synthesizer.writeInput(exhaustEndpoint());
+    const auto endpoint = advanceTick(true);
+    m_synthesizer.writeInput(endpoint.data);
     ++m_currentIteration;
     return true;
 }
@@ -164,7 +164,7 @@ void Simulator::validateBodies() const {
     }
 }
 
-void Simulator::advanceTick(bool legacyFrame) {
+engine_sim::AcousticExcitation Simulator::advanceTick(bool legacyFrame) {
     const double timestep = getTimestep();
     validateBodies();
     m_system->process(timestep, 1);
@@ -215,7 +215,7 @@ void Simulator::advanceTick(bool legacyFrame) {
     }
 
     simulateStep_();
-    produceExhaustEndpoint();
+    const auto endpoint = produceExhaustEndpoint();
     for (int i = 0; i < m_engine->getIntakeCount(); ++i) {
         auto &flow = m_engine->getIntake(i)->m_flowRate;
         if (legacyFrame) {
@@ -224,6 +224,7 @@ void Simulator::advanceTick(bool legacyFrame) {
         }
         else flow /= timestep;
     }
+    return endpoint;
 }
 
 double Simulator::getTotalExhaustFlow() const {

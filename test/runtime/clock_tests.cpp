@@ -44,7 +44,8 @@ struct Source : ClockSource {
         if (record) { controls.emplace_back(starts, applied); events.emplace_back('L', starts); }
         ++starts;
     }
-    bool tick(double *output) override {
+    bool tick(double *output, std::size_t capacity) override {
+        if (output == nullptr || capacity == 0) return false;
         ++ticks;
         if (record) events.emplace_back('T', ticks);
         output[0] = ticks == nonfiniteTick ? std::numeric_limits<double>::quiet_NaN() : endpoint(ticks);
@@ -143,7 +144,11 @@ TEST(Clock, DesktopRetimingPreservesPartialTicksAndPartitionedTimeline) {
         std::uint64_t ticks = 0;
         std::vector<double> inputs;
         void latch() override {}
-        bool tick(double *out) override { out[0] = static_cast<double>(++ticks % 257); return true; }
+        bool tick(double *out, std::size_t capacity) override {
+            if (out == nullptr || capacity == 0) return false;
+            out[0] = static_cast<double>(++ticks % 257);
+            return true;
+        }
         bool native(const double *in, std::int16_t &out) override {
             inputs.push_back(in[0]); out = static_cast<std::int16_t>(std::lround(in[0])); return true;
         }

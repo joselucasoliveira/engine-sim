@@ -26,10 +26,13 @@ void PullEngine::latch() {
     if (m_controls) m_controls();
 }
 
-bool PullEngine::tick(double *endpoint) {
+bool PullEngine::tick(double *endpoint, std::size_t capacity) {
+    const auto count = static_cast<std::size_t>(m_simulator.getEngine()->getExhaustSystemCount());
+    if (endpoint == nullptr || capacity < count) return false;
     m_simulator.setSimulationFrequency(static_cast<int>(m_clock.tickFrequency()));
     if (m_beforeTick) m_beforeTick();
-    m_simulator.advanceTick(false);
+    const auto excitation = m_simulator.advanceTick(false);
+    if (excitation.data == nullptr || excitation.count != count) return false;
     if (m_presenting) {
         ++m_simulator.m_steps; ++m_simulator.m_currentIteration;
         const auto dt = m_simulator.getTimestep();
@@ -38,7 +41,7 @@ bool PullEngine::tick(double *endpoint) {
             m_flowTotals[i] += m_simulator.getEngine()->getIntake(static_cast<int>(i))->m_flowRate * dt;
         }
     }
-    std::copy_n(m_simulator.exhaustEndpoint(), m_simulator.getEngine()->getExhaustSystemCount(), endpoint);
+    std::copy_n(excitation.data, excitation.count, endpoint);
     if (m_observer) m_observer(m_simulator);
     if (m_afterTick) m_afterTick();
     return true;

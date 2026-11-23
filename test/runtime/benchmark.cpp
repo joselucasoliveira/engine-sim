@@ -164,9 +164,13 @@ public:
         if (!m_stages.enabled) { m_source.latch(); return; }
         const auto start = Clock::now(); m_source.latch(); m_stages.latch += elapsed(start);
     }
-    bool tick(double *endpoint) override {
-        if (!m_stages.enabled) return m_source.tick(endpoint);
-        const auto start = Clock::now(); const bool result = m_source.tick(endpoint); m_stages.physics += elapsed(start); ++m_stages.ticks; return result;
+    bool tick(double *endpoint, std::size_t capacity) override {
+        if (!m_stages.enabled) return m_source.tick(endpoint, capacity);
+        const auto start = Clock::now();
+        const bool result = m_source.tick(endpoint, capacity);
+        m_stages.physics += elapsed(start);
+        ++m_stages.ticks;
+        return result;
     }
     bool native(const double *input, std::int16_t &sample) override {
         if (!m_stages.enabled) return m_source.native(input, sample);

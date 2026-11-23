@@ -37,7 +37,13 @@ struct Source:ClockSource {
     std::vector<std::pair<char,std::uint64_t>> events;
     static double endpoint(std::uint64_t tick) {return static_cast<double>(tick%257);}
     void latch() override {applied=requested;if(record){controls.emplace_back(starts,applied);events.emplace_back('L',starts);}++starts;}
-    bool tick(double *out) override {++ticks;out[0]=endpoint(ticks);if(record)events.emplace_back('T',ticks);return ticks!=failTick;}
+    bool tick(double *out, std::size_t capacity) override {
+        if (out == nullptr || capacity == 0) return false;
+        ++ticks;
+        out[0] = endpoint(ticks);
+        if (record) events.emplace_back('T',ticks);
+        return ticks != failTick;
+    }
     bool native(const double *in,std::int16_t &out) override {
         const auto n=samples++;if(record){inputs.push_back(in[0]);events.emplace_back('N',n);}out=signal(n);return n!=failSample;
     }

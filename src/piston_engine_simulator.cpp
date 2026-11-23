@@ -241,7 +241,7 @@ void PistonEngineSimulator::placeAndInitialize() {
 
     m_engine->getIgnitionModule()->reset();
 
-    m_exhaustFlowStagingBuffer = new double[m_engine->getExhaustSystemCount()];
+    m_exhaustFlowStagingBuffer = new double[m_engine->getExhaustSystemCount()]{};
 }
 
 void PistonEngineSimulator::placeCylinder(int i) {
@@ -388,7 +388,7 @@ void PistonEngineSimulator::destroy() {
     m_delayFilters = nullptr;
 }
 
-void PistonEngineSimulator::produceExhaustEndpoint() {
+engine_sim::AcousticExcitation PistonEngineSimulator::produceExhaustEndpoint() {
     const int exhaustSystemCount = m_engine->getExhaustSystemCount();
     for (int i = 0; i < exhaustSystemCount; ++i) {
         m_exhaustFlowStagingBuffer[i] = 0;
@@ -424,5 +424,5 @@ void PistonEngineSimulator::produceExhaustEndpoint() {
             * (exhaustSystem->getAudioVolume() * delayedExhaustPulse / cylinderCount)
             * (1 / (exhaustLength * exhaustLength));
     }
-
+    return {m_exhaustFlowStagingBuffer, static_cast<std::size_t>(exhaustSystemCount)};
 }

@@ -1,6 +1,7 @@
 #ifndef ATG_ENGINE_SIM_SIMULATOR_H
 #define ATG_ENGINE_SIM_SIMULATOR_H
 
+#include "acoustic_excitation.h"
 #include "engine.h"
 #include "transmission.h"
 #include "vehicle.h"
@@ -91,15 +92,14 @@ public:
 protected:
     void initializeSynthesizer();
     virtual void simulateStep_();
-    virtual void produceExhaustEndpoint() = 0;
-    virtual const double *exhaustEndpoint() const = 0;
+    virtual engine_sim::AcousticExcitation produceExhaustEndpoint() = 0;
 
     atg_scs::RigidBodySystem *m_system;
 
 private:
     friend struct engine_sim_test::LegacyAccess;
     friend class engine_sim::PullEngine;
-    void advanceTick(bool legacyFrame);
+    engine_sim::AcousticExcitation advanceTick(bool legacyFrame);
     void validateBodies() const;
     bool beginFrame();
     void resetFrameFlows();

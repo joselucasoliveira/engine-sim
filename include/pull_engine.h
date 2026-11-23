@@ -29,7 +29,7 @@ public:
 private:
     friend struct ClockTestAccess;
     void latch() override;
-    bool tick(double *endpoint) override;
+    bool tick(double *endpoint, std::size_t capacity) override;
     bool native(const double *input, std::int16_t &sample) override;
     Simulator &m_simulator;
     ControlLatch m_controls;

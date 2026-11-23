@@ -223,6 +223,22 @@ if (TARGET engine-sim-runtime AND TARGET engine-sim-assembly)
     target_compile_features(engine-sim-json-runtime-test PRIVATE cxx_std_17)
     engine_sim_diagnose(engine-sim-json-runtime-test TRUE)
 
+    set(acoustic_assets "${CMAKE_CURRENT_BINARY_DIR}/acoustic-fixture")
+    # Supply the MIT fixture's synthetic impulse at the model's resource path.
+    configure_file("${PROJECT_SOURCE_DIR}/examples/runtime/fixture/impulse.wav"
+        "${acoustic_assets}/es/sound-library/new/mild_exhaust.wav" COPYONLY)
+    set(acoustic_model "${PROJECT_SOURCE_DIR}/assets/engines/atg-video-1/05_honda_vtec.json")
+    add_executable(engine-sim-acoustic-endpoint-test acoustic_endpoint_tests.cpp)
+    target_link_libraries(engine-sim-acoustic-endpoint-test PRIVATE
+        engine-sim-runtime-json-private engine-sim-script-interpreter gtest_main)
+    engine_sim_diagnose(engine-sim-acoustic-endpoint-test TRUE)
+    foreach(check IN ITEMS AcousticEndpointParity TickBoundaryOrdering)
+        add_test(NAME "${check}" COMMAND engine-sim-acoustic-endpoint-test
+            "--gtest_filter=AcousticEndpointTest.${check}")
+        set_tests_properties("${check}" PROPERTIES LABELS r25-acoustic TIMEOUT 180
+            ENVIRONMENT "ENGINE_SIM_TEST_ACOUSTIC_MODEL=${acoustic_model};ENGINE_SIM_TEST_ACOUSTIC_ASSETS=${acoustic_assets}")
+    endforeach ()
+
     set(json_fixture "${PROJECT_SOURCE_DIR}/test/config/fixtures/schema-engine.json")
     set(impulse_fixture "${PROJECT_SOURCE_DIR}/examples/runtime/fixture/impulse.wav")
     add_test(NAME JsonTransactionalRuntime

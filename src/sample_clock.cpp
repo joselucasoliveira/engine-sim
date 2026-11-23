@@ -160,7 +160,7 @@ void SampleClock::startTick() {
 }
 
 void SampleClock::finishTick() {
-    if (!m_source.tick(m_next.data())) throw SimulationFault("physics made no progress");
+    if (!m_source.tick(m_next.data(), m_next.size())) throw SimulationFault("physics made no progress");
     for (double value : m_next) {
         if (!std::isfinite(value)) throw SimulationFault("nonfinite exhaust endpoint");
     }

@@ -51,8 +51,7 @@ class PistonEngineSimulator : public Simulator {
         void placeCylinder(int i);
         
     protected:
-        void produceExhaustEndpoint() override;
-        const double *exhaustEndpoint() const override { return m_exhaustFlowStagingBuffer; }
+        engine_sim::AcousticExcitation produceExhaustEndpoint() override;
 
     protected:
         DelayFilter *m_delayFilters;

@@ -18,7 +18,9 @@ class ClockSource {
 public:
     virtual ~ClockSource() = default;
     virtual void latch() = 0;
-    virtual bool tick(double *endpoint) = 0;
+    // Reject a null or undersized destination before stepping. Any caller
+    // storage beyond the configured channel count is left untouched.
+    virtual bool tick(double *endpoint, std::size_t capacity) = 0;
     virtual bool native(const double *input, std::int16_t &sample) = 0;
 };
 
