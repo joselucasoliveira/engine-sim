@@ -1,0 +1,425 @@
+{
+  "format_version": 1,
+  "selected_engine": "motor",
+  "engine": {
+    "id": "motor",
+    "name": "Schema example single",
+    "redline": 628.32,
+    "starter_speed": 62.83,
+    "starter_torque": 40.0,
+    "dyno_min_speed": 104.72,
+    "dyno_max_speed": 628.32,
+    "dyno_hold_step": 10.472,
+    "fuel": "gas",
+    "throttle": "pedal",
+    "simulation_frequency": 10000.0,
+    "hf_gain": 0.01,
+    "jitter": 0,
+    "noise": 0,
+    "crankshafts": [
+      "shaft"
+    ],
+    "banks": [
+      "block"
+    ],
+    "ignition": "ign",
+    "mean_piston_speed_to_turbulence": "mean"
+  },
+  "components": {
+    "functions": [
+      {
+        "id": "lift",
+        "filter_radius": 0.4,
+        "input_scale": 1,
+        "output_scale": 1,
+        "samples": [
+          {
+            "x": -1.75,
+            "y": 0
+          },
+          {
+            "x": -1,
+            "y": 0.002
+          },
+          {
+            "x": 0,
+            "y": 0.008
+          },
+          {
+            "x": 1,
+            "y": 0.002
+          },
+          {
+            "x": 1.75,
+            "y": 0
+          }
+        ]
+      },
+      {
+        "id": "port",
+        "filter_radius": 0.004,
+        "input_scale": 1,
+        "output_scale": 1,
+        "samples": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0.004,
+            "y": 0.001
+          },
+          {
+            "x": 0.008,
+            "y": 0.002
+          }
+        ]
+      },
+      {
+        "id": "spark",
+        "filter_radius": 100,
+        "input_scale": 1,
+        "output_scale": 1,
+        "samples": [
+          {
+            "x": 0,
+            "y": 0.2
+          },
+          {
+            "x": 630,
+            "y": 0.4
+          }
+        ]
+      },
+      {
+        "id": "flame",
+        "filter_radius": 5,
+        "input_scale": 1,
+        "output_scale": 1,
+        "samples": [
+          {
+            "x": 0,
+            "y": 3
+          },
+          {
+            "x": 5,
+            "y": 7.5
+          }
+        ]
+      },
+      {
+        "id": "mean",
+        "filter_radius": 1,
+        "input_scale": 1,
+        "output_scale": 1,
+        "samples": [
+          {
+            "x": 0.0,
+            "y": 0.0
+          },
+          {
+            "x": 1.0,
+            "y": 0.5
+          },
+          {
+            "x": 2.0,
+            "y": 1.0
+          },
+          {
+            "x": 3.0,
+            "y": 1.5
+          },
+          {
+            "x": 4.0,
+            "y": 2.0
+          },
+          {
+            "x": 5.0,
+            "y": 2.5
+          },
+          {
+            "x": 6.0,
+            "y": 3.0
+          },
+          {
+            "x": 7.0,
+            "y": 3.5
+          },
+          {
+            "x": 8.0,
+            "y": 4.0
+          },
+          {
+            "x": 9.0,
+            "y": 4.5
+          },
+          {
+            "x": 10.0,
+            "y": 5.0
+          },
+          {
+            "x": 11.0,
+            "y": 5.5
+          },
+          {
+            "x": 12.0,
+            "y": 6.0
+          },
+          {
+            "x": 13.0,
+            "y": 6.5
+          },
+          {
+            "x": 14.0,
+            "y": 7.0
+          },
+          {
+            "x": 15.0,
+            "y": 7.5
+          },
+          {
+            "x": 16.0,
+            "y": 8.0
+          },
+          {
+            "x": 17.0,
+            "y": 8.5
+          },
+          {
+            "x": 18.0,
+            "y": 9.0
+          },
+          {
+            "x": 19.0,
+            "y": 9.5
+          },
+          {
+            "x": 20.0,
+            "y": 10.0
+          },
+          {
+            "x": 21.0,
+            "y": 10.5
+          },
+          {
+            "x": 22.0,
+            "y": 11.0
+          },
+          {
+            "x": 23.0,
+            "y": 11.5
+          },
+          {
+            "x": 24.0,
+            "y": 12.0
+          },
+          {
+            "x": 25.0,
+            "y": 12.5
+          },
+          {
+            "x": 26.0,
+            "y": 13.0
+          },
+          {
+            "x": 27.0,
+            "y": 13.5
+          },
+          {
+            "x": 28.0,
+            "y": 14.0
+          },
+          {
+            "x": 29.0,
+            "y": 14.5
+          }
+        ]
+      }
+    ],
+    "journals": [
+      {
+        "id": "main-pin",
+        "angle": 0
+      }
+    ],
+    "crankshafts": [
+      {
+        "id": "shaft",
+        "throw": 0.04,
+        "flywheel_mass": 4,
+        "mass": 4,
+        "friction_torque": 1,
+        "moment_of_inertia": 0.12,
+        "position_x": 0,
+        "position_y": 0,
+        "tdc": 1.57,
+        "journals": [
+          "main-pin"
+        ]
+      }
+    ],
+    "pistons": [
+      {
+        "id": "slug",
+        "mass": 0.4,
+        "blowby": 0,
+        "compression_height": 0.03,
+        "wrist_pin_position": 0,
+        "displacement": 0
+      }
+    ],
+    "rods": [
+      {
+        "id": "rod",
+        "mass": 0.3,
+        "moment_of_inertia": 0.001,
+        "center_of_mass": 0,
+        "length": 0.15,
+        "slave_throw": 0,
+        "journals": []
+      }
+    ],
+    "fuels": [
+      {
+        "id": "gas",
+        "name": "Example fuel",
+        "molecular_mass": 0.1,
+        "energy_density": 48100000.0,
+        "density": 755,
+        "molecular_afr": 12.5,
+        "turbulence_to_flame_speed_ratio": "flame",
+        "max_burning_efficiency": 0.8,
+        "burning_efficiency_randomness": 0,
+        "low_efficiency_attenuation": 0.6,
+        "max_turbulence_effect": 2,
+        "max_dilution_effect": 10
+      }
+    ],
+    "throttles": [
+      {
+        "id": "pedal",
+        "kind": "direct",
+        "gamma": 1
+      }
+    ],
+    "banks": [
+      {
+        "id": "block",
+        "angle": 0,
+        "bore": 0.08,
+        "deck_height": 0.22,
+        "position_x": 0,
+        "position_y": 0,
+        "display_depth": 0.5,
+        "cylinders": [
+          {
+            "piston": "slug",
+            "connecting_rod": "rod",
+            "rod_journal": "main-pin",
+            "intake": "inlet",
+            "exhaust_system": "outlet",
+            "ignition_wire": "wire",
+            "primary_length": 0,
+            "sound_attenuation": 1
+          }
+        ],
+        "head": "top"
+      }
+    ],
+    "heads": [
+      {
+        "id": "top",
+        "chamber_volume": 4e-05,
+        "intake_runner_volume": 0.00015,
+        "intake_runner_cross_section_area": 0.0008,
+        "exhaust_runner_volume": 0.00015,
+        "exhaust_runner_cross_section_area": 0.0008,
+        "flip_display": false,
+        "intake_port_flow": "port",
+        "exhaust_port_flow": "port",
+        "valvetrain": "train"
+      }
+    ],
+    "valvetrains": [
+      {
+        "id": "train",
+        "kind": "standard",
+        "intake_camshaft": "ic",
+        "exhaust_camshaft": "ec"
+      }
+    ],
+    "camshafts": [
+      {
+        "id": "ic",
+        "advance": 0,
+        "base_radius": 0.012,
+        "lobe_profile": "lift",
+        "lobes": [
+          8.2
+        ]
+      },
+      {
+        "id": "ec",
+        "advance": 0,
+        "base_radius": 0.012,
+        "lobe_profile": "lift",
+        "lobes": [
+          4.36
+        ]
+      }
+    ],
+    "intakes": [
+      {
+        "id": "inlet",
+        "plenum_volume": 0.001,
+        "plenum_cross_section_area": 0.001,
+        "intake_flow_rate": 0.001,
+        "idle_flow_rate": 0,
+        "runner_flow_rate": 0.001,
+        "molecular_afr": 12.5,
+        "idle_throttle_plate_position": 0.95,
+        "runner_length": 0.1,
+        "velocity_decay": 0.25
+      }
+    ],
+    "exhausts": [
+      {
+        "id": "outlet",
+        "length": 0.6,
+        "collector_cross_section_area": 0.001,
+        "outlet_flow_rate": 0.001,
+        "primary_tube_length": 0.4,
+        "primary_flow_rate": 0.001,
+        "audio_volume": 1,
+        "velocity_decay": 1,
+        "impulse_response": "sound"
+      }
+    ],
+    "impulses": [
+      {
+        "id": "sound",
+        "path": "impulse.wav",
+        "volume": 0.01
+      }
+    ],
+    "wires": [
+      {
+        "id": "wire"
+      }
+    ],
+    "ignitions": [
+      {
+        "id": "ign",
+        "timing_curve": "spark",
+        "rev_limit": 628.32,
+        "limiter_duration": 0.5,
+        "posts": [
+          {
+            "wire": "wire",
+            "angle": 0
+          }
+        ]
+      }
+    ]
+  }
+}

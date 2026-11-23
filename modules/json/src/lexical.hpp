@@ -65,6 +65,8 @@ struct ParseError {
 
 using ParseResult = std::variant<ParsedJson, ParseError>;
 ParseResult parse(std::string_view bytes);
+void append_pointer_key(std::string &pointer, std::string_view key);
+void set_source_location(Diagnostic &problem, std::string_view input, std::size_t offset);
 
 enum class IntegerStatus { exact, fractional, out_of_range };
 
@@ -74,6 +76,8 @@ struct Integer32 {
 };
 
 Integer32 integer32(const ParsedJson &input, const Node &node) noexcept;
+// Compare two admitted decimal spellings without passing through binary64.
+int compare_numbers(std::string_view a, std::string_view b) noexcept;
 
 }
 #endif

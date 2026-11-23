@@ -30,10 +30,10 @@ result=json.loads((run/'consumers/result.json').read_text());assert result['stat
 print('Installed SDK admission passed:',run)
 
 if a.variant=='static':
-    # Configure a private source copy, then alter only its lawful fixture.
+    # Configure a private source copy, then change one locked install input at a time.
     # Rejection must precede copying even the first SDK binary.
     projection=run/'input-check-source';projection.mkdir()
-    for directory in ('cmake','include','src','scripting'):
+    for directory in ('cmake','include','modules/config','modules/json','schemas','src','scripting'):
         shutil.copytree(a.source/directory,projection/directory)
     for name in ('CMakeLists.txt','LICENSE','THIRD_PARTY_NOTICES.md'):
         shutil.copyfile(a.source/name,projection/name)
@@ -51,10 +51,17 @@ if a.variant=='static':
              '-DENGINE_SIM_BUILD_RUNTIME=ON','-DENGINE_SIM_BUILD_DESKTOP=OFF','-DENGINE_SIM_BUILD_CAPTURE=OFF',
              '-DBUILD_TESTING=OFF','-DENGINE_SIM_BUILD_HOST_TESTS=OFF','-DENGINE_SIM_INSTALL_RUNTIME_EXAMPLE=ON',
              f'-DENGINE_SIM_DEPS_FILE={a.root}/deps.cmake'])
-    model=projection/'examples/runtime/fixture/main.mr'
-    model.write_text(model.read_text()+'\n// Changed after configure; installation must reject.\n')
-    rejected=run/'refused-prefix'
-    message=execute(['cmake','--install',run/'input-check-build','--config','Release','--prefix',rejected,'--component','RuntimeSDK'],expected_failure=True)
-    assert 'SDK input changed since configure' in message,message
-    assert not rejected.exists() or not any(p.is_file() for p in rejected.rglob('*'))
-    print('Changed fixture rejected before any SDK file copy')
+    inputs = (projection/'examples/runtime/fixture/main.mr',
+              projection/'schemas/engine-config-v1.schema.json')
+    for fixture in inputs:
+        original = fixture.read_bytes()
+        rejected = run / ('refused-' + fixture.name)
+        try:
+            fixture.write_bytes(original + b'\n')
+            message = execute(['cmake','--install',run/'input-check-build','--config','Release',
+                               '--prefix',rejected,'--component','RuntimeSDK'], expected_failure=True)
+            assert 'SDK input changed since configure' in message and fixture.name in message, message
+            assert not rejected.exists() or not any(p.is_file() for p in rejected.rglob('*'))
+        finally:
+            fixture.write_bytes(original)
+        print(f'Changed {fixture.name} rejected before any SDK file copy')

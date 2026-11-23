@@ -14,7 +14,19 @@ endfunction()
 check_json_vendor(json.hpp header_sha256)
 check_json_vendor(LICENSE.MIT license_sha256)
 
-add_library(engine-sim-json STATIC src/lexical.cpp)
+set(schema "${CMAKE_CURRENT_SOURCE_DIR}/../../schemas/engine-config-v1.schema.json")
+set(schema_compiler "${CMAKE_CURRENT_SOURCE_DIR}/../../cmake/compile_config_schema.py")
+set(schema_generated "${CMAKE_CURRENT_BINARY_DIR}/generated")
+set(schema_digest "3b084785637e024c7d74e7b567b64b01f4fc620367d978181a24f40b012237ef")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${schema}" "${schema_compiler}")
+find_package(Python3 3.9 REQUIRED COMPONENTS Interpreter)
+execute_process(
+    COMMAND "${Python3_EXECUTABLE}" -B "${schema_compiler}" "${schema}"
+        "${schema_generated}/config_schema_v1.hpp" --expected-sha256 "${schema_digest}"
+    COMMAND_ERROR_IS_FATAL ANY)
+
+add_library(engine-sim-json STATIC src/lexical.cpp src/schema.cpp src/decode.cpp)
+target_include_directories(engine-sim-json PRIVATE "${schema_generated}")
 add_library(EngineSim::Json ALIAS engine-sim-json)
 target_include_directories(engine-sim-json SYSTEM PRIVATE "${json_vendor}")
 target_link_libraries(engine-sim-json PRIVATE EngineSim::Config)

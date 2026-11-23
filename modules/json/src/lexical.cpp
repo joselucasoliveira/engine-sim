@@ -10,6 +10,31 @@
 #include <utility>
 
 namespace engine_sim::config_v1::json_detail {
+
+void append_pointer_key(std::string &pointer, std::string_view key) {
+    for (char c : key) {
+        if (c == '~') pointer += "~0";
+        else if (c == '/') pointer += "~1";
+        else pointer += c;
+    }
+}
+
+void set_source_location(Diagnostic &problem, std::string_view input, std::size_t offset) {
+    problem.byte_offset = offset;
+    std::uint64_t line = 1, column = 1;
+    for (std::size_t i = 0; i < offset; ++i) {
+        const auto c = static_cast<unsigned char>(input[i]);
+        if (c == '\r' || c == '\n') {
+            if (c == '\r' && i + 1 < offset && input[i + 1] == '\n') ++i;
+            ++line;
+            column = 1;
+        }
+        else if ((c & 0xc0) != 0x80) ++column;
+    }
+    problem.line = line;
+    problem.column = column;
+}
+
 namespace {
 static_assert(NLOHMANN_JSON_VERSION_MAJOR == 3 &&
               NLOHMANN_JSON_VERSION_MINOR == 12 && NLOHMANN_JSON_VERSION_PATCH == 0);
@@ -25,14 +50,6 @@ struct PathPart {
     std::size_t index{};
     bool is_name{};
 };
-
-void append_pointer_key(std::string &pointer, std::string_view key) {
-    for (char c : key) {
-        if (c == '~') pointer += "~0";
-        else if (c == '/') pointer += "~1";
-        else pointer += c;
-    }
-}
 
 class Reader {
 public:
@@ -63,19 +80,7 @@ private:
             else problem.pointer += std::to_string(part.index);
         }
         if (!m_path.empty() && m_path.back().is_name) problem.field = m_path.back().name;
-        problem.byte_offset = offset;
-        std::uint64_t line = 1, column = 1;
-        for (std::size_t i = 0; i < offset; ++i) {
-            const auto c = static_cast<unsigned char>(m_input[i]);
-            if (c == '\r' || c == '\n') {
-                if (c == '\r' && i + 1 < offset && m_input[i + 1] == '\n') ++i;
-                ++line;
-                column = 1;
-            }
-            else if ((c & 0xc0) != 0x80) ++column;
-        }
-        problem.line = line;
-        problem.column = column;
+        set_source_location(problem, m_input, offset);
         throw ParseError{std::move(problem), first_key};
     }
 
@@ -346,53 +351,81 @@ ParseResult parse(std::string_view bytes) {
     catch (ParseError &error) { return std::move(error); }
 }
 
-Integer32 integer32(const ParsedJson &input, const Node &node) noexcept {
-    if (node.kind != Kind::number) return {IntegerStatus::fractional, 0};
-    const auto token = input.lexeme(node);
-    const bool negative = token.front() == '-';
+namespace {
+struct DecimalToken {
     std::array<unsigned char, number_bytes> digits{};
-    std::size_t i = negative ? 1 : 0, count = 0;
-    int fractional = 0;
-    bool after_point = false;
+    int count = 0;
+    int scale = 0;
+    bool negative = false;
+};
+
+DecimalToken decimal(std::string_view token) noexcept {
+    DecimalToken result;
+    const bool negative = token.front() == '-';
+    std::size_t i = negative ? 1 : 0;
+    bool point = false;
     for (; i < token.size() && token[i] != 'e' && token[i] != 'E'; ++i) {
-        if (token[i] == '.') after_point = true;
-        else {
-            digits[count++] = static_cast<unsigned char>(token[i] - '0');
-            if (after_point) ++fractional;
+        if (token[i] == '.') {
+            point = true;
+            continue;
         }
+        if (point) --result.scale;
+        if (token[i] != '0' || result.count != 0)
+            result.digits[static_cast<std::size_t>(result.count++)] = static_cast<unsigned char>(token[i] - '0');
     }
-    int exponent = 0;
+    if (result.count == 0) return result;
+
     if (i < token.size()) {
         ++i;
         const bool exp_negative = token[i] == '-';
         if (exp_negative || token[i] == '+') ++i;
+        int exponent = 0;
         for (; i < token.size() && exponent < 1000; ++i)
             exponent = exponent * 10 + token[i] - '0';
-        if (exp_negative) exponent = -exponent;
+        result.scale += exp_negative ? -exponent : exponent;
     }
-    std::size_t first = 0;
-    while (first < count && digits[first] == 0) ++first;
-    if (first == count) return {IntegerStatus::exact, 0};
-
-    const int scale = exponent - fractional;
-    if (scale < 0) {
-        const auto remove = static_cast<std::size_t>(-scale);
-        if (remove >= count - first) return {IntegerStatus::fractional, 0};
-        for (i = count - remove; i < count; ++i)
-            if (digits[i] != 0) return {IntegerStatus::fractional, 0};
-        count -= remove;
+    while (result.digits[static_cast<std::size_t>(result.count - 1)] == 0) {
+        --result.count;
+        ++result.scale;
     }
-    else if (count - first + static_cast<std::size_t>(scale) > 10)
-        return {IntegerStatus::out_of_range, 0};
+    result.negative = negative;
+    return result;
+}
 
-    if (count - first > 10) return {IntegerStatus::out_of_range, 0};
+int compare_magnitude(const DecimalToken &lhs, const DecimalToken &rhs) noexcept {
+    if (lhs.count == 0 || rhs.count == 0) return (lhs.count != 0) - (rhs.count != 0);
+    const int a = lhs.count + lhs.scale, b = rhs.count + rhs.scale;
+    if (a != b) return (a > b) - (a < b);
+    for (int i = 0; i < lhs.count || i < rhs.count; ++i) {
+        const auto index = static_cast<std::size_t>(i);
+        const auto x = i < lhs.count ? lhs.digits[index] : 0;
+        const auto y = i < rhs.count ? rhs.digits[index] : 0;
+        if (x != y) return (x > y) - (x < y);
+    }
+    return 0;
+}
+}
+
+int compare_numbers(std::string_view a, std::string_view b) noexcept {
+    const auto lhs = decimal(a), rhs = decimal(b);
+    if (lhs.negative != rhs.negative) return lhs.negative ? -1 : 1;
+    const auto magnitude = compare_magnitude(lhs, rhs);
+    return lhs.negative ? -magnitude : magnitude;
+}
+
+Integer32 integer32(const ParsedJson &input, const Node &node) noexcept {
+    if (node.kind != Kind::number) return {IntegerStatus::fractional, 0};
+    const auto token = decimal(input.lexeme(node));
+    if (token.count == 0) return {IntegerStatus::exact, 0};
+    if (token.scale < 0) return {IntegerStatus::fractional, 0};
+    if (token.count + token.scale > 10) return {IntegerStatus::out_of_range, 0};
     std::uint64_t magnitude = 0;
-    for (i = first; i < count; ++i) magnitude = magnitude * 10 + digits[i];
-    for (int power = 0; power < scale; ++power) magnitude *= 10;
-    const auto limit = static_cast<std::uint64_t>(std::numeric_limits<std::int32_t>::max()) + negative;
+    for (int i = 0; i < token.count; ++i) magnitude = magnitude * 10 + token.digits[static_cast<std::size_t>(i)];
+    for (int power = 0; power < token.scale; ++power) magnitude *= 10;
+    const auto limit = static_cast<std::uint64_t>(std::numeric_limits<std::int32_t>::max()) + token.negative;
     if (magnitude > limit) return {IntegerStatus::out_of_range, 0};
     const auto value = static_cast<std::int64_t>(magnitude);
-    return {IntegerStatus::exact, static_cast<std::int32_t>(negative ? -value : value)};
+    return {IntegerStatus::exact, static_cast<std::int32_t>(token.negative ? -value : value)};
 }
 
 }

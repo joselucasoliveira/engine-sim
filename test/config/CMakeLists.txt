@@ -59,3 +59,23 @@ if (TARGET engine-sim-json)
     add_test(NAME ConfigJsonLimits COMMAND engine-sim-json-lexical-test limits)
     set_tests_properties(ConfigJsonLexical ConfigJsonLimits PROPERTIES LABELS r25-config TIMEOUT 60)
 endif ()
+
+if (TARGET engine-sim-json)
+    add_executable(engine-sim-config-schema-test schema_cases.cpp)
+    target_link_libraries(engine-sim-config-schema-test PRIVATE EngineSim::Json EngineSim::Config)
+    target_include_directories(engine-sim-config-schema-test PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../modules/json/src")
+    set_target_properties(engine-sim-config-schema-test PROPERTIES
+        CXX_STANDARD 17 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO)
+    if (COMMAND engine_sim_diagnose)
+        engine_sim_diagnose(engine-sim-config-schema-test TRUE)
+    endif ()
+    find_package(Python3 3.9 REQUIRED COMPONENTS Interpreter)
+    add_test(NAME ConfigSchemaParity COMMAND engine-sim-config-schema-test parity
+        "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/schema-engine.json")
+    add_test(NAME ConfigSchemaEmbedding COMMAND "${Python3_EXECUTABLE}" -B
+        "${CMAKE_CURRENT_SOURCE_DIR}/schema_embedding.py" "$<TARGET_FILE:engine-sim-config-schema-test>"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../cmake/compile_config_schema.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../schemas/engine-config-v1.schema.json")
+    set_tests_properties(ConfigSchemaParity ConfigSchemaEmbedding PROPERTIES LABELS r25-config TIMEOUT 60)
+endif ()

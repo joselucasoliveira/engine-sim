@@ -1,0 +1,2 @@
+# The embedded and installed schema use the same pinned bytes on all hosts.
+engine-config-v1.schema.json -text
