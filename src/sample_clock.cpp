@@ -8,6 +8,8 @@
 
 namespace engine_sim {
 namespace {
+constexpr std::uint32_t maximumDesktopFrequency = 400000;
+
 long double roundedCycles(long double value) {
     const auto nearest = std::round(value);
     const auto tolerance = 64 * std::numeric_limits<long double>::epsilon() * std::max(1.0L, std::abs(value));
@@ -18,7 +20,7 @@ SampleClock::SampleClock(std::uint32_t frequency, const std::vector<double> &res
     : m_frequency(frequency), m_outputRate(outputRate), m_source(source), m_previous(rest), m_current(rest),
       m_next(rest.size()), m_interpolated(rest.size()), m_profile(profile) {
     const auto minimum = profile == Profile::Desktop ? 400u : 4000u;
-    const auto maximum = profile == Profile::Desktop ? 400000u : 96000u;
+    const auto maximum = profile == Profile::Desktop ? maximumDesktopFrequency : 96000u;
     if (frequency < minimum || frequency > maximum || rest.empty()
         || (outputRate != NativeRate && outputRate != 48000)
         || (profile == Profile::Desktop && outputRate != NativeRate)) {
@@ -35,9 +37,16 @@ void SampleClock::validateSpan(float *output, std::size_t count) const {
         throw std::invalid_argument("invalid sample clock output span");
     }
     const auto maximum = std::numeric_limits<std::uint64_t>::max();
+    // At the maximum desktop rate even a full block cannot exceed this bound.
+    // The exact phase calculation is needed only close to counter exhaustion.
+    constexpr auto maximumTicks = (std::uint64_t{maximumDesktopFrequency} * MaximumBlock + NativeRate - 1) / NativeRate + 1;
+    if (m_counts.frames <= maximum - MaximumBlock && m_counts.nativeFrames <= maximum - MaximumBlock
+        && m_counts.ticks <= maximum - maximumTicks) {
+        return;
+    }
     // Only the bounded request is multiplied. No lifetime frame product exists.
     const auto extraTicks = (m_variable || m_pendingFrequency) && count
-        ? (std::uint64_t{400000} * count + NativeRate - 1) / NativeRate + 1
+        ? (std::uint64_t{maximumDesktopFrequency} * count + NativeRate - 1) / NativeRate + 1
         : (std::uint64_t{m_frequency} * count + m_phase) / NativeRate;
     const auto ticks = m_outputRate == NativeRate ? extraTicks
         : (std::uint64_t{m_frequency} * count + m_outputTickPhase) / m_outputRate;
@@ -218,7 +227,7 @@ std::uint32_t SampleClock::changeFrequencyWithinInterval(long double remaining) 
 }
 
 void SampleClock::requestDesktopFrequency(std::uint32_t frequency) {
-    if (m_profile != Profile::Desktop || frequency < 400 || frequency > 400000) {
+    if (m_profile != Profile::Desktop || frequency < 400 || frequency > maximumDesktopFrequency) {
         throw std::invalid_argument("invalid private desktop simulation frequency");
     }
     m_pendingFrequency = frequency == m_frequency ? 0 : frequency;

@@ -157,6 +157,21 @@ if (TARGET engine-sim-runtime)
             --compile-database "${CMAKE_BINARY_DIR}/compile_commands.json")
         set_tests_properties(RuntimeBenchmark PROPERTIES LABELS "runtime-bench" TIMEOUT 300)
     endif ()
+    if (TARGET engine-sim-runtime AND ENGINE_SIM_SANITIZER STREQUAL "none")
+        add_subdirectory(cost-phases)
+        set(runtime_cost_gate "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/cost_gate.py")
+        set(runtime_cost_inputs --source "${PROJECT_SOURCE_DIR}"
+            --fixture "${PROJECT_SOURCE_DIR}/examples/runtime/fixture" --deps-root "${ENGINE_SIM_PRESET_ROOT}")
+        add_test(NAME PreparationPhaseAccounting COMMAND ${runtime_cost_gate} phases
+            ${runtime_cost_inputs} --executable "$<TARGET_FILE:engine-sim-runtime-phase-bench>"
+            --overlay "${CMAKE_CURRENT_BINARY_DIR}/cost-phases/overlay/identities.json")
+        add_test(NAME IsolatedRuntimeCosts COMMAND ${runtime_cost_gate} installed
+            ${runtime_cost_inputs} --compiler "${CMAKE_CXX_COMPILER}"
+            --cmake "${CMAKE_COMMAND}" --ctest "${CMAKE_CTEST_COMMAND}"
+            --generator "${CMAKE_GENERATOR}" "--platform=${CMAKE_GENERATOR_PLATFORM}")
+        set_tests_properties(PreparationPhaseAccounting IsolatedRuntimeCosts PROPERTIES
+            LABELS runtime-bench RUN_SERIAL TRUE TIMEOUT 1200)
+    endif ()
     add_test(NAME StandaloneSynthesisConsumer COMMAND "${Python3_EXECUTABLE}" -B
         "${CMAKE_CURRENT_SOURCE_DIR}/synthesis_projection.py"
         --source "${PROJECT_SOURCE_DIR}" --generator "${CMAKE_GENERATOR}"

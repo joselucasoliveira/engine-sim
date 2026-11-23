@@ -353,3 +353,44 @@ cost, and a bounded host worker/device queue. Strict callback guarantees, a job
 scheduler, many-vehicle budgets, acoustic LOD, new sound synthesis and plugin/game
 integration are outside this SDK's current contract. See [tests](../TESTING.md)
 and [native status](platforms.md#device-free-runtime-sdk) for reproducible checks.
+
+## Measure preparation and render costs
+
+The runtime benchmark can use an independent Release consumer linked through
+`EngineSim::Runtime`. Start with a code-only install from either runtime SDK
+preset. The smoke workload uses the synthetic fixture and compares complete PCM
+and clock counters across block partitions at both supported rates.
+
+```sh
+export FIXTURE="$PWD/examples/runtime/fixture"
+export COST_BUILD="$ES_OUT/cost-consumer"
+cmake -S test/runtime/cost-consumer -B "$COST_BUILD" \
+  -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$SDK_PREFIX"
+cmake --build "$COST_BUILD" --config Release --target runtime-cost
+python3 -B tools/runtime_bench.py installed-costs --smoke \
+  --installed "$COST_BUILD/runtime-cost" --fixture "$FIXTURE" \
+  --out "$ES_OUT/cost-smoke"
+```
+
+Use a fresh output directory per run. On a multi-config generator select the
+Release executable, and use the shared SDK loader setup described above.
+
+`PreparationPhaseAccounting` records the file-read or byte-copy, tokenization
+and parsing, schema validation, normalization, semantic graph, resource I/O and
+decoding, mechanics, synthesis and activation costs in a separate instrumented
+process. Inclusive totals contain nested phases. Its allocation accounting
+covers ordinary C++ allocations, with separate live counts for immutable shared
+tables and per-session objects before and after replacement. The Linux lock
+counter covers wrapped pthread mutex acquisitions. Run the bounded checks from
+a configured and built `runtime-test` tree.
+
+```sh
+ctest --test-dir "$ES_OUT/runtime-test" -C Release --no-tests=error \
+  --output-on-failure -R '^(PreparationPhaseAccounting|IsolatedRuntimeCosts)$'
+```
+
+`installed-costs --help` lists the independent reference inputs for the paired
+Linux study. A timed row identifies its inputs, output digests and clock counts.
+Report timings with the fixture, compiler, build profile, loader, rate, control
+timeline and processor settings. These measurements cover synchronous rendering
+and preparation on the measured setup.

@@ -1,0 +1,21 @@
+cmake_minimum_required(VERSION 3.25)
+project(InstalledRuntimeCost LANGUAGES CXX)
+
+find_package(EngineSimRuntime 2.0 CONFIG REQUIRED)
+find_package(Threads REQUIRED)
+add_executable(runtime-cost main.cpp)
+target_link_libraries(runtime-cost PRIVATE EngineSim::Runtime Threads::Threads)
+set_target_properties(runtime-cost PROPERTIES
+    CXX_STANDARD 17 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO)
+if(WIN32)
+    target_link_libraries(runtime-cost PRIVATE psapi)
+    if(MINGW)
+        target_link_options(runtime-cost PRIVATE -municode)
+    endif()
+endif()
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    enable_language(C)
+    add_executable(runtime-cost-launcher launch_linux.c)
+    set_target_properties(runtime-cost-launcher PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+endif()
