@@ -96,3 +96,12 @@ if (TARGET engine-sim-legacy-snapshot)
     add_test(NAME LegacyActionRouting COMMAND "${Python3_EXECUTABLE}" -B ${legacy_route_arguments} routing)
     set_tests_properties(LegacySelectionSnapshot LegacyActionRouting PROPERTIES LABELS "r25-convert;script" TIMEOUT 90)
 endif ()
+
+if (TARGET engine-sim-convert)
+    set(legacy_cli_arguments "${CMAKE_CURRENT_SOURCE_DIR}/legacy_converter.py"
+        "$<TARGET_FILE:engine-sim-convert>" "${PROJECT_SOURCE_DIR}/examples/runtime/fixture"
+        "${CMAKE_CURRENT_BINARY_DIR}")
+    add_test(NAME LegacyConverterCli COMMAND "${Python3_EXECUTABLE}" -B ${legacy_cli_arguments} cli)
+    add_test(NAME LegacyBatchFailures COMMAND "${Python3_EXECUTABLE}" -B ${legacy_cli_arguments} batch)
+    set_tests_properties(LegacyConverterCli LegacyBatchFailures PROPERTIES LABELS "r25-convert;script" TIMEOUT 120)
+endif ()

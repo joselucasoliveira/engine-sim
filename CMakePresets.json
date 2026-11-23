@@ -156,6 +156,20 @@
       }
     },
     {
+      "name": "legacy-converter",
+      "inherits": "external",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_TESTING": false,
+        "PIRANHA_ENABLED": true,
+        "ENGINE_SIM_BUILD_LEGACY_CONVERTER": true,
+        "ENGINE_SIM_BUILD_DESKTOP": false,
+        "ENGINE_SIM_BUILD_RUNTIME": false,
+        "ENGINE_SIM_BUILD_CAPTURE": false,
+        "ENGINE_SIM_BUILD_HOST_TESTS": false
+      }
+    },
+    {
       "name": "runtime-test",
       "inherits": "runtime",
       "cacheVariables": {
@@ -289,6 +303,11 @@
     {
       "name": "runtime",
       "configurePreset": "runtime",
+      "configuration": "Release"
+    },
+    {
+      "name": "legacy-converter",
+      "configurePreset": "legacy-converter",
       "configuration": "Release"
     },
     {

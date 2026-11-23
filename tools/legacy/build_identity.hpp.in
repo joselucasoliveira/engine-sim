@@ -1,0 +1,14 @@
+#ifndef ENGINE_SIM_CONVERTER_BUILD_IDENTITY_HPP
+#define ENGINE_SIM_CONVERTER_BUILD_IDENTITY_HPP
+
+namespace engine_sim::legacy::cli {
+inline constexpr auto build_revision = "@converter_revision@";
+inline constexpr auto source_state = "@converter_source_state@";
+inline constexpr auto source_fingerprint = "@converter_source_fingerprint@";
+inline constexpr auto parser_revision = "@converter_parser@";
+inline constexpr auto lock_sha256 = "@converter_lock_hash@";
+inline constexpr auto build_host = "@build_host@";
+inline constexpr auto build_compiler = "@build_compiler@";
+inline constexpr auto build_flags = R"FLAGS(@converter_fp@)FLAGS";
+}
+#endif

@@ -94,7 +94,7 @@ if (BUILD_TESTING)
 endif ()
 
 add_subdirectory(modules/config)
-if (BUILD_TESTING OR ENGINE_SIM_BUILD_RUNTIME)
+if (BUILD_TESTING OR ENGINE_SIM_BUILD_RUNTIME OR ENGINE_SIM_BUILD_LEGACY_CONVERTER)
     add_subdirectory(modules/json)
 endif ()
 if (BUILD_TESTING)

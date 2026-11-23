@@ -1,0 +1,22 @@
+file(READ "${source_list}" inputs)
+set(source_hashes "")
+foreach(input IN LISTS inputs)
+    file(SHA256 "${input}" digest)
+    file(RELATIVE_PATH name "${source_root}" "${input}")
+    string(APPEND source_hashes "${name}=${digest}\n")
+endforeach ()
+string(SHA256 converter_source_fingerprint "${source_hashes}")
+
+execute_process(COMMAND git -C "${source_root}" rev-parse HEAD
+    OUTPUT_VARIABLE converter_revision OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+execute_process(COMMAND git -C "${source_root}" status --porcelain --untracked-files=all
+    OUTPUT_VARIABLE status OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+if (converter_revision STREQUAL "")
+    set(converter_revision "source-archive")
+    set(converter_source_state "archive")
+elseif (status STREQUAL "")
+    set(converter_source_state "clean")
+else ()
+    set(converter_source_state "modified")
+endif ()
+configure_file("${source_root}/tools/legacy/build_identity.hpp.in" "${identity_header}" @ONLY)

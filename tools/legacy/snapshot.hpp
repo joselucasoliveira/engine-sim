@@ -28,7 +28,8 @@ struct Snapshot {
 
 // Captures the selected evaluated nodes inside the legacy execution scope.
 // The result owns all data after destruction of the program and compiler.
-Snapshot capture(const es_script::PreparationContext &source);
+Snapshot capture(const es_script::PreparationContext &source,
+                 const es_script::Compiler::InputVerifier &verify = {});
 
 }
 #endif

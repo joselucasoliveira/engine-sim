@@ -397,12 +397,12 @@ private:
 };
 }
 
-legacy::Snapshot evaluateSnapshot(const PreparationContext &source) {
+legacy::Snapshot evaluateSnapshot(const PreparationContext &source, const Compiler::InputVerifier &verify) {
     Recorder recorder;
     std::vector<ScriptInput> consumed;
     // Finish legacy execution and release its live engine and compiler. An
     // execution or construction failure cannot publish a partial snapshot.
-    (void)Compiler::prepare(source, consumed, {}, &recorder);
+    (void)Compiler::prepare(source, consumed, verify, &recorder);
     auto result = recorder.take();
     result.consumed_scripts = std::move(consumed);
     return result;
@@ -410,6 +410,7 @@ legacy::Snapshot evaluateSnapshot(const PreparationContext &source) {
 
 }
 
-engine_sim::legacy::Snapshot engine_sim::legacy::capture(const es_script::PreparationContext &source) {
-    return es_script::evaluateSnapshot(source);
+engine_sim::legacy::Snapshot engine_sim::legacy::capture(const es_script::PreparationContext &source,
+        const es_script::Compiler::InputVerifier &verify) {
+    return es_script::evaluateSnapshot(source, verify);
 }
