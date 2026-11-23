@@ -54,12 +54,14 @@ jobs:
         with:
           ref: ${{ inputs.revision }}
           persist-credentials: false
-          submodules: recursive
+      - name: Acquire only the desktop gitlinks
+        shell: bash
+        run: python -B tools/runtime_ci.py acquire --profile desktop
       - name: Prepare Linux dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install --yes flex bison libfl-dev xvfb xauth mesa-vulkan-drivers libvulkan1 \
+          sudo apt-get install --yes gcc-13 g++-13 ninja-build xvfb xauth mesa-vulkan-drivers libvulkan1 \
             libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev \
             libwayland-dev wayland-protocols libxkbcommon-dev libdrm-dev libgbm-dev libasound2-dev libpulse-dev bubblewrap
           icd=$(find /usr/share/vulkan/icd.d -maxdepth 1 -name 'lvp_icd*.json' -print -quit)
@@ -72,12 +74,7 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           test -d /Applications/Xcode_16.4.app/Contents/Developer
-          brew install bison flex
           echo 'DEVELOPER_DIR=/Applications/Xcode_16.4.app/Contents/Developer' >> "$GITHUB_ENV"
-          echo "$(brew --prefix bison)/bin" >> "$GITHUB_PATH"
-          echo "$(brew --prefix flex)/bin" >> "$GITHUB_PATH"
-          bison --version
-          flex --version
       - name: Replay Unix entry points
         if: runner.os != 'Windows'
         shell: bash
@@ -114,6 +111,9 @@ jobs:
         if: always()
         with:
           name: native-${{ matrix.os }}-${{ matrix.preset }}-logs
-          path: ${{ runner.temp }}/engine-sim-native/logs/
+          path: |
+            ${{ runner.temp }}/engine-sim-native/logs/**/*.json
+            ${{ runner.temp }}/engine-sim-native/logs/**/*.log
+            ${{ runner.temp }}/engine-sim-native/logs/**/*.xml
           retention-days: 7
           if-no-files-found: warn

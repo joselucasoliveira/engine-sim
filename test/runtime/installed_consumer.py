@@ -116,6 +116,7 @@ def inside(prefix, fixture, work, variant, report):
         companion=list(prefix.rglob('engine-sim-runtime-consumer'+extension))
         assert len(companion)==1
         command([companion[0],fixture/'main.json',fixture],work,report,env)
+    if (work/'offline-source/CMakeLists.txt').is_file():
         offline_build=work/'offline-build'
         command([cmake,'-S',work/'offline-source','-B',offline_build,'-DCMAKE_BUILD_TYPE=Release',f'-DCMAKE_PREFIX_PATH={prefix}',
                  '-DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF','-DCMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY=OFF'],work,report)
@@ -125,13 +126,15 @@ def inside(prefix, fixture, work, variant, report):
                  '-DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF','-DCMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY=OFF'],work,report)
         command([cmake,'--build',reference_build,'--config','Release','--parallel','2'],work,report)
         reference=executable(reference_build,'runtime-direct-reference')
-        arguments=[sys.executable,'-B',work/'example_tests.py','--cli',offline[0],'--reference',reference,'--fixture',fixture,'--out',work/'offline-admission']
+        standalone=executable(offline_build,'engine-sim-render')
+        arguments=[sys.executable,'-B',work/'example_tests.py','--cli',standalone,'--reference',reference,'--fixture',fixture,'--out',work/'standalone-admission']
         if variant=='shared':arguments+=['--ffi',location]
         command(arguments,work,report,env)
-        standalone=executable(offline_build,'engine-sim-render')
-        standalone_arguments=arguments.copy();standalone_arguments[standalone_arguments.index('--cli')+1]=standalone
-        standalone_arguments[standalone_arguments.index('--out')+1]=work/'standalone-admission'
-        command(standalone_arguments,work,report,env)
+        if offline:
+            installed_arguments=arguments.copy()
+            installed_arguments[installed_arguments.index('--cli')+1]=offline[0]
+            installed_arguments[installed_arguments.index('--out')+1]=work/'offline-admission'
+            command(installed_arguments,work,report,env)
         if variant=='shared':
             command([sys.executable,'-B',work/'ffi_smoke.py','--library',location,'--entry',fixture/'main.json',
                      '--asset-root',fixture],work,report,env)
@@ -197,8 +200,10 @@ def main():
         prefix = args.prefix.resolve()
         if not out.is_dir() or not prefix.is_dir() or not prefix.is_relative_to(out):
             parser.error('Prepared SDK must be inside the separate consumer working directory')
-        fixture = prefix/'share/engine-sim-runtime/example'
+        fixture = args.fixture.resolve() if args.fixture else prefix/'share/engine-sim-runtime/example'
         try:
+            if not fixture.is_relative_to(out) or not (fixture/'main.json').is_file():
+                raise ValueError('Prepared JSON fixture must be inside the verified consumer payload')
             if platform.system() == 'Linux':
                 assert not Path('/home').exists() and not Path('/run').exists(), 'Linux prepared consumption requires its minimal namespace'
             inside(prefix,fixture,out,args.variant,report)

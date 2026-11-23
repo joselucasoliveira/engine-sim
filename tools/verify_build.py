@@ -159,6 +159,8 @@ def main():
         command("bootstrap", bootstrap)
         report["dependency_receipt_sha256"] = sha256(output / "dependency-receipt.json")
         configure = ["cmake", "--preset", args.preset, "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"]
+        if platform.system() == "Darwin":
+            configure += ["-DCMAKE_OSX_ARCHITECTURES=arm64", "-DCMAKE_OSX_DEPLOYMENT_TARGET=15.0"]
         # Desktop CI also runs the public quick/stress characterization and staged-resource cases.
         if profile == "desktop":
             configure.append("-DENGINE_SIM_BUILD_CAPTURE=ON")

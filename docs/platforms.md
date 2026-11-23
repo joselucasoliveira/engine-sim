@@ -44,14 +44,20 @@ selections exercise preparation, reset, retirement, coherent fault prefixes and
 independent concurrent owners. The optimized static benchmark is a separate
 CPU observation; it does not qualify audio callback deadlines or hardware.
 
-The manual runtime SDK workflow defines required producer and separate clean
-consumer jobs for Ubuntu 24.04/GCC 13, Windows Server 2022/VS 2022 x64 and macOS
-15 arm64/Xcode 16.4, plus separate Linux and MSVC diagnostics. It verifies actual
-OS, machine, compiler and SDK and retains exact commit/run and file identities.
-The image catalog and local workflow/transport checks are source evidence;
-actual hosted runs and native Windows/macOS execution remain pending. The
-original desktop, driver/bus, physical audio and recording-rights limits above
-remain separate.
+The manual runtime SDK workflow defines minimal and combined static/shared
+producer cells, separate clean consumers, standalone modules and converter jobs,
+and distinct Linux and MSVC diagnostic jobs. The native runner settings are
+Ubuntu 24.04/GCC 13, Windows Server 2022/VS 2022 v143 x64 with the installed
+Windows SDK, and macOS 15 arm64/Xcode 16.4 with deployment target 15.0. The
+producer records the actual toolchain, revision, run, target closure and file
+identities. The consumers link and render the same synthetic JSON input in C11
+and C++17 and load the shared library through ctypes.
+
+Actual hosted results and native Windows/macOS module, application, converter,
+and SDK results remain pending. Native MSVC address diagnostics remain pending.
+The desktop replay records virtual or physical mode and the staged assets
+tested. Physical audio, GPU/desktop-bus and recording-rights evidence retain
+the scopes described above.
 
 See the [integration guide](runtime-guide.md) for units, lifecycle, event timing,
 legacy signal differences, measured conversion response and tuple-specific CPU

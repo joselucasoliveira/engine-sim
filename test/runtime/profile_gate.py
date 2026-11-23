@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import platform
 import re
 import shlex
 import shutil
@@ -67,6 +68,10 @@ class Audit:
         self.root = root
         self.commands = []
         self.env = {key: value for key, value in os.environ.items() if key not in SEARCH_ENV}
+        self.system = platform.system()
+
+    def binary(self, build, name):
+        return build / "bin" / (name + (".exe" if self.system == "Windows" else ""))
 
     def run(self, label, argv, *, cwd=None, env=None, expected=None, trace=False, minimal=False):
         argv = list(map(str, argv))
@@ -123,14 +128,16 @@ class Audit:
         write_json(checkout.parent / "source-files.json", inventory)
         return checkout
 
-    def bootstrap(self, source, output, profile, flags=(), cache=None):
+    def bootstrap(self, source, output, profile, flags=(), cache=None, offline=True):
         # None selects a real empty archive cache for archive-free profiles.
         cache = cache or output.parent / "empty-cache"
-        args = ["--offline", "--cache", cache, "--out", output, "--profile", profile, *flags]
+        args = ["--cache", cache, "--out", output, "--profile", profile, *flags]
+        if offline:
+            args.insert(0, "--offline")
         self.run(f"bootstrap-{profile}", [sys.executable, "-B", source / "tools/bootstrap.py", *args], cwd=source,
                  trace=True, minimal=not flags and profile != "converter")
         receipt = read_json(output / "dependency-receipt.json")
-        assert receipt["offline"] and receipt["profile"] == profile
+        assert receipt["offline"] == offline and receipt["profile"] == profile
         return receipt
 
     def configure(self, source, out, preset, *options):
@@ -139,6 +146,7 @@ class Audit:
         query.mkdir(parents=True)
         (query / "codemodel-v2").touch()
         cc = f"-DCMAKE_CXX_COMPILER={self.args.compiler}"
+        deployment = ("-DCMAKE_OSX_ARCHITECTURES=arm64", "-DCMAKE_OSX_DEPLOYMENT_TARGET=15.0") if self.system == "Darwin" else ()
         # Always use the same generator, compiler, output policy and locale for
         # compared producers. No package discovery or fetch can use network.
         env = dict(self.env, ES_OUT=str(out), LC_ALL="C", TZ="UTC")
@@ -152,7 +160,7 @@ class Audit:
                 cc, "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON", "-DFETCHCONTENT_FULLY_DISCONNECTED=ON",
                 "-DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF", "-DCMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY=OFF",
                 "--trace-expand", "--trace-format=json-v1", f"--trace-redirect={build}/configure-trace.jsonl",
-                *traces, *off, *options], cwd=source, env=env, trace=True, minimal=not optional)
+                *traces, *off, *deployment, *options], cwd=source, env=env, trace=True, minimal=not optional)
         return build
 
     def build(self, build, *targets):
@@ -167,7 +175,7 @@ class Audit:
         assert set(receipt["git"]) == set(gitlinks) and not receipt["archives"], receipt
         client = source.parent / "consumer.cmake"
         client.write_text(
-            f'add_executable(profile-consumer "{source / consumer}")\n'
+            f'add_executable(profile-consumer "{(source / consumer).as_posix()}")\n'
             f'target_link_libraries(profile-consumer PRIVATE {target})\n'
             'target_compile_features(profile-consumer PRIVATE cxx_std_17)\n'
             'set_target_properties(profile-consumer PROPERTIES CXX_EXTENSIONS OFF)\n', encoding="utf-8")
@@ -176,7 +184,7 @@ class Audit:
         compile_db = (build / "compile_commands.json").read_text(encoding="utf-8")
         assert not OPTIONAL_INPUT.search(compile_db), name
         self.run(f"dependencies-{name}", ["ninja", "-C", build, "-t", "deps"])
-        return build / "bin/profile-consumer"
+        return self.binary(build, "profile-consumer")
 
     def modules(self):
         config = self.module("model", "config", ("modules/config", "test/config/public_header.cpp"),
@@ -216,15 +224,16 @@ class Audit:
                                 *headers((*CORE, *physics.HEADERS, *synthesis.HEADERS, "engine_session"))),
                                (SOLVER, "piranha") if converter else (SOLVER,))
 
-    def converter(self, cache):
+    def converter(self, cache, offline=True):
         source = self.sdk_source(converter=True)
         out = source.parent / "out"
-        receipt = self.bootstrap(source, out, "converter", cache=cache)
-        assert set(receipt["git"]) == {SOLVER, "piranha"} and set(receipt["archives"]) == {"boost"}, receipt
+        receipt = self.bootstrap(source, out, "converter", cache=cache, offline=offline)
+        archives = {"boost", "winflexbison"} if self.system == "Windows" else {"boost"}
+        assert set(receipt["git"]) == {SOLVER, "piranha"} and set(receipt["archives"]) == archives, receipt
         build = self.configure(source, out, "legacy-converter")
         self.build(build, "engine-sim-convert")
         self.run("converter-positive-and-negative", [sys.executable, "-B",
-                 self.args.source / "test/script/legacy_converter.py", build / "bin/engine-sim-convert",
+                 self.args.source / "test/script/legacy_converter.py", self.binary(build, "engine-sim-convert"),
                  self.args.source / "examples/runtime/fixture", build, "cli"])
 
     def sdk(self, source, out, variant, mixed=False, converter=True):
@@ -360,17 +369,18 @@ def minimal(audit):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=("isolation", "combined"))
+    parser.add_argument("mode", choices=("modules", "converter", "isolation", "combined"))
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--deps-root", type=Path, required=True)
     parser.add_argument("--compiler", required=True)
     parser.add_argument("--cmake", required=True)
     parser.add_argument("--ctest", required=True)
     parser.add_argument("--jobs", default=os.environ.get("ENGINE_SIM_PROFILE_JOBS", "3"))
+    parser.add_argument("--prepare-converter-cache", action="store_true")
     args = parser.parse_args()
     output = os.environ.get("ENGINE_SIM_GATE_OUTPUT")
     if output:
-        root = Path(output) / "closure/linux"
+        root = Path(output) / "closure" / platform.system().lower()
         root.mkdir(parents=True, exist_ok=True)
     else:
         root = args.deps_root / "profile-audit"
@@ -384,7 +394,12 @@ def main():
             work = retained
         evidence = Audit(args, work)
         write_json(work / "environment.json", {key: os.environ.get(key) for key in BASE_ENV})
-        if args.mode == "isolation":
+        if args.mode == "modules":
+            evidence.modules()
+        elif args.mode == "converter":
+            cache = Path(os.environ.get("ENGINE_SIM_PROFILE_CACHE", args.deps_root / "cache"))
+            evidence.converter(cache, offline=not args.prepare_converter_cache)
+        elif args.mode == "isolation":
             evidence.modules()
             write_json(work / "summary.json", minimal(evidence))
         else:

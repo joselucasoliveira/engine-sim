@@ -19,7 +19,7 @@ env:
 
 jobs:
   producer:
-    name: Produce ${{ matrix.os }} ${{ matrix.variant }} SDK
+    name: Produce ${{ matrix.os }} ${{ matrix.profile }} ${{ matrix.variant }} SDK
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     strategy:
@@ -27,8 +27,10 @@ jobs:
       matrix:
         os: ["ubuntu-24.04", "windows-2022", "macos-15"]
         variant: ["static", "shared"]
+        profile: ["minimal", "combined"]
     env:
       VARIANT: ${{ matrix.variant }}
+      PROFILE: ${{ matrix.profile }}
     steps:
       - name: Require a full revision
         shell: bash
@@ -37,29 +39,40 @@ jobs:
         with:
           ref: ${{ inputs.revision }}
           persist-credentials: false
-          submodules: recursive
       - name: Prepare Linux producer tools
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install --yes gcc-13 g++-13 flex bison libfl-dev ninja-build
+          sudo apt-get install --yes gcc-13 g++-13 ninja-build
           echo 'CC=gcc-13' >> "$GITHUB_ENV"
           echo 'CXX=g++-13' >> "$GITHUB_ENV"
       - name: Prepare Apple producer tools
         if: runner.os == 'macOS'
         run: |
           test -d /Applications/Xcode_16.4.app/Contents/Developer
-          brew install bison flex
           echo 'DEVELOPER_DIR=/Applications/Xcode_16.4.app/Contents/Developer' >> "$GITHUB_ENV"
+      - name: Prepare combined Linux host and parser tools
+        if: runner.os == 'Linux' && matrix.profile == 'combined'
+        run: |
+          sudo apt-get install --yes flex bison libfl-dev libvulkan1 libx11-dev libxext-dev \
+            libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev libwayland-dev \
+            wayland-protocols libxkbcommon-dev libdrm-dev libgbm-dev libasound2-dev libpulse-dev
+      - name: Prepare combined Apple parser tools
+        if: runner.os == 'macOS' && matrix.profile == 'combined'
+        run: |
+          brew install bison flex
           echo "$(brew --prefix bison)/bin" >> "$GITHUB_PATH"
           echo "$(brew --prefix flex)/bin" >> "$GITHUB_PATH"
+      - name: Acquire only the producer gitlinks
+        shell: bash
+        run: python -B tools/runtime_ci.py acquire --profile "$PROFILE"
       - name: Produce Unix SDK and consumer payload
         if: runner.os != 'Windows'
         shell: bash
         run: |
           set -euo pipefail
           python3 -B tools/runtime_ci.py produce --hosted \
-            --out "$RUNNER_TEMP/sdk-producer" --revision "$EXPECTED_REVISION" --variant "$VARIANT"
+            --out "$RUNNER_TEMP/sdk-producer" --revision "$EXPECTED_REVISION" --variant "$VARIANT" --profile "$PROFILE"
       - name: Produce MSVC SDK and consumer payload
         if: runner.os == 'Windows'
         shell: pwsh
@@ -70,11 +83,11 @@ jobs:
           if ($LASTEXITCODE -ne 0 -or !$vs) { throw 'VS 2022 x64 C++ tools are required' }
           Import-Module (Join-Path $vs 'Common7\Tools\Microsoft.VisualStudio.DevShell.dll')
           Enter-VsDevShell -VsInstallPath $vs -SkipAutomaticLocation -DevCmdArguments '-arch=x64 -host_arch=x64'
-          & py -3 -B tools/runtime_ci.py produce --hosted --out (Join-Path $env:RUNNER_TEMP 'sdk-producer') --revision $env:EXPECTED_REVISION --variant $env:VARIANT
+          & py -3 -B tools/runtime_ci.py produce --hosted --out (Join-Path $env:RUNNER_TEMP 'sdk-producer') --revision $env:EXPECTED_REVISION --variant $env:VARIANT --profile $env:PROFILE
           if ($LASTEXITCODE -ne 0) { throw "SDK production failed: $LASTEXITCODE" }
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
-          name: sdk-${{ matrix.os }}-${{ matrix.variant }}
+          name: sdk-${{ matrix.os }}-${{ matrix.variant }}-${{ matrix.profile }}
           path: ${{ runner.temp }}/sdk-producer/transfer/
           if-no-files-found: error
           retention-days: 7
@@ -82,10 +95,11 @@ jobs:
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
-          name: sdk-producer-${{ matrix.os }}-${{ matrix.variant }}-logs
+          name: sdk-producer-${{ matrix.os }}-${{ matrix.variant }}-${{ matrix.profile }}-logs
           path: |
             ${{ runner.temp }}/sdk-producer/*.json
             ${{ runner.temp }}/sdk-producer/*.log
+            ${{ runner.temp }}/sdk-producer/*.xml
             ${{ runner.temp }}/sdk-producer/build/dependency-receipt.json
           if-no-files-found: warn
           retention-days: 7
@@ -103,11 +117,13 @@ jobs:
         variant: ["static", "shared"]
     env:
       VARIANT: ${{ matrix.variant }}
+      PAYLOAD_NAME: sdk-${{ matrix.os }}-${{ matrix.variant }}
     steps:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          name: sdk-${{ matrix.os }}-${{ matrix.variant }}
-          path: ${{ runner.temp }}/sdk-payload
+          pattern: sdk-${{ matrix.os }}-${{ matrix.variant }}-*
+          path: ${{ runner.temp }}/sdk-payloads
+          merge-multiple: false
       - name: Prepare Linux consumer tools
         if: runner.os == 'Linux'
         run: |
@@ -134,22 +150,28 @@ jobs:
           for path in /usr /lib /lib64 /bin /etc; do
             if test -e "$path"; then args+=(--ro-bind "$path" "$path"); fi
           done
-          args+=(--proc /proc --dev /dev --tmpfs /tmp --ro-bind "$RUNNER_TEMP/sdk-payload" /payload
-            --bind "$RUNNER_TEMP/sdk-consumer" /result --chdir /result --clearenv
-            --setenv PATH /usr/bin:/bin --setenv LC_ALL C.UTF-8 --setenv TZ UTC)
+          args+=(--proc /proc --dev /dev --tmpfs /tmp --chdir /result --clearenv
+            --setenv PATH /usr/bin:/bin --setenv LC_ALL C.UTF-8 --setenv TZ UTC --setenv CMAKE_GENERATOR Ninja)
           for key in RUNNER_OS RUNNER_ARCH ImageOS ImageVersion GITHUB_SHA GITHUB_RUN_ID GITHUB_RUN_ATTEMPT GITHUB_WORKFLOW_REF CC CXX; do
             if test -n "${!key-}"; then args+=(--setenv "$key" "${!key}"); fi
           done
-          "${prefix[@]}" "${args[@]}" /usr/bin/python3 -B /payload/runtime_ci.py consume --hosted \
-            --payload /payload --out /result/run --revision "$EXPECTED_REVISION" --variant "$VARIANT"
+          for profile in minimal combined; do
+            mkdir -p "$RUNNER_TEMP/sdk-consumer/$profile"
+            "${prefix[@]}" "${args[@]}" --ro-bind "$RUNNER_TEMP/sdk-payloads/$PAYLOAD_NAME-$profile" /payload \
+              --bind "$RUNNER_TEMP/sdk-consumer/$profile" /result /usr/bin/python3 -B /payload/runtime_ci.py consume --hosted \
+              --payload /payload --out /result/run --revision "$EXPECTED_REVISION" --variant "$VARIANT" --profile "$profile"
+          done
       - name: Consume Apple transfer without producer trees
         if: runner.os == 'macOS'
         shell: bash
         run: |
           set -euo pipefail
-          python3 -B "$RUNNER_TEMP/sdk-payload/runtime_ci.py" consume --hosted \
-            --payload "$RUNNER_TEMP/sdk-payload" --out "$RUNNER_TEMP/sdk-consumer/run" \
-            --revision "$EXPECTED_REVISION" --variant "$VARIANT"
+          for profile in minimal combined; do
+            payload="$RUNNER_TEMP/sdk-payloads/$PAYLOAD_NAME-$profile"
+            python3 -B "$payload/runtime_ci.py" consume --hosted \
+              --payload "$payload" --out "$RUNNER_TEMP/sdk-consumer/$profile/run" \
+              --revision "$EXPECTED_REVISION" --variant "$VARIANT" --profile "$profile"
+          done
       - name: Consume MSVC transfer without producer trees
         if: runner.os == 'Windows'
         shell: pwsh
@@ -160,18 +182,104 @@ jobs:
           if ($LASTEXITCODE -ne 0 -or !$vs) { throw 'VS 2022 x64 C++ tools are required' }
           Import-Module (Join-Path $vs 'Common7\Tools\Microsoft.VisualStudio.DevShell.dll')
           Enter-VsDevShell -VsInstallPath $vs -SkipAutomaticLocation -DevCmdArguments '-arch=x64 -host_arch=x64'
-          & py -3 -B (Join-Path $env:RUNNER_TEMP 'sdk-payload/runtime_ci.py') consume --hosted --payload (Join-Path $env:RUNNER_TEMP 'sdk-payload') --out (Join-Path $env:RUNNER_TEMP 'sdk-consumer/run') --revision $env:EXPECTED_REVISION --variant $env:VARIANT
-          if ($LASTEXITCODE -ne 0) { throw "Clean SDK consumption failed: $LASTEXITCODE" }
+          foreach ($profile in @('minimal', 'combined')) {
+            $payload = Join-Path $env:RUNNER_TEMP "sdk-payloads/$env:PAYLOAD_NAME-$profile"
+            & py -3 -B (Join-Path $payload 'runtime_ci.py') consume --hosted --payload $payload --out (Join-Path $env:RUNNER_TEMP "sdk-consumer/$profile/run") --revision $env:EXPECTED_REVISION --variant $env:VARIANT --profile $profile
+            if ($LASTEXITCODE -ne 0) { throw "Clean SDK consumption failed for ${profile}: $LASTEXITCODE" }
+          }
+      - name: Compare installed SDK scopes and JSON results
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -B "$RUNNER_TEMP/sdk-payloads/$PAYLOAD_NAME-minimal/runtime_ci.py" compare \
+            --payload "$RUNNER_TEMP/sdk-consumer/minimal/run" --combined "$RUNNER_TEMP/sdk-consumer/combined/run" \
+            --out "$RUNNER_TEMP/sdk-consumer/comparison.json"
       - name: Retain consumer diagnostics and identities
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: sdk-consumer-${{ matrix.os }}-${{ matrix.variant }}-logs
           path: |
-            ${{ runner.temp }}/sdk-payload/manifest.json
+            ${{ runner.temp }}/sdk-payloads/*/manifest.json
             ${{ runner.temp }}/sdk-consumer/**/*.json
             ${{ runner.temp }}/sdk-consumer/**/*.log
             ${{ runner.temp }}/sdk-consumer/**/imported-properties.txt
+          if-no-files-found: warn
+          retention-days: 7
+
+  profiles:
+    name: Exercise ${{ matrix.os }} ${{ matrix.profile }} profile
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ["ubuntu-24.04", "windows-2022", "macos-15"]
+        profile: ["modules", "converter"]
+    env:
+      PROFILE: ${{ matrix.profile }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ inputs.revision }}
+          persist-credentials: false
+      - name: Acquire only selected sources
+        shell: bash
+        run: |
+          [[ "$EXPECTED_REVISION" =~ ^[0-9a-f]{40}$ ]]
+          python -B tools/runtime_ci.py acquire --profile "$PROFILE"
+      - name: Prepare Linux profile tools
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes gcc-13 g++-13 ninja-build
+          if test "$PROFILE" = converter; then sudo apt-get install --yes flex bison libfl-dev; fi
+          echo 'CC=gcc-13' >> "$GITHUB_ENV"
+          echo 'CXX=g++-13' >> "$GITHUB_ENV"
+      - name: Prepare Apple profile tools
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d /Applications/Xcode_16.4.app/Contents/Developer
+          echo 'DEVELOPER_DIR=/Applications/Xcode_16.4.app/Contents/Developer' >> "$GITHUB_ENV"
+          if test "$PROFILE" = converter; then
+            brew install bison flex
+            echo "$(brew --prefix bison)/bin" >> "$GITHUB_PATH"
+            echo "$(brew --prefix flex)/bin" >> "$GITHUB_PATH"
+          fi
+      - name: Compile and run Unix profile consumers
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          python3 -B tools/runtime_ci.py profiles --hosted --profile "$PROFILE" \
+            --out "$RUNNER_TEMP/sdk-profiles" --revision "$EXPECTED_REVISION"
+      - name: Compile and run MSVC profile consumers
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+          $vs = & $vswhere -latest -products '*' -version '[17.0,18.0)' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if ($LASTEXITCODE -ne 0 -or !$vs) { throw 'VS 2022 x64 C++ tools are required' }
+          Import-Module (Join-Path $vs 'Common7\Tools\Microsoft.VisualStudio.DevShell.dll')
+          Enter-VsDevShell -VsInstallPath $vs -SkipAutomaticLocation -DevCmdArguments '-arch=x64 -host_arch=x64'
+          & py -3 -B tools/runtime_ci.py profiles --hosted --profile $env:PROFILE --out (Join-Path $env:RUNNER_TEMP 'sdk-profiles') --revision $env:EXPECTED_REVISION
+          if ($LASTEXITCODE -ne 0) { throw "Native profile failed: $LASTEXITCODE" }
+      - name: Retain profile commands and assertions
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: native-profile-${{ matrix.os }}-${{ matrix.profile }}-logs
+          path: |
+            ${{ runner.temp }}/sdk-profiles/*.json
+            ${{ runner.temp }}/sdk-profiles/*.log
+            ${{ runner.temp }}/sdk-profiles/closure/*/${{ matrix.profile }}/*.log
+            ${{ runner.temp }}/sdk-profiles/closure/*/${{ matrix.profile }}/commands.json
+            ${{ runner.temp }}/sdk-profiles/closure/*/${{ matrix.profile }}/**/source-files.json
+            ${{ runner.temp }}/sdk-profiles/closure/*/${{ matrix.profile }}/**/dependency-receipt.json
           if-no-files-found: warn
           retention-days: 7
 
@@ -199,14 +307,16 @@ jobs:
         with:
           ref: ${{ inputs.revision }}
           persist-credentials: false
-          submodules: recursive
+      - name: Acquire only the diagnostic gitlink
+        shell: bash
+        run: python -B tools/runtime_ci.py acquire --profile diagnostics
       - name: Run Linux memory or thread diagnostics
         if: runner.os == 'Linux'
         shell: bash
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install --yes gcc-13 g++-13 clang-18 llvm-18 flex bison libfl-dev ninja-build bubblewrap
+          sudo apt-get install --yes gcc-13 g++-13 clang-18 llvm-18 ninja-build bubblewrap
           export CC=gcc-13 CXX=g++-13 ES_OUT="$RUNNER_TEMP/sdk-diagnostics"
           if ! bwrap --unshare-all --ro-bind / / -- /usr/bin/true; then
             export ENGINE_SIM_BWRAP_COMMAND="$(python3 -c 'import json,os; print(json.dumps(["sudo","-n","bwrap","--uid",str(os.getuid()),"--gid",str(os.getgid()),"--cap-drop","ALL"]))')"
