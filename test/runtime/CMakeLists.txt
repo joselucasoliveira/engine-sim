@@ -447,6 +447,18 @@ if (TARGET engine-sim-runtime AND TARGET engine-sim-runtime-json-private)
     add_test(NAME FleetProducerHorizon COMMAND engine-sim-fleet-producer-test horizon "${fleet_fixture}")
     add_test(NAME FleetProducerFaultPrefix COMMAND engine-sim-fleet-producer-test fault "${fleet_fixture}")
     set_tests_properties(FleetProducerHorizon FleetProducerFaultPrefix PROPERTIES LABELS r3-fleet-producer TIMEOUT 90)
+
+    add_executable(engine-sim-fleet-telemetry-test fleet-telemetry/main.cpp)
+    target_link_libraries(engine-sim-fleet-telemetry-test PRIVATE EngineSim::Fleet
+        EngineSim::Config engine-sim-runtime-backend Threads::Threads)
+    target_include_directories(engine-sim-fleet-telemetry-test PRIVATE
+        "${PROJECT_SOURCE_DIR}/src/fleet" "${PROJECT_SOURCE_DIR}/modules/assembly/src"
+        "${PROJECT_SOURCE_DIR}/src/runtime")
+    target_compile_features(engine-sim-fleet-telemetry-test PRIVATE cxx_std_17)
+    engine_sim_diagnose(engine-sim-fleet-telemetry-test TRUE)
+    add_test(NAME FleetTelemetryRace COMMAND engine-sim-fleet-telemetry-test telemetry "${fleet_fixture}")
+    add_test(NAME FleetRetirement COMMAND engine-sim-fleet-telemetry-test retirement "${fleet_fixture}")
+    set_tests_properties(FleetTelemetryRace FleetRetirement PROPERTIES LABELS r3-fleet-telemetry TIMEOUT 90)
 endif ()
 
 if (TARGET engine-sim-runtime AND TARGET engine-sim-config-roundtrip AND ENGINE_SIM_BUILD_RUNTIME_EXAMPLES)

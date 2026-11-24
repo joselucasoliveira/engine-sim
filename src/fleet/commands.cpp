@@ -48,9 +48,13 @@ std::int32_t validatePayload(const es_rt_fleet &fleet, const es_rt_event &event,
         if (!usable(event.voice, fleet)) return ES_RT_INVALID;
         const auto *identity = admittedIdentity(fleet, event.voice);
         if (!identity) return ES_RT_STALE;
+        const auto &cell = fleet.cells[identity->cell];
+        const auto state = cell.state.load(std::memory_order_acquire);
+        if ((state != CellState::queued && state != CellState::active) ||
+            cell.generation.load(std::memory_order_relaxed) != identity->cellGeneration) return ES_RT_STALE;
         if (event.kind == ES_RT_REPLACE || event.kind == ES_RT_STOP) priorCell = identity->cell;
         if (event.kind == ES_RT_VECTOR) {
-            const auto *target = fleet.cells[identity->cell].voice.get();
+            const auto *target = cell.voice.get();
             if (!target) return ES_RT_STALE;
             if ((target->mode == ES_RT_FREE && event.physical.driven_rpm != 0) ||
                 (target->mode == ES_RT_DRIVEN && event.physical.starter)) return ES_RT_UNSUPPORTED;
@@ -104,12 +108,13 @@ void finishCommand(es_rt_fleet &fleet, const Command &command, std::uint32_t rea
     if (hasCandidate(event.kind)) {
         auto &cell = fleet.cells[event.candidate.cell];
         assert(cell.state.load(std::memory_order_relaxed) == CellState::queued);
-        cell.state.store(reason == ES_RT_OK ? CellState::active : CellState::returned, std::memory_order_release);
+        if (reason == ES_RT_OK) cell.state.store(CellState::active, std::memory_order_release);
+        else returnCell(cell);
     }
     if (reason == ES_RT_OK && command.priorCell != no_cell) {
         auto &prior = fleet.cells[command.priorCell];
         assert(prior.state.load(std::memory_order_relaxed) == CellState::active);
-        prior.state.store(CellState::returned, std::memory_order_release);
+        returnCell(prior);
     }
     ticket.result = {sizeof(es_rt_result), ES_RT_V1, reason, event.kind, event.sequence, event.epoch,
                      event.frame, applied, ended, event.voice, event.next_voice};
@@ -147,24 +152,29 @@ extern "C" std::int32_t ES_RT_CALL es_rt_submit(es_rt_fleet *fleet, const es_rt_
     const auto ordinaryInBucket = bucket == commands.bucket ? commands.ordinaryInBucket : 0;
     const bool ordinary = !structural(event.kind);
     const auto available = ordinary ? ingress_slots - structural_reserve : ingress_slots;
+    const auto full = [&]() noexcept {
+        if (commands.rejections != UINT64_MAX) ++commands.rejections;
+        return ES_RT_FULL;
+    };
     if (inBucket >= 16 || (ordinary && ordinaryInBucket >= 12) ||
         index - commands.ingress.acquireHead() >= available || commands.outstanding >= available)
-        return ES_RT_FULL;
+        return full();
     std::size_t ticketIndex = 0;
     while (ticketIndex < commands.tickets.size() &&
            commands.tickets[ticketIndex].state.load(std::memory_order_relaxed) != TicketState::vacant) ++ticketIndex;
-    if (ticketIndex == commands.tickets.size()) return ES_RT_FULL;
+    if (ticketIndex == commands.tickets.size()) return full();
 
     // All checks above are read-only. The operations below cannot fail.
     if (cell) {
         auto &lane = commands.lanes[event.next_voice.lane];
-        const LaneIdentity identity{event.next_voice.generation, event.candidate.cell};
+        const LaneIdentity identity{event.next_voice.generation, event.candidate.generation, event.candidate.cell};
         lane.highWater = identity.generation;
         if (event.kind == ES_RT_ACTIVATE) lane.current = identity;
         else {
             lane.replacement = identity;
             commands.overlap = true;
         }
+        cell->identity = event.next_voice;
         cell->state.store(CellState::queued, std::memory_order_relaxed);
     }
     auto &ticket = commands.tickets[ticketIndex];

@@ -44,6 +44,7 @@ std::int32_t produce(es_rt_fleet &fleet, const std::atomic<bool> &stopping,
                 if (!fleet.pcm.tryPublish(output)) return fleet.pcm.broken() ? ES_RT_BROKEN : ES_RT_INTERNAL;
                 generated = scheduler.generated();
                 published.store(generated, std::memory_order_release);
+                fleet.snapshots.publish([&](es_rt_snapshot &out) noexcept { scheduler.snapshot(out); });
                 submitted = fleet.commands.submitted.load(std::memory_order_acquire);
                 if (const auto status = check(); status != ES_RT_OK) return status;
                 if (generated < submitted) return ES_RT_INTERNAL;
@@ -129,14 +130,33 @@ std::int32_t ES_RT_CALL es_rt_get_transport(es_rt_fleet *fleet, es_rt_transport 
         fleet->pcm.broken() ? 1u : 0u, returned, static_cast<std::uint32_t>(fleet->commands.outstanding),
         fleet->config.epoch, fleet->commands.submitted.load(std::memory_order_acquire),
         fleet->producer.generated.load(std::memory_order_acquire),
-        fleet->commands.sealed.load(std::memory_order_acquire), 0, 0};
+        fleet->commands.sealed.load(std::memory_order_acquire), fleet->commands.rejections, fleet->snapshots.dropped()};
     return ES_RT_OK;
 }
 
+std::int32_t ES_RT_CALL es_rt_poll_snapshot(es_rt_fleet *fleet, es_rt_snapshot *out) {
+    using engine_sim::fleet::prefix;
+    if (!fleet || !out) return ES_RT_INVALID;
+    if (const auto status = prefix(*out); status != ES_RT_OK) return status;
+    return fleet->snapshots.poll(*out) ? ES_RT_OK : ES_RT_EMPTY;
+}
+
 std::int32_t ES_RT_CALL es_rt_quiesce(es_rt_fleet *fleet) {
+    using namespace engine_sim::fleet;
     if (!fleet) return ES_RT_INVALID;
     try {
         fleet->producer.quiesce();
+        auto &ingress = fleet->commands.ingress;
+        const auto limit = ingress.snapshot();
+        while (const auto *pending = ingress.peek(limit)) {
+            const auto command = *pending;
+            ingress.consume();
+            finishCommand(*fleet, command, ES_RT_CANCELED, ES_RT_NO_FRAME, ES_RT_NO_FRAME);
+        }
+        for (std::size_t i = 0; i < fleet->cellCount; ++i) {
+            auto &cell = fleet->cells[i];
+            if (cell.state.load(std::memory_order_relaxed) == CellState::active) returnCell(cell);
+        }
         return ES_RT_OK;
     } catch (...) {
         return ES_RT_INTERNAL;

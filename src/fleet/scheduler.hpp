@@ -13,8 +13,6 @@ struct ScheduledTile {
 struct ScheduledLane {
     es_rt_id id{};
     std::uint32_t cell = no_cell;
-    double gain = 1;
-    bool failed = false;
 };
 
 // One serial W owns this timeline and its active voice borrows. The C-side
@@ -30,6 +28,7 @@ public:
     std::uint64_t generated() const noexcept { return next; }
     const ScheduledLane &lane(std::size_t index) const noexcept { return lanes[index]; }
     double masterGain() const noexcept { return master; }
+    void snapshot(es_rt_snapshot &out) const noexcept;
 
 private:
     void renderRange(ScheduledTile &output, std::uint32_t begin, std::uint32_t end);

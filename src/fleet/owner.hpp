@@ -8,6 +8,7 @@
 #include "pcm.hpp"
 #include "producer.hpp"
 #include "runtime.hpp"
+#include "snapshot.hpp"
 
 #include <atomic>
 #include <cmath>
@@ -44,6 +45,7 @@ struct Voice {
     void attachTimeline(es_rt_id voice, TimelineTrace observer, void *context) noexcept;
     void request(es_rt_vector vector, std::uint64_t sequence, std::uint64_t frame) noexcept;
     ProcessingStatus renderAt(std::uint64_t start, float *output, std::uint32_t count, std::uint32_t &written);
+    es_rt_lane_info laneInfo(es_rt_id id, std::uint32_t state) const noexcept;
 
     Runtime runtime;
     assembly::FleetCapacity capacity;
@@ -52,7 +54,10 @@ struct Voice {
     std::uint32_t mode;
     double drivenLimitRpm = 0;
 
-    std::uint64_t requestedSequence = 0, requestedFrame = ES_RT_NO_FRAME;
+    es_rt_vector requested{}, applied{};
+    std::uint32_t fault = ES_RT_OK;
+    double gain = 1;
+    std::uint64_t lastSequence = 0, requestedSequence = 0, requestedFrame = ES_RT_NO_FRAME;
     std::uint64_t latchedSequence = 0, latchFrame = ES_RT_NO_FRAME, latchTick = ES_RT_NO_FRAME;
 
 private:
@@ -67,7 +72,11 @@ struct Cell {
     std::atomic<CellState> state{CellState::free};
     std::atomic<std::uint64_t> generation{0};
     std::unique_ptr<Voice> voice;
+    es_rt_id identity{};
+    es_rt_lane_info finalInfo{};
 };
+
+void returnCell(Cell &cell) noexcept;
 
 }
 
@@ -84,6 +93,7 @@ struct es_rt_fleet {
     engine_sim::fleet::CommandTransport commands;
     engine_sim::fleet::PcmTransport pcm;
     engine_sim::fleet::Producer producer;
+    engine_sim::fleet::Snapshots snapshots;
 };
 
 namespace engine_sim::fleet {

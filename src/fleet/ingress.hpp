@@ -65,6 +65,7 @@ private:
 
 struct LaneIdentity {
     std::uint64_t generation = 0;
+    std::uint64_t cellGeneration = 0;
     std::uint32_t cell = no_cell;
 };
 struct LaneCredits {
@@ -79,7 +80,7 @@ struct CommandTransport {
     std::array<LaneCredits, 8> lanes{};
     std::atomic<std::uint64_t> submitted{0};
     std::atomic<std::uint64_t> sealed{0};
-    std::uint64_t lastSequence = 0, lastFrame = 0, bucket = 0;
+    std::uint64_t lastSequence = 0, lastFrame = 0, bucket = 0, rejections = 0;
     std::size_t outstanding = 0;
     unsigned inBucket = 0, ordinaryInBucket = 0;
     bool overlap = false;

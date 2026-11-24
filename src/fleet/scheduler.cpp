@@ -12,6 +12,7 @@ void Voice::attachTimeline(es_rt_id id, TimelineTrace observer, void *context) n
         auto &voice = *static_cast<Voice *>(source);
         if (voice.requestedSequence == voice.latchedSequence) return;
         voice.latchedSequence = voice.requestedSequence;
+        voice.applied = voice.requested;
         voice.latchFrame = voice.renderOrigin + (frame - voice.localOrigin);
         voice.latchTick = tick;
         if (voice.trace) voice.trace(voice.traceContext,
@@ -20,6 +21,7 @@ void Voice::attachTimeline(es_rt_id id, TimelineTrace observer, void *context) n
 }
 
 void Voice::request(es_rt_vector vector, std::uint64_t sequence, std::uint64_t frame) noexcept {
+    requested = vector;
     requestedSequence = sequence;
     requestedFrame = frame;
     runtime.setControls({sizeof(es_controls), ES_ABI_V2, vector.ignition, vector.starter,
@@ -58,6 +60,7 @@ std::int32_t Scheduler::apply(const es_rt_event &event) noexcept {
         auto &voice = *cell.voice;
         voice.attachTimeline(lane.id, observer, traceContext);
         voice.request(voice.initial, event.sequence, event.frame);
+        voice.lastSequence = event.sequence;
         observeApply(event, &voice, lane.id);
         return ES_RT_OK;
     }
@@ -66,13 +69,14 @@ std::int32_t Scheduler::apply(const es_rt_event &event) noexcept {
     if (lane.cell == no_cell || lane.id.generation != event.voice.generation) return ES_RT_STALE;
     auto &voice = *fleet.cells[lane.cell].voice;
     if (event.kind == ES_RT_STOP && event.duration_ms == 0) {
+        voice.lastSequence = event.sequence;
         observeApply(event, &voice, lane.id);
         lane = {};
         return ES_RT_OK;
     }
-    if (lane.failed || voice.runtime.telemetry().state != ES_READY) return ES_RT_STATE;
+    if (voice.fault != ES_RT_OK || voice.runtime.telemetry().state != ES_READY) return ES_RT_STATE;
     if (event.kind == ES_RT_GAIN) {
-        lane.gain = event.gain;
+        voice.gain = event.gain;
     } else if (event.kind == ES_RT_VECTOR) {
         if ((voice.mode == ES_RT_FREE && event.physical.driven_rpm != 0) ||
             (voice.mode == ES_RT_DRIVEN && event.physical.starter)) return ES_RT_UNSUPPORTED;
@@ -81,23 +85,47 @@ std::int32_t Scheduler::apply(const es_rt_event &event) noexcept {
     } else {
         return ES_RT_UNSUPPORTED;
     }
+    voice.lastSequence = event.sequence;
     observeApply(event, &voice, lane.id);
     return ES_RT_OK;
+}
+
+void Scheduler::snapshot(es_rt_snapshot &out) const noexcept {
+    out = {};
+    out.size = sizeof(out);
+    out.abi = ES_RT_V1;
+    out.lanes = fleet.config.lanes;
+    out.epoch = fleet.config.epoch;
+    out.generated = next;
+    for (std::size_t index = 0; index < fleet.config.lanes; ++index) {
+        const auto &lane = lanes[index];
+        if (lane.cell == no_cell) {
+            auto &vacant = out.lane[index];
+            vacant.state = ES_RT_VACANT;
+            vacant.requested_frame = ES_RT_NO_FRAME;
+            vacant.latch_frame = ES_RT_NO_FRAME;
+            vacant.latch_tick = ES_RT_NO_FRAME;
+        } else {
+            out.lane[index] = fleet.cells[lane.cell].voice->laneInfo(lane.id, ES_RT_PLAY);
+        }
+    }
 }
 
 void Scheduler::renderRange(ScheduledTile &output, std::uint32_t begin, std::uint32_t end) {
     if (begin == end) return;
     for (std::size_t index = 0; index < fleet.config.lanes; ++index) {
-        auto &lane = lanes[index];
-        if (lane.cell == no_cell || lane.failed) continue;
+        const auto &lane = lanes[index];
+        if (lane.cell == no_cell) continue;
         auto &voice = *fleet.cells[lane.cell].voice;
-        if (voice.runtime.telemetry().state != ES_READY) continue;
+        if (voice.fault != ES_RT_OK || voice.runtime.telemetry().state != ES_READY) continue;
         auto *destination = output.stem[index].data() + begin;
         std::uint32_t written = 0;
         try {
-            lane.failed = voice.renderAt(output.first + begin, destination, end - begin, written) != ProcessingStatus::ok;
+            const auto status = voice.renderAt(output.first + begin, destination, end - begin, written);
+            if (status != ProcessingStatus::ok)
+                voice.fault = status == ProcessingStatus::render_capacity ? ES_RT_CAPACITY : ES_RT_FAULT;
         } catch (...) {
-            lane.failed = true;
+            voice.fault = ES_RT_INTERNAL;
         }
         // The initialized suffix remains silent for a failed voice.
     }

@@ -112,6 +112,32 @@ later spans.
 
 Stop and drain the host callback before calling `es_rt_quiesce`. Quiesce joins
 the producer even if no further frames will be consumed. Create a new fleet
-with a fresh epoch to restart. The current preview releases detached cells
-when the owner is destroyed. Cell collection, snapshot delivery and lifecycle
-envelopes are pending.
+with a fresh epoch to restart. Lifecycle envelopes are pending.
+
+## Observing voices and reclaiming cells
+
+`es_rt_poll_snapshot` takes the oldest available snapshot of a completed
+quantum. It includes the generation, requested and physically latched control
+vectors, tick counts and measured state. Its `generated` field identifies the
+audio position covered by that snapshot. The audio driver's presentation
+position is a separate observation.
+
+The producer retains up to 16 snapshots. When the queue fills it drops new
+snapshots while PCM and commands continue. Each new snapshot carries the
+cumulative number dropped so far. `es_rt_get_transport` reports the current
+drop count. Drain the queue when observation age matters. Command results
+and returned cells remain available while snapshots are being dropped.
+
+Poll command results for terminal status and completion frames. Use
+`es_rt_collect` to take a returned cell and obtain its historical token and
+final voice observation. Collection destroys the engine on the coordinator
+thread, freeing its cell for a future voice. The returned token identifies
+the old engine. A rejected or detached voice remains in its cell until
+collected. Use `es_rt_discard` for a token that you prepared and never submitted.
+
+For shutdown, stop host callbacks and wait for them to return, then call
+`es_rt_quiesce` on the coordinator. The producer joins and pending commands
+receive terminal cancellation receipts. The settled difference between `G`
+and `D`, when positive, counts generated frames abandoned at shutdown. Drain
+snapshots, receipts and returned cells as needed, discard any untransferred
+tokens, and destroy the fleet after all users are done.

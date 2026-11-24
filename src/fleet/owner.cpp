@@ -10,7 +10,7 @@ namespace engine_sim::fleet {
 Voice::Voice(const es_config &config, const es_rt_voice_config &settings,
              assembly::FleetCapacity estimate, json_runtime::PreparedModel graph)
     : runtime(config), capacity(estimate), initial(settings.initial), controlsPolicy(settings.controls_policy),
-      mode(settings.mode) {
+      mode(settings.mode), requested(settings.initial) {
     runtime.adoptSession(std::move(graph.session), std::move(graph.recipe), config.mode, false, {});
     const auto *system = runtime.m_session->prepared.session->simulator->getSystem();
     auto &actual = capacity.assembled;
@@ -24,6 +24,38 @@ Voice::Voice(const es_config &config, const es_rt_voice_config &settings,
         throw SimulationFault("Final voice graph differs from its admitted solver dimensions");
     drivenLimitRpm = runtime.telemetry().driven_limit_rpm;
 }
+
+es_rt_lane_info Voice::laneInfo(es_rt_id id, std::uint32_t state) const noexcept {
+    const auto &raw = runtime.telemetry();
+    es_rt_lane_info info{};
+    info.voice = id;
+    info.state = fault == ES_RT_OK ? state : static_cast<std::uint32_t>(ES_RT_FAILED);
+    info.fault = fault;
+    info.frames = raw.frames;
+    info.ticks = raw.ticks;
+    info.native_frames = raw.native_frames;
+    info.last_sequence = lastSequence;
+    info.requested_frame = requestedFrame;
+    info.last_latched_sequence = latchedSequence;
+    info.latch_frame = latchFrame;
+    info.latch_tick = latchTick;
+    info.requested = requested;
+    info.applied = applied;
+    info.measured_rpm = raw.measured_rpm;
+    info.cycle_rad = raw.cycle_rad;
+    info.plate_angle_rad = raw.plate_angle_rad;
+    info.load_reaction_nm = raw.load_reaction_nm;
+    info.drive_reaction_nm = raw.drive_reaction_nm;
+    info.gain = gain;
+    info.gate = info.state == ES_RT_PLAY ? 1. : 0.;
+    return info;
+}
+
+void returnCell(Cell &cell) noexcept {
+    cell.finalInfo = cell.voice->laneInfo(cell.identity, ES_RT_VACANT);
+    cell.state.store(CellState::returned, std::memory_order_release);
+}
+
 }
 
 namespace {
@@ -194,7 +226,8 @@ std::int32_t ES_RT_CALL es_rt_create(const es_rt_config *input, es_rt_fleet **ou
             return report(detail, ES_RT_CAPACITY, ES_RT_DIAG_PROFILE, "Fixed fleet storage exceeds capacity");
         auto owner = std::make_unique<es_rt_fleet>(config, *cells);
         if (!owner->commands.lockFree() || !owner->pcm.lockFree() ||
-            !owner->producer.phase.is_lock_free() || !owner->producer.generated.is_lock_free())
+            !owner->producer.phase.is_lock_free() || !owner->producer.generated.is_lock_free() ||
+            !owner->snapshots.lockFree())
             return report(detail, ES_RT_UNSUPPORTED, ES_RT_DIAG_PROFILE, "Fleet transport atomics are not lock-free");
         for (std::size_t index = 0; index < *cells; ++index) {
             const auto &cell = owner->cells[index];
@@ -235,6 +268,21 @@ std::int32_t ES_RT_CALL es_rt_discard(es_rt_fleet *fleet, es_rt_token token) {
     --fleet->prepared;
     cell->state.store(CellState::free, std::memory_order_release);
     return ES_RT_OK;
+}
+
+std::int32_t ES_RT_CALL es_rt_collect(es_rt_fleet *fleet, es_rt_token *out, es_rt_lane_info *info) {
+    using namespace engine_sim::fleet;
+    if (!fleet || !out || !info) return ES_RT_INVALID;
+    for (std::size_t i = 0; i < fleet->cellCount; ++i) {
+        auto &cell = fleet->cells[i];
+        if (cell.state.load(std::memory_order_acquire) != CellState::returned) continue;
+        *out = {fleet->config.epoch, cell.generation.load(std::memory_order_relaxed), static_cast<std::uint32_t>(i), 0};
+        *info = cell.finalInfo;
+        cell.voice.reset();
+        cell.state.store(CellState::free, std::memory_order_release);
+        return ES_RT_OK;
+    }
+    return ES_RT_EMPTY;
 }
 
 std::int32_t ES_RT_CALL es_rt_start(es_rt_fleet *fleet, es_rt_diagnostic *detail) {
