@@ -38,6 +38,8 @@ public:
                     throw engine_sim::SimulationFault("Invalid fixed solver row body binding");
             }
         }
+        if (rows == 0)
+            throw engine_sim::SimulationFault("Invalid fixed solver row count");
         if (rows > maximum / rows || static_cast<std::size_t>(rows) >
                 std::numeric_limits<std::size_t>::max() / sizeof(double) / static_cast<std::size_t>(rows))
             throw engine_sim::SimulationFault("Fixed solver matrix extent exceeds addressability");
