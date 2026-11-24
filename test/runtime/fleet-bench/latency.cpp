@@ -41,7 +41,6 @@ Probe capture(const char *entry, const char *root, Stimulus stimulus) {
     options.profile = ES_RT_INTERACTIVE;
     options.max_frames = block;
     options.lanes = 1;
-    options.flags = ES_RT_EXPERIMENTAL;
     options.epoch = 1;
     es_rt_fleet *handle = nullptr;
     auto detail = init<es_rt_diagnostic>();

@@ -158,7 +158,6 @@ bool play(const std::array<const char *, 4> &files, const Device &device, std::u
     configuration.profile = ES_RT_BALANCED;
     configuration.lanes = 2;
     configuration.epoch = epoch;
-    configuration.flags = ES_RT_EXPERIMENTAL;
     auto diagnostic = record<es_rt_diagnostic>();
     es_rt_fleet *fleet = nullptr;
     check(es_rt_create(&configuration, &fleet, &diagnostic) == ES_RT_OK, diagnostic.message);

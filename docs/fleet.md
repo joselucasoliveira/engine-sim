@@ -1,12 +1,13 @@
-# Experimental Fleet
+# Fleet
 
 The build-tree C11 and C++17 interface in `engine_sim/fleet.h` is available through
 `EngineSim::Fleet` when the device-free runtime is enabled. This increment supports
 owner creation, detached voice preparation, ordered commands, one serial
 producer and a planar callback.
 
-Initialize each extensible input with its size and `ES_RT_V1`. For local
-experiments, create an owner with `ES_RT_EXPERIMENTAL` and qualification ID zero.
+Initialize each extensible input with its size and `ES_RT_V1`. Create an owner
+with flags and qualification ID set to zero. Existing clients may continue to
+pass the legacy `ES_RT_EXPERIMENTAL` flag.
 Use a distinct nonzero epoch for each owner and restart. Valid rates are 44100
 and 48000 Hz. The Balanced profile accepts maximum blocks of 64, 128, 256, 512
 or 1024 frames and defaults to 256. Interactive accepts 64 or 128 frames.
@@ -39,7 +40,7 @@ on success. Poll a terminal result once to return its ticket credit.
 The current transport supports 256 ingress entries and 256 tickets. Structural
 events retain eight reserved entries and tickets. A full or otherwise rejected
 submission preserves the event sequence, candidate token and lane reservation.
-The experimental worker supports the configured number of independent lanes
+The worker supports the configured number of independent lanes
 and one replacement at a time.
 
 ## Output frames and numerical ticks
@@ -202,12 +203,12 @@ later frames. Use activation receipts and their effective frame and generation
 to associate older samples with an engine. Hosts can spatialize stems or
 duplicate the reference mix to device channels.
 
-The experimental limit is eight logical lanes with `V + 3` physical cells
+The limit is eight logical lanes with `V + 3` physical cells
 and two preparation credits. A returned cell retains its accounted payload
 until collected. The fixed-storage ceiling is 8 MiB and each live cell is
 bounded to 16 MiB of accounted payload. Thread stacks, allocation overhead,
-transient preparation and device buffers are measured separately. The
-normal profile still requires a measured whole-roster admission record.
+transient preparation and device buffers are measured separately. Real-time
+performance depends on the host, audio backend and active engines.
 
 
 ## Replacement and numerical faults

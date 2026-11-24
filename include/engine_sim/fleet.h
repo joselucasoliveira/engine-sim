@@ -35,7 +35,9 @@ enum { ES_RT_ACTIVATE=1, ES_RT_VECTOR, ES_RT_GAIN, ES_RT_MASTER, ES_RT_MUTE,
        ES_RT_UNMUTE, ES_RT_PAUSE, ES_RT_RESUME, ES_RT_STOP, ES_RT_REPLACE };
 enum { ES_RT_VACANT, ES_RT_ATTACK, ES_RT_PLAY, ES_RT_MUTING, ES_RT_MUTED,
        ES_RT_PAUSING, ES_RT_PAUSED, ES_RT_OVERLAP, ES_RT_STOPPING, ES_RT_FAILED };
-enum { ES_RT_FREE=0, ES_RT_DRIVEN=1, ES_RT_EXPERIMENTAL=1 };
+enum { ES_RT_FREE=0, ES_RT_DRIVEN=1 };
+/* Legacy creation flag. New callers use zero for flags and qualification_id. */
+enum { ES_RT_EXPERIMENTAL=1 };
 typedef struct es_rt_fleet es_rt_fleet;
 typedef struct es_rt_id { uint64_t generation; uint32_t lane, reserved; } es_rt_id;
 typedef struct es_rt_token { uint64_t epoch, generation; uint32_t cell, reserved; } es_rt_token;

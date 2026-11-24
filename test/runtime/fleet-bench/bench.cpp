@@ -231,7 +231,6 @@ public:
         opts.epoch = epoch;
         opts.profile = settings.profile;
         opts.max_frames = settings.block;
-        opts.flags = ES_RT_EXPERIMENTAL;
         es_rt_fleet *value = nullptr;
         auto diagnostic = init<es_rt_diagnostic>();
         require(es_rt_create(&opts, &value, &diagnostic) == ES_RT_OK, diagnostic.message);

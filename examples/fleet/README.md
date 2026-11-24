@@ -23,7 +23,7 @@ The simulated coordinator waits for enough published PCM before each
 call. A device supplies its own cadence. Its callback updates the requested
 frame count and calls `es_rt_process` with the prepared arrays. The host
 drains callbacks before quiescing or destroying the fleet. The examples
-use the experimental profile and report frame counts and signal presence.
+report frame counts and signal presence.
 
 The inputs are the MIT Runtime Single and Runtime Single Heavy Flywheel.
 The latter preserves the original fixture and eight-sample synthetic

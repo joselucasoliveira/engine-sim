@@ -8,17 +8,17 @@
     {
       "source": "examples/fleet/README.md",
       "path": "README.md",
-      "sha256": "39e4fe0890e7449da138f468dc2a6844af3482190f05f94db5f9fd5914c2c296"
+      "sha256": "76e2b0682938f6ae39c3a4c61aabffede050efc5dd57f23f640512643370623b"
     },
     {
       "source": "examples/fleet/host.c",
       "path": "host.c",
-      "sha256": "e0de1606941f391bcde517cbd603733c94cb9d79e51e0bdb3f8d5e8dc618a17e"
+      "sha256": "e0ebcb83ff1e6685738653649cc296ccf50b397eaa20818c768df33b32fceb86"
     },
     {
       "source": "examples/fleet/host.cpp",
       "path": "host.cpp",
-      "sha256": "b45fcfdf3a6f2145b2173578968ee2d3d30d3f230ec1434473eef56cfd895185"
+      "sha256": "6b6540705e47b104b7ba1f13eb8700112654ade939132ee4974cd35e09fee1b1"
     },
     {
       "source": "examples/fleet/verify.py",
@@ -63,7 +63,7 @@
     {
       "source": "examples/fleet/live.cpp",
       "path": "live.cpp",
-      "sha256": "27f58d932f2421e49098d27445f4e9874fb5b18da696d84949a57cfb215c36f2"
+      "sha256": "ceec499fc5616a6c7e218f39b5b2176c1f32c8a7d6a28437b6228968d83a5847"
     }
   ]
 }

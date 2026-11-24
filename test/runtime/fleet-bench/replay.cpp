@@ -134,7 +134,6 @@ public:
         config.profile = ES_RT_BALANCED;
         config.max_frames = block;
         config.lanes = 1;
-        config.flags = ES_RT_EXPERIMENTAL;
         config.epoch = voice.seed;
         es_rt_fleet *handle = nullptr;
         auto diag = native<es_rt_diagnostic>();

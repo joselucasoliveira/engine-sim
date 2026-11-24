@@ -51,15 +51,14 @@ python3 -B "$examples/verify.py" \
 
 The hosts run one FREE engine and one independently controlled DRIVEN
 engine. The verification checks that both stems advance and contain signal,
-then checks stop completion and retirement. It exercises the experimental
-interface with a simulated device-free host.
+then checks stop completion and retirement on a simulated device-free host.
 
 ## Set up the host and callback
 
 1. On the coordinator, call `es_rt_api_version` and initialize the size and
    ABI fields of every versioned record. Create an owner with an unused
-   nonzero epoch, rate, profile, maximum span and lane count. Use
-   `ES_RT_EXPERIMENTAL` with qualification ID zero for the examples.
+   nonzero epoch, rate, profile, maximum span and lane count. Leave `flags`
+   and `qualification_id` at zero.
 2. Prepare each voice from a JSON document with an absolute asset root and
    its own seed, mode and initial controls. Release unsubmitted tokens with
    `es_rt_discard`. Submit frame-zero activations before `es_rt_start`.
@@ -108,13 +107,13 @@ frames, the watermarks are 768 and 1024. The corresponding limits are 1088
 frames or 22.667 ms and 1344 frames or 28 ms. Hardware queue delay, model
 response, DAC presentation and acoustic travel have separate measurements.
 
-## Current admission and device limits
+## Device and timing limits
 
-This release exposes experimental mode. With no verified admission row
-installed, ordinary qualified creation returns `ES_RT_UNSUPPORTED`.
+Interactive and Balanced are available through ordinary Fleet creation.
+Nonzero qualification IDs are reserved and return `ES_RT_UNSUPPORTED`.
 The device-neutral Linux benchmark exercises separate static and shared
 binaries at 48 kHz with an exact two-vehicle workload and a documented
-real-time scheduler. The experimental screens show workload and period
+real-time scheduler. The benchmark screens show workload and period
 limits. Use the [measurement procedure](fleet-performance.md) for the exact
 workload and independent stem checks.
 

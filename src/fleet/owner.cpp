@@ -242,9 +242,10 @@ std::int32_t ES_RT_CALL es_rt_create(const es_rt_config *input, es_rt_fleet **ou
         if (!cells || !config.epoch || (config.profile != ES_RT_BALANCED && config.profile != ES_RT_INTERACTIVE) ||
             !maximum_for_profile(config))
             return report(detail, ES_RT_INVALID, ES_RT_DIAG_PROFILE, "Invalid fleet epoch, profile, lane count or quantum");
-        if (!supported_layout() || (config.rate != 44100 && config.rate != 48000) ||
-            config.flags != ES_RT_EXPERIMENTAL || config.qualification_id != 0)
-            return report(detail, ES_RT_UNSUPPORTED, ES_RT_DIAG_PROFILE, "Fleet profile has no admitted qualification on this build");
+        if (!supported_layout() || (config.rate != 44100 && config.rate != 48000))
+            return report(detail, ES_RT_UNSUPPORTED, ES_RT_DIAG_PROFILE, "Unsupported Fleet platform layout or sample rate");
+        if ((config.flags != 0 && config.flags != ES_RT_EXPERIMENTAL) || config.qualification_id != 0)
+            return report(detail, ES_RT_UNSUPPORTED, ES_RT_DIAG_PROFILE, "Unsupported Fleet flags or qualification ID");
         auto retained = sizeof(es_rt_fleet) + sizeof(engine_sim::fleet::Scheduler) +
             sizeof(engine_sim::fleet::ScheduledTile) + sizeof(engine_sim::fleet::PcmTile);
         if (!assembly::charge_capacity(retained, *cells, sizeof(engine_sim::fleet::Cell), assembly::fleet_storage_limit) ||

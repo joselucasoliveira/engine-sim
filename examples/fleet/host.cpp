@@ -66,7 +66,6 @@ public:
         config.max_frames = maximum;
         config.lanes = 2;
         config.epoch = epoch;
-        config.flags = ES_RT_EXPERIMENTAL;
         auto diagnostic = record<es_rt_diagnostic>();
         es_rt_fleet *fleet = nullptr;
         check(es_rt_create(&config, &fleet, &diagnostic) == ES_RT_OK, diagnostic.message);

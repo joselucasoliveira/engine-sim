@@ -319,7 +319,7 @@ void maxRoster(const Model &single) {
     options.qualification_id = 1;
     es_rt_fleet *unmeasured = nullptr;
     require(es_rt_create(&options, &unmeasured, nullptr) == ES_RT_UNSUPPORTED && !unmeasured,
-            "unmeasured roster entered normal qualification");
+            "reserved Fleet qualification ID accepted");
     auto fleet = create(8);
     std::array<es_rt_event, 8> starts{};
     std::array<unsigned, 8> nonzero{};

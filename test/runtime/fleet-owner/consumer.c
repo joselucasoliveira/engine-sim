@@ -8,7 +8,7 @@
 
 int fleet_c_consumer(const char *entry, const char *root) {
     struct { es_rt_config value; uint64_t tail; } config = {
-        {0, ES_RT_V1, 48000, ES_RT_INTERACTIVE, 128, 2, ES_RT_EXPERIMENTAL, 0, 7}, UINT64_MAX};
+        {0, ES_RT_V1, 48000, ES_RT_INTERACTIVE, 128, 2, 0, 0, 7}, UINT64_MAX};
     struct { es_rt_diagnostic value; uint64_t tail; } diagnostic = {{0}, UINT64_MAX};
     struct { es_rt_voice_config value; uint64_t tail; } voice = {
         {0, ES_RT_V1, ES_RT_FREE, 0, ES_RT_RAW, 0, 403, 0, {0.25, 0.375, 0, 1, 1}}, UINT64_MAX};
@@ -25,10 +25,10 @@ int fleet_c_consumer(const char *entry, const char *root) {
     CHECK(diagnostic.value.stage == ES_RT_DIAG_NONE && diagnostic.value.message[0] == '\0');
     CHECK(diagnostic.tail == UINT64_MAX && config.tail == UINT64_MAX);
     marker = fleet;
-    config.value.flags = 0;
+    config.value.flags = 2;
     CHECK(es_rt_create(&config.value, &marker, &diagnostic.value) == ES_RT_UNSUPPORTED && marker == fleet);
     CHECK(diagnostic.value.stage == ES_RT_DIAG_PROFILE && diagnostic.value.code == ES_RT_UNSUPPORTED);
-    config.value.flags = ES_RT_EXPERIMENTAL;
+    config.value.flags = 0;
     config.value.size = 8;
     CHECK(es_rt_create(&config.value, &marker, &diagnostic.value) == ES_RT_CAPACITY && marker == fleet);
     config.value.size = sizeof(config);

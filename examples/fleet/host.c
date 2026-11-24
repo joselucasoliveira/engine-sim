@@ -230,8 +230,6 @@ int main(int argc, char **argv) {
     cfg.profile = ES_RT_BALANCED;
     cfg.max_frames = block_frames;
     cfg.lanes = voices;
-    /* Functional example independent of installed native qualification rows. */
-    cfg.flags = ES_RT_EXPERIMENTAL;
     es_rt_diagnostic d = {0};
     d.size = sizeof d;
     d.abi = ES_RT_V1;
