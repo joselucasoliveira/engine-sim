@@ -40,7 +40,7 @@ void waitFor(Condition condition, const char *reason) {
 }
 
 Fleet create(unsigned lanes = 1, unsigned maximum = 128) {
-    es_rt_config config{sizeof(config), ES_RT_V1, rate, ES_RT_BALANCED, maximum, lanes, ES_RT_EXPERIMENTAL, 0, epoch};
+    es_rt_config config{sizeof(config), ES_RT_V1, rate, ES_RT_BALANCED, maximum, lanes, 0, 0, epoch};
     es_rt_fleet *result = nullptr;
     require(es_rt_create(&config, &result, nullptr) == ES_RT_OK && result, "create fleet observer");
     return {result, es_rt_destroy};

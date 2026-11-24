@@ -6,8 +6,7 @@ owner creation, detached voice preparation, ordered commands, one serial
 producer and a planar callback.
 
 Initialize each extensible input with its size and `ES_RT_V1`. Create an owner
-with flags and qualification ID set to zero. Existing clients may continue to
-pass the legacy `ES_RT_EXPERIMENTAL` flag.
+with the reserved `flags` and `qualification_id` fields set to zero.
 Use a distinct nonzero epoch for each owner and restart. Valid rates are 44100
 and 48000 Hz. The Balanced profile accepts maximum blocks of 64, 128, 256, 512
 or 1024 frames and defaults to 256. Interactive accepts 64 or 128 frames.

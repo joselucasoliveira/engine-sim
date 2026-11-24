@@ -15,11 +15,11 @@ int main(void) {
     es_runtime *raw = NULL;
     if (es_config_init(ES_ABI_V2, sizeof raw_config, &raw_config, NULL) != ES_OK ||
         es_create(&raw_config, &raw, NULL) != ES_OK) return 2;
-    es_rt_config options = {sizeof options, ES_RT_V1, 44100, ES_RT_BALANCED, 64, 1, ES_RT_EXPERIMENTAL, 0, 317};
+    es_rt_config options = {sizeof options, ES_RT_V1, 44100, ES_RT_BALANCED, 64, 1, 0, 0, 317};
     es_rt_fleet *fleet = NULL;
-    options.flags |= 2;
+    options.flags = 2;
     if (es_rt_create(&options, &fleet, NULL) != ES_RT_UNSUPPORTED || fleet) return 3;
-    options.flags = ES_RT_EXPERIMENTAL;
+    options.flags = 0;
     options.size -= 1;
     if (es_rt_create(&options, &fleet, NULL) != ES_RT_CAPACITY || fleet) return 4;
     options.size += 1;

@@ -30,7 +30,7 @@ void require(bool condition, const char *message) {
     if (!condition) throw std::runtime_error(message);
 }
 Fleet owner() {
-    const es_rt_config config{sizeof(config), ES_RT_V1, default_rate, ES_RT_BALANCED, 64, 2, ES_RT_EXPERIMENTAL, 0, epoch};
+    const es_rt_config config{sizeof(config), ES_RT_V1, default_rate, ES_RT_BALANCED, 64, 2, 0, 0, epoch};
     es_rt_fleet *value = nullptr;
     require(es_rt_create(&config, &value, nullptr) == ES_RT_OK, "Could not create test fleet");
     return Fleet(value, es_rt_destroy);

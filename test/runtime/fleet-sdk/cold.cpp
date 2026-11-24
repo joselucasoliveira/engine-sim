@@ -10,7 +10,7 @@ static_assert(std::atomic<std::uint64_t>::is_always_lock_free, "64-bit lock-free
 static_assert(sizeof(void *) == 8, "64-bit native consumer required");
 
 int main() {
-    const es_rt_config config{sizeof(config), ES_RT_V1, 48000, ES_RT_INTERACTIVE, 128, 1, ES_RT_EXPERIMENTAL, 0, 317};
+    const es_rt_config config{sizeof(config), ES_RT_V1, 48000, ES_RT_INTERACTIVE, 128, 1, 0, 0, 317};
     es_rt_fleet *fleet = nullptr;
     if (es_rt_create(&config, &fleet, nullptr) != ES_RT_OK) return 1;
     if (es_rt_start(fleet, nullptr) != ES_RT_OK) {

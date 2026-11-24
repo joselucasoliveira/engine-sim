@@ -172,7 +172,7 @@ void await(Condition condition, const char *message) {
 
 using Owner = std::unique_ptr<es_rt_fleet, decltype(&es_rt_destroy)>;
 Owner create(std::uint64_t epoch, unsigned maximum = 64) {
-    const es_rt_config setup{sizeof(setup), ES_RT_V1, 44100, ES_RT_BALANCED, maximum, 1, ES_RT_EXPERIMENTAL, 0, epoch};
+    const es_rt_config setup{sizeof(setup), ES_RT_V1, 44100, ES_RT_BALANCED, maximum, 1, 0, 0, epoch};
     es_rt_fleet *fleet = nullptr;
     require(es_rt_create(&setup, &fleet, nullptr) == ES_RT_OK && fleet, "create fresh epoch");
     return {fleet, es_rt_destroy};

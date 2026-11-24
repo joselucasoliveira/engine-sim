@@ -56,9 +56,9 @@ std::string read(const fs::path &path) {
 }
 
 Fleet owner(std::uint64_t epoch, unsigned rate = 48000, unsigned lanes = 2) {
-    const es_rt_config setup{sizeof(setup), ES_RT_V1, rate, ES_RT_BALANCED, 256, lanes, ES_RT_EXPERIMENTAL, 0, epoch};
+    const es_rt_config setup{sizeof(setup), ES_RT_V1, rate, ES_RT_BALANCED, 256, lanes, 0, 0, epoch};
     es_rt_fleet *target = nullptr;
-    require(es_rt_create(&setup, &target, nullptr) == ES_RT_OK, "Experimental fleet creation failed");
+    require(es_rt_create(&setup, &target, nullptr) == ES_RT_OK, "Fleet creation failed");
     return Fleet(target, es_rt_destroy);
 }
 

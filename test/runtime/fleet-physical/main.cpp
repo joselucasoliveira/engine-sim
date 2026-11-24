@@ -154,7 +154,7 @@ void curves() {
 
 Fleet create(unsigned rate, unsigned frequency, bool driven, bool game, const Model &model,
              es_rt_vector first, es_rt_token &token) {
-    const es_rt_config config{sizeof(config), ES_RT_V1, rate, ES_RT_BALANCED, quantum, 1, ES_RT_EXPERIMENTAL, 0, epoch};
+    const es_rt_config config{sizeof(config), ES_RT_V1, rate, ES_RT_BALANCED, quantum, 1, 0, 0, epoch};
     es_rt_fleet *fleet = nullptr;
     require(es_rt_create(&config, &fleet, nullptr) == ES_RT_OK && fleet, "create physical test fleet");
     Fleet owner(fleet, es_rt_destroy);

@@ -40,7 +40,7 @@ void require(bool valid, const char *message) {
 bool same(float left, float right) { return std::memcmp(&left, &right, sizeof(float)) == 0; }
 
 Fleet owner(unsigned lanes = 2) {
-    const es_rt_config config{sizeof(config), ES_RT_V1, rate, ES_RT_BALANCED, q, lanes, ES_RT_EXPERIMENTAL, 0, epoch};
+    const es_rt_config config{sizeof(config), ES_RT_V1, rate, ES_RT_BALANCED, q, lanes, 0, 0, epoch};
     es_rt_fleet *value = nullptr;
     require(es_rt_create(&config, &value, nullptr) == ES_RT_OK && value, "new replacement epoch");
     return {value, es_rt_destroy};

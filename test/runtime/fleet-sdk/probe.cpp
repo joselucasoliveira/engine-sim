@@ -16,7 +16,7 @@ int main() {
     auto arm = reinterpret_cast<void (*)()>(dlsym(RTLD_DEFAULT, "fleet_probe_arm"));
     auto stop = reinterpret_cast<void (*)(fleet_probe_hits *)>(dlsym(RTLD_DEFAULT, "fleet_probe_end"));
     if (!setup || !arm || !stop || !setup()) return 1;
-    es_rt_config config{sizeof(config), ES_RT_V1, 44100, ES_RT_BALANCED, 64, 1, ES_RT_EXPERIMENTAL, 0, 17};
+    es_rt_config config{sizeof(config), ES_RT_V1, 44100, ES_RT_BALANCED, 64, 1, 0, 0, 17};
     es_rt_fleet *fleet = nullptr;
     if (es_rt_create(&config, &fleet, nullptr) != ES_RT_OK) return 2;
     if (es_rt_start(fleet, nullptr) != ES_RT_OK) {

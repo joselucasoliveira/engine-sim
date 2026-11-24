@@ -39,7 +39,7 @@ template<class T>
 bool identical(T a, T b) { return std::memcmp(&a, &b, sizeof(a)) == 0; }
 
 es_rt_config config(unsigned lanes) {
-    return {sizeof(es_rt_config), ES_RT_V1, rate, ES_RT_BALANCED, maximum, lanes, ES_RT_EXPERIMENTAL, 0, epoch};
+    return {sizeof(es_rt_config), ES_RT_V1, rate, ES_RT_BALANCED, maximum, lanes, 0, 0, epoch};
 }
 Owner create(unsigned lanes) {
     auto options = config(lanes);

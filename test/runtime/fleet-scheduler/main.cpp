@@ -19,7 +19,7 @@ void require(bool valid, const char *message) {
     if (!valid) throw std::runtime_error(message);
 }
 Owner create(unsigned rate) {
-    const es_rt_config config{sizeof(config), ES_RT_V1, rate, ES_RT_BALANCED, 64, 1, ES_RT_EXPERIMENTAL, 0, epoch};
+    const es_rt_config config{sizeof(config), ES_RT_V1, rate, ES_RT_BALANCED, 64, 1, 0, 0, epoch};
     es_rt_fleet *value = nullptr;
     require(es_rt_create(&config, &value, nullptr) == ES_RT_OK, "Could not create scheduler owner");
     return Owner(value, es_rt_destroy);

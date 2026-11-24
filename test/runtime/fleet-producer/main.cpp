@@ -58,7 +58,7 @@ void audioThread(Body body) {
 }
 
 Owner create(unsigned rate, unsigned maximum, unsigned profile, unsigned lanes = 2) {
-    es_rt_config config{sizeof(config), ES_RT_V1, rate, profile, maximum, lanes, ES_RT_EXPERIMENTAL, 0, epoch};
+    es_rt_config config{sizeof(config), ES_RT_V1, rate, profile, maximum, lanes, 0, 0, epoch};
     es_rt_fleet *owner = nullptr;
     require(es_rt_create(&config, &owner, nullptr) == ES_RT_OK && owner, "create owner");
     return {owner, es_rt_destroy};

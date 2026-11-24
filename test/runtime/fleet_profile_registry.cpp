@@ -35,21 +35,19 @@ int main() {
                 if (!accepts(config)) return 1;
                 config.qualification_id = 1;
                 if (!refused(config, ES_RT_UNSUPPORTED)) return 2;
-                config.flags = ES_RT_EXPERIMENTAL;
-                if (!refused(config, ES_RT_UNSUPPORTED)) return 3;
                 config.qualification_id = 0;
-                if (!accepts(config)) return 4;
+                config.flags = 1;
+                if (!refused(config, ES_RT_UNSUPPORTED)) return 3;
+                config.flags = 2;
+                if (!refused(config, ES_RT_UNSUPPORTED)) return 4;
                 config.flags = 0;
                 config.rate = 32000;
                 if (!refused(config, ES_RT_UNSUPPORTED)) return 5;
                 config.rate = rate;
-                config.flags = ES_RT_EXPERIMENTAL | 2;
-                if (!refused(config, ES_RT_UNSUPPORTED)) return 6;
-                config.flags = 0;
                 config.max_frames = 129;
-                if (!refused(config, ES_RT_INVALID)) return 7;
+                if (!refused(config, ES_RT_INVALID)) return 6;
             }
         }
     }
-    std::puts("Fleet profiles accept default creation and legacy flags; qualification IDs are reserved");
+    std::puts("Fleet profiles accept default creation. Flags and qualification IDs are reserved.");
 }

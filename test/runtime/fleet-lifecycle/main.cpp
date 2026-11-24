@@ -78,7 +78,7 @@ void synthetic() {
 }
 
 Owner owner(const fs::path &model, const fs::path &root, es_rt_token &token) {
-    const es_rt_config config{sizeof(config), ES_RT_V1, rate, ES_RT_BALANCED, maximum, 1, ES_RT_EXPERIMENTAL, 0, epoch};
+    const es_rt_config config{sizeof(config), ES_RT_V1, rate, ES_RT_BALANCED, maximum, 1, 0, 0, epoch};
     es_rt_fleet *value = nullptr;
     require(es_rt_create(&config, &value, nullptr) == ES_RT_OK && value, "create lifecycle owner");
     Owner fleet(value, es_rt_destroy);
