@@ -25,6 +25,21 @@ The host waits on its monotonic timer and spins for up to the final millisecond
 or half a period, whichever is shorter. The spin belongs to the host timer and
 its CPU time is included in the host report.
 
+On Linux, add `--alsa-output INDEX 'EXACT DEVICE NAME'` to run the same
+matrix against an explicitly selected native ALSA output through PortAudio
+v19. Set `PKG_CONFIG_PATH` if the provider is installed outside the default
+search paths. Use the PortAudio index and full device name, including its
+`(hw:card,device)` suffix. The study sends the original mixed PCM to the
+endpoint for 24 ten-minute runs and may be audible.
+
+The physical host records actual callback sizes and flags, native ADC,
+callback and estimated DAC times, and clock calibration brackets. It checks
+completion against the earliest calibrated DAC timestamp, independently
+counts xruns and verifies the same producer budget, command timing and stem
+replay as the device-neutral host. The device clock and output queue estimates
+cover the selected stream. Acoustic latency requires a separate loopback
+measurement.
+
 Add `--screen-only` to run 60-second rate, block-size and roster screens at
 44.1 and 48 kHz. The variable-block screen repeats the maximum, one half of
 the maximum and three quarters of the maximum. Roster screens use the Single,

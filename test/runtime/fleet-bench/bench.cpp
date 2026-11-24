@@ -22,6 +22,11 @@
 #include <thread>
 #include <vector>
 
+#if defined(ENGINE_SIM_FLEET_BENCH_PORTAUDIO)
+#include <portaudio.h>
+#include <iomanip>
+#endif
+
 #if defined(__linux__)
 #include <pthread.h>
 #include <sched.h>
@@ -73,6 +78,8 @@ struct Settings {
     int audioCore, loadCore;
     bool live, pace, variable, injectMiss, injectStarve, replaySmoke;
     std::string roster = "FD";
+    int device = -1;
+    const char *deviceName = nullptr;
     fs::path ls;
 
     bool free(unsigned lane) const noexcept { return roster[lane] == 'F'; }
@@ -90,6 +97,23 @@ struct ClockSample {
     std::uint32_t zero = 0;
 };
 static_assert(sizeof(ClockSample) == 56);
+
+#if defined(ENGINE_SIM_FLEET_BENCH_PORTAUDIO)
+struct DeviceSample {
+    std::uint64_t first, frames, flags;
+    double adc, current, dac;
+};
+static_assert(sizeof(DeviceSample) == 48);
+constexpr auto xruns = paInputUnderflow | paInputOverflow | paOutputUnderflow | paOutputOverflow;
+
+void checkPa(PaError code, const char *operation) {
+    if (code != paNoError) throw std::runtime_error(std::string(operation) + ": " + Pa_GetErrorText(code));
+}
+struct PortAudio {
+    PortAudio() { checkPa(Pa_Initialize(), "PortAudio initialization"); }
+    ~PortAudio() { (void)Pa_Terminate(); }
+};
+#endif
 
 struct Event {
     enum Kind { vector, prepare, swap, release, gain, activate } kind;
@@ -184,6 +208,16 @@ public:
         : settings(std::move(setup)), agenda(script(settings)), windows((settings.frames + settings.rate - 1) / settings.rate) {
         const auto smallest = settings.variable ? settings.block / 2 : settings.block;
         records.reserve(static_cast<std::size_t>((settings.frames + smallest - 1) / smallest));
+#if defined(ENGINE_SIM_FLEET_BENCH_PORTAUDIO)
+        if (settings.device >= 0) {
+            const auto count = static_cast<std::size_t>(settings.frames / settings.block);
+            records.resize(count);
+            records.clear();
+            deviceRecords.resize(count);
+            deviceRecords.clear();
+        }
+#endif
+
         events.reserve(agenda.size() + 2);
         updates.reserve(settings.live ? static_cast<std::size_t>(settings.frames * 60 / settings.rate + 1) : 0);
         voicePoints.reserve((windows.size() + 16) * settings.roster.size());
@@ -240,15 +274,22 @@ public:
         };
         std::thread audio;
         try {
-            audio = std::thread([&] {
-                try { pump(); }
-                catch (...) {
-                    audioFailure = std::current_exception();
-                    done.store(true, std::memory_order_release);
-                }
-            });
-            coordinate();
-            audio.join();
+#if defined(ENGINE_SIM_FLEET_BENCH_PORTAUDIO)
+            if (settings.device >= 0) {
+                runDevice();
+            } else
+#endif
+            {
+                audio = std::thread([&] {
+                    try { pump(); }
+                    catch (...) {
+                        audioFailure = std::current_exception();
+                        done.store(true, std::memory_order_release);
+                    }
+                });
+                coordinate();
+                audio.join();
+            }
             shutdown();
         } catch (...) {
             shutdown();
@@ -260,7 +301,7 @@ public:
         capture();
         if (audioFailure) std::rethrow_exception(audioFailure);
         if (loadFailure) std::rethrow_exception(loadFailure);
-        return !metrics.deadlineMisses && !metrics.breaks && !metrics.fallback && !metrics.late && !metrics.unsubmitted &&
+        return !deviceXruns && !metrics.deadlineMisses && !metrics.breaks && !metrics.fallback && !metrics.late && !metrics.unsubmitted &&
                !metrics.faults && !metrics.invalidSamples && ended == settings.frames &&
                std::all_of(metrics.hash.begin(), metrics.hash.begin() + settings.roster.size(),
                            [](auto hash) { return hash != 0; });
@@ -443,24 +484,147 @@ private:
         while (Clock::now() < deadline) {}
     }
 
+#if defined(ENGINE_SIM_FLEET_BENCH_PORTAUDIO)
+    static int deviceEntry(const void *, void *output, unsigned long frames,
+                           const PaStreamCallbackTimeInfo *timing, PaStreamCallbackFlags flags, void *context) noexcept {
+        return static_cast<Trial *>(context)->deviceBlock(static_cast<float *>(output), frames, timing, flags);
+    }
+
+    void runDevice() {
+        PortAudio provider;
+        const auto *info = Pa_GetDeviceInfo(settings.device);
+        require(info && info->maxOutputChannels > 0, "Unknown physical output");
+        const auto *host = Pa_GetHostApiInfo(info->hostApi);
+        const std::string_view name(info->name);
+        require(host && host->type == paALSA && name == settings.deviceName &&
+                name.find("(hw:") != std::string_view::npos,
+                "Physical device index must match the explicitly named native ALSA endpoint");
+        PaStreamParameters output{settings.device, 1, paFloat32, info->defaultLowOutputLatency, nullptr};
+        checkPa(Pa_IsFormatSupported(nullptr, &output, settings.rate), "Physical output format");
+        PaStream *handle = nullptr;
+        checkPa(Pa_OpenStream(&handle, nullptr, &output, settings.rate, settings.block, paNoFlag,
+                             deviceEntry, this), "Opening physical endpoint");
+        const auto close = [](PaStream *stream) { (void)Pa_CloseStream(stream); };
+        std::unique_ptr<PaStream, decltype(close)> stream(handle, close);
+        const auto *actual = Pa_GetStreamInfo(handle);
+        require(actual && actual->sampleRate == settings.rate && std::isfinite(actual->outputLatency) &&
+                actual->outputLatency > 0, "Physical output negotiated a different rate or invalid latency");
+        const auto before = ns();
+        const auto backend = Pa_GetStreamTime(handle);
+        const auto after = ns();
+        require(std::isfinite(backend) && backend > 0 && (after - before) * settings.rate < UINT64_C(1000000000),
+                "Cannot calibrate monotonic and PortAudio clocks");
+        deviceUncertainty = (after - before) * .5;
+        deviceOffset = before + deviceUncertainty - backend * 1e9;
+        std::cout << std::setprecision(17)
+                  << "provider=" << Pa_GetVersionText() << " endpoint=" << info->name << " backend=" << host->name
+                  << " rate=" << actual->sampleRate << " requested_period=" << settings.block
+                  << " output_latency_s=" << actual->outputLatency
+                  << " clock_before_ns=" << before << " stream_s=" << backend << " clock_after_ns=" << after
+                  << " offset_ns=" << deviceOffset << " uncertainty_ns=" << deviceUncertainty << std::endl;
+        cpu_set_t previous;
+        require(pthread_getaffinity_np(pthread_self(), sizeof(previous), &previous) == 0, "Read coordinator affinity");
+        bind(settings.audioCore);
+        if (settings.live) metrics.cpuIterations = calibrateAudio(deviceWork);
+        const auto started = Pa_StartStream(handle);
+        require(pthread_setaffinity_np(pthread_self(), sizeof(previous), &previous) == 0, "Restore coordinator affinity");
+        checkPa(started, "Start native callback");
+        coordinate();
+        if (done.load(std::memory_order_acquire) && !stop.load(std::memory_order_acquire)) {
+            const auto deadline = Clock::now() + 1s;
+            // PortAudio must finish draining the last successful device buffer.
+            while (Pa_IsStreamActive(handle) == 1 && Clock::now() < deadline)
+                std::this_thread::sleep_for(100us);
+            require(Pa_IsStreamActive(handle) == 0, "Physical endpoint did not drain");
+        } else {
+            (void)Pa_AbortStream(handle);
+        }
+        const auto endBefore = ns();
+        const auto endBackend = Pa_GetStreamTime(handle);
+        const auto endAfter = ns();
+        std::cout << std::setprecision(17) << "clock_end_before_ns=" << endBefore << " stream_end_s=" << endBackend
+                  << " clock_end_after_ns=" << endAfter << std::endl;
+        stream.reset();
+    }
+#endif
+
+    std::uint64_t calibrateAudio(volatile std::uint64_t &work) const noexcept {
+        if (!settings.live) return 0;
+        constexpr std::uint64_t iterations = 256000;
+        std::array<std::uint64_t, 9> samples{};
+        for (auto &sample : samples) {
+            const auto before = ns();
+            work ^= kernel(before, iterations);
+            sample = ns() - before;
+        }
+        std::sort(samples.begin(), samples.end());
+        const auto elapsed = std::max<std::uint64_t>(samples[samples.size() / 2], 1);
+        return std::clamp<std::uint64_t>(iterations * settings.block * UINT64_C(100000000) /
+            settings.rate / elapsed, 1, 5'000'000);
+    }
+
+#if defined(ENGINE_SIM_FLEET_BENCH_PORTAUDIO)
+    int deviceBlock(float *deviceOutput, unsigned long frames,
+                    const PaStreamCallbackTimeInfo *timing, PaStreamCallbackFlags flags) noexcept {
+        const auto arrived = ns();
+        const auto first = ended;
+        if (stop.load(std::memory_order_acquire)) return paAbort;
+        const auto reject = [&]() noexcept {
+            ++metrics.breaks;
+            done.store(true, std::memory_order_release);
+            return paAbort;
+        };
+        if (!deviceOutput || !timing || records.size() >= records.capacity() ||
+                deviceRecords.size() >= deviceRecords.capacity()) return reject();
+        deviceRecords.push_back({first, frames, flags, timing->inputBufferAdcTime, timing->currentTime, timing->outputBufferDacTime});
+        if (frames != settings.block || !std::isfinite(timing->currentTime) ||
+            !std::isfinite(timing->outputBufferDacTime) || timing->outputBufferDacTime <= timing->currentTime) return reject();
+        if (!first) {
+            metrics.audioRounding = std::fegetround();
+            callbackScheduler = sched_getscheduler(0);
+            sched_param actual{};
+            if (sched_getparam(0, &actual) == 0) callbackPriority = actual.sched_priority;
+            callbackCpu = sched_getcpu();
+            startAt.store(arrived, std::memory_order_release);
+        }
+        auto out = init<es_rt_audio>();
+        out.frames = settings.block;
+        out.capacity = settings.block;
+        out.mix = deviceOutput;
+        for (unsigned lane = 0; lane < settings.roster.size(); ++lane) out.stem[lane] = deviceStem[lane].data();
+        auto reply = init<es_rt_block>();
+        const auto entered = ns();
+        const auto status = es_rt_process(fleet.get(), &out, &reply);
+        const auto returned = ns();
+        if (metrics.cpuIterations) deviceWork = kernel(deviceWork ^ first, metrics.cpuIterations);
+        if (status == ES_RT_OK && reply.first == first && reply.epoch == epoch && reply.pcm_frames == frames)
+            accumulate(first, out.frames, deviceOutput, deviceStem);
+        const auto finished = ns();
+        const auto deadline = static_cast<std::uint64_t>(timing->outputBufferDacTime * 1e9 + deviceOffset - deviceUncertainty);
+        records.push_back({first, arrived, entered, returned, finished, reply.pcm_frames, reply.fallback_frames, status});
+        if (finished > deadline) ++metrics.deadlineMisses;
+        metrics.fallback += reply.fallback_frames;
+        if (status != ES_RT_OK || reply.first != first || reply.epoch != epoch || reply.pcm_frames != frames) return reject();
+        if (flags & xruns) ++deviceXruns;
+        ended += frames;
+        if (ended != settings.frames && !metrics.deadlineMisses && !deviceXruns) return paContinue;
+        metrics.elapsed = finished - startAt.load(std::memory_order_relaxed);
+        metrics.audioFinalRounding = std::fegetround();
+        audioDigest = deviceWork;
+        rusage usage{};
+        if (getrusage(RUSAGE_THREAD, &usage) == 0)
+            metrics.audioCpuNs = (static_cast<std::uint64_t>(usage.ru_utime.tv_sec) + usage.ru_stime.tv_sec) *
+                UINT64_C(1000000000) + (usage.ru_utime.tv_usec + usage.ru_stime.tv_usec) * UINT64_C(1000);
+        done.store(true, std::memory_order_release);
+        return paComplete;
+    }
+#endif
+
     void pump() {
         bind(settings.audioCore);
         metrics.audioRounding = std::fegetround();
         volatile std::uint64_t audioWork = 1;
-        const auto calibration = [&] {
-            if (!settings.live) return UINT64_C(0);
-            constexpr std::uint64_t iterations = 256000;
-            std::array<std::uint64_t, 9> calibrationSamples{};
-            for (auto &sample : calibrationSamples) {
-                const auto t = ns();
-                audioWork ^= kernel(t, iterations);
-                sample = ns() - t;
-            }
-            std::sort(calibrationSamples.begin(), calibrationSamples.end());
-            const auto used = std::max<std::uint64_t>(calibrationSamples[calibrationSamples.size() / 2], 1);
-            return std::clamp<std::uint64_t>(iterations * settings.block * UINT64_C(100000000) /
-                settings.rate / used, 1, 5'000'000);
-        }();
+        const auto calibration = calibrateAudio(audioWork);
         metrics.cpuIterations = calibration;
         std::array<float, maximum> mix{};
         std::array<std::array<float, maximum>, maxLanes> stem{};
@@ -500,22 +664,7 @@ private:
                 ++metrics.breaks;
                 break;
             }
-            for (unsigned i = 0; i < count; ++i) {
-                auto &window = windows[static_cast<std::size_t>((first + i) / settings.rate)];
-                ++window.frames;
-                if (!std::isfinite(mix[i])) ++metrics.invalidSamples;
-                metrics.mixPeak = std::max(metrics.mixPeak, std::abs(mix[i]));
-                if (std::abs(mix[i]) == 1.f) ++metrics.clipped;
-                for (unsigned lane = 0; lane < settings.roster.size(); ++lane) {
-                    const auto sample = stem[lane][i];
-                    if (!std::isfinite(sample)) ++metrics.invalidSamples;
-                    if (sample != 0.f) ++window.nonzero[lane];
-                    std::uint32_t raw;
-                    std::memcpy(&raw, &sample, sizeof(raw));
-                    metrics.hash[lane] = (metrics.hash[lane] ^ raw) * digestPrime;
-                    window.hash[lane] = (window.hash[lane] ^ raw) * digestPrime;
-                }
-            }
+            accumulate(first, count, mix.data(), stem);
             first += count;
             ended = first;
             if (metrics.deadlineMisses) break;
@@ -533,9 +682,43 @@ private:
 #endif
         done.store(true, std::memory_order_release);
     }
+    void accumulate(std::uint64_t first, unsigned count, const float *mix,
+                    const std::array<std::array<float, maximum>, maxLanes> &stem) noexcept {
+        for (unsigned i = 0; i < count; ++i) {
+            auto &window = windows[static_cast<std::size_t>((first + i) / settings.rate)];
+            ++window.frames;
+            if (!std::isfinite(mix[i])) ++metrics.invalidSamples;
+            metrics.mixPeak = std::max(metrics.mixPeak, std::abs(mix[i]));
+            if (std::abs(mix[i]) == 1.f) ++metrics.clipped;
+            for (unsigned lane = 0; lane < settings.roster.size(); ++lane) {
+                const auto sample = stem[lane][i];
+                if (!std::isfinite(sample)) ++metrics.invalidSamples;
+                if (sample != 0.f) ++window.nonzero[lane];
+                std::uint32_t raw;
+                std::memcpy(&raw, &sample, sizeof(raw));
+                metrics.hash[lane] = (metrics.hash[lane] ^ raw) * digestPrime;
+                window.hash[lane] = (window.hash[lane] ^ raw) * digestPrime;
+            }
+        }
+    }
+
     void capture() {
         std::ofstream raw(settings.path / "callbacks.bin", std::ios::binary);
         raw.write(reinterpret_cast<const char *>(records.data()), static_cast<std::streamsize>(records.size() * sizeof(ClockSample)));
+#if defined(ENGINE_SIM_FLEET_BENCH_PORTAUDIO)
+        if (settings.device >= 0) {
+            std::ofstream timestamps(settings.path / "device.bin", std::ios::binary);
+            timestamps.write(reinterpret_cast<const char *>(deviceRecords.data()),
+                             static_cast<std::streamsize>(deviceRecords.size() * sizeof(DeviceSample)));
+            std::ofstream summary(settings.path / "device.tsv");
+            summary << std::setprecision(17) << "offset_ns " << deviceOffset << '\n'
+                    << "uncertainty_ns " << deviceUncertainty << '\n'
+                    << "xruns " << deviceXruns << '\n' << "audio_cpu " << callbackCpu << '\n'
+                    << "audio_scheduler " << callbackScheduler << '\n' << "audio_priority " << callbackPriority << '\n';
+            require(timestamps && summary, "Write native physical timestamp evidence");
+        }
+#endif
+
         std::ofstream actions(settings.path / "events.tsv");
         actions << "sequence\tkind\tframe\ttrigger\tsampled\tD\tsubmit\treason\tapplied\tended\treaped\tlane\tvoice\tnext"
                    "\tdemand\tload\trpm\tignition\tstarter\tgain\n";
@@ -615,6 +798,14 @@ private:
     const std::vector<Event> agenda;
     std::vector<Window> windows;
     std::vector<ClockSample> records;
+#if defined(ENGINE_SIM_FLEET_BENCH_PORTAUDIO)
+    std::vector<DeviceSample> deviceRecords;
+    std::array<std::array<float, maximum>, maxLanes> deviceStem{};
+    std::uint64_t deviceWork = 1;
+    int callbackCpu = -1, callbackScheduler = -1, callbackPriority = -1;
+    double deviceOffset = 0., deviceUncertainty = 0.;
+#endif
+
     std::vector<LoggedEvent> events;
     std::vector<GameUpdate> updates;
     std::vector<VoicePoint> voicePoints;
@@ -623,7 +814,7 @@ private:
     std::array<bool, maxLanes> seenFault{};
     std::array<std::uint64_t, maxLanes> lastGeneration{}, lastSecond{};
     Metrics metrics;
-    std::uint64_t ended = 0, audioDigest = 0, loadDigest = 0;
+    std::uint64_t ended = 0, audioDigest = 0, loadDigest = 0, deviceXruns = 0;
     std::uint32_t high = 0;
     std::atomic<std::uint64_t> startAt{0}, generated{0};
     std::atomic<bool> done{false}, stop{false};
@@ -653,6 +844,20 @@ int main(int argc, char **argv) {
                 (variant == "normal" || variant == "unp" || variant == "miss" || variant == "starve" || variant == "variable" ||
                  settings.replaySmoke) &&
                 ((!settings.variable && settings.pace) || !settings.live), "Invalid benchmark workload");
+        if (const auto *device = std::getenv("ES_FLEET_BENCH_DEVICE")) {
+#if defined(ENGINE_SIM_FLEET_BENCH_PORTAUDIO)
+            settings.device = number<int>(device);
+            settings.deviceName = std::getenv("ES_FLEET_BENCH_DEVICE_NAME");
+            require(settings.deviceName && *settings.deviceName, "Supply the exact ALSA device name");
+            require(settings.device >= 0 && variant == "normal" && settings.roster == "FD" &&
+                    settings.frames % settings.block == 0 && settings.rate == 48000 &&
+                    ((settings.profile == ES_RT_INTERACTIVE && settings.block == 128) ||
+                     (settings.profile == ES_RT_BALANCED && settings.block == 256)), "Invalid physical trial tuple");
+#else
+            (void)device;
+            throw std::runtime_error("Build the installed benchmark with ENGINE_SIM_FLEET_BENCH_PORTAUDIO");
+#endif
+        }
         Trial trial(settings);
         return trial.run() ? 0 : 1;
     } catch (const std::exception &issue) {

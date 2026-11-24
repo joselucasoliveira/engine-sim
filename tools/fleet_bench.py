@@ -20,6 +20,8 @@ import time
 
 
 CALLBACK = struct.Struct("<QQQQQIIiI")
+DEVICE = struct.Struct("<QQQddd")
+DEVICE_XRUN = 0x0f  # PortAudio input/output underflow and overflow flags.
 TILE = struct.Struct("<QQQQQ")
 RATE = 48000
 QUANTUM = 64
@@ -116,7 +118,45 @@ def check_voice_clocks(path, rate, frequencies):
     return {"model_clock_counts": coherent and set(previous) == set(activations), "observed_voice_motion": moving}, len(voices)
 
 
-def collect(path, rate, block, high, frames, live, observed, *, paced=True, variable=False, overlaps=0, roster="FD"):
+def device_evidence(path, callbacks, rate, block):
+    rows = list(DEVICE.iter_unpack((path / "device.bin").read_bytes()))
+    state = {key: float(value) for key, value in
+             (line.split() for line in (path / "device.tsv").read_text().splitlines())}
+    offset = state["offset_ns"]
+    uncertainty = state["uncertainty_ns"]
+    shape = bool(rows) and len(rows) == len(callbacks)
+    clock = math.isfinite(offset) and 0 <= 2 * uncertainty * rate < 10**9
+    previous_current = previous_dac = -math.inf
+    misses = xruns = 0
+    queue, residual, entry, nominal_wake = [], [], [], []
+    for callback, (first, count, flags, adc, current, dac) in zip(callbacks, rows):
+        shape &= first == callback[0] and count == block
+        xruns += bool(flags & DEVICE_XRUN)
+        if not all(math.isfinite(timestamp) for timestamp in (adc, current, dac)):
+            clock = False
+            continue
+        clock &= previous_current <= current < dac and previous_dac < dac
+        if queue:
+            residual.append((dac - previous_dac) * rate - block)
+        previous_current, previous_dac = current, dac
+        queue.append(round((dac - current) * 1e9))
+        entry.append(round(callback[1] - (current * 1e9 + offset)))
+        nominal_wake.append(callback[1] - callbacks[0][1] - first * 10**9 // rate)
+        if math.isfinite(offset) and math.isfinite(uncertainty):
+            misses += callback[4] > int(dac * 1e9 + offset - uncertainty)
+    return misses, {
+        "physical_period_accounting": shape,
+        "physical_no_xruns": not xruns and not state["xruns"],
+        "physical_clock_and_queue": clock,
+    }, {
+        "callbacks": len(rows), "xruns": xruns, "clock": state, "missed_dac_deadlines": misses,
+        "estimated_queued_ns": dist(queue), "dac_step_residual_frames": dist(residual),
+        "entry_from_provider_current_ns": dist(entry), "wake_from_first_nominal_period_ns": dist(nominal_wake),
+    }
+
+
+def collect(path, rate, block, high, frames, live, observed, *, paced=True, variable=False, overlaps=0, roster="FD",
+            physical=False):
     data = counters(path / "counts.tsv")
     callbacks = list(CALLBACK.iter_unpack((path / "callbacks.bin").read_bytes()))
     windows = table(path / "windows.tsv")
@@ -142,7 +182,11 @@ def collect(path, rate, block, high, frames, live, observed, *, paced=True, vari
         consumer.append(leave - enter)
         wake.append(enter - due)
         host.append(done - leave)
-        deadline_misses += paced and bool(callbacks) and done > callbacks[0][1] + expected * 10**9 // rate
+        if not physical:
+            deadline_misses += paced and done > callbacks[0][1] + expected * 10**9 // rate
+    device_checks, device_stats = {}, {}
+    if physical:
+        deadline_misses, device_checks, device_stats = device_evidence(path, callbacks, rate, block)
     criteria = {
         "each_call_headroom": not paced or all(ns * 4 * rate <= count * 10**9 for ns, count in zip(consumer, counts)),
         "callback_frame_accounting": bool(callbacks) and not callback_invalid and data["frames"] == frames == expected,
@@ -156,6 +200,7 @@ def collect(path, rate, block, high, frames, live, observed, *, paced=True, vari
                                        int(e["frame"]) == int(e["applied"]) for e in events),
         "fault_free": data["unexpected_faults"] == 0,
         "overlaps_completed": data["overlap_completions"] >= overlaps,
+        **device_checks,
     }
     tile_time, control_to_publish, control_to_return, control_start, control_reaped, seals = [], [], [], [], [], []
     tiles = []
@@ -218,18 +263,22 @@ def collect(path, rate, block, high, frames, live, observed, *, paced=True, vari
     }
     if (path / "tiles.bin.tsv").is_file():
         stats.update(counters(path / "tiles.bin.tsv"))
+    if physical:
+        stats["physical_device"] = device_stats
     return stats
 
 
 def native_trial(runner, out, models, block, rate, profile, seconds, workload, cores, variant="normal", observed=True,
-                 *, roster="FD", ls=None):
+                 *, roster="FD", ls=None, alsa_output=None):
     out.mkdir()
     trial_keys = ("ES_FLEET_TRACE_FILE", "ES_FLEET_TRACE_TILES", "ES_FLEET_WORKER_CORE", "ES_FLEET_COORDINATOR_CORE",
-                  "ES_FLEET_BENCH_ROSTER", "ES_FLEET_BENCH_LS_MODEL")
+                  "ES_FLEET_BENCH_ROSTER", "ES_FLEET_BENCH_LS_MODEL", "ES_FLEET_BENCH_DEVICE", "ES_FLEET_BENCH_DEVICE_NAME")
     env = {k: v for k, v in os.environ.items() if k not in trial_keys}
     env["ES_FLEET_BENCH_ROSTER"] = roster
     if ls is not None:
         env["ES_FLEET_BENCH_LS_MODEL"] = str(ls)
+    if alsa_output:
+        env["ES_FLEET_BENCH_DEVICE"], env["ES_FLEET_BENCH_DEVICE_NAME"] = alsa_output
     if observed:
         env.update(ES_FLEET_TRACE_FILE=str(out / "tiles.bin"),
                    ES_FLEET_TRACE_TILES=str((rate * seconds + 16 * 1024) // QUANTUM))
@@ -244,11 +293,14 @@ def native_trial(runner, out, models, block, rate, profile, seconds, workload, c
         raise RuntimeError(f"No native counters (exit {rc}). See {out / 'process.log'}")
     row = collect(out, rate, block, block * PROFILES[profile][2], rate * seconds, workload == "live-loaded", observed,
                   paced=variant not in ("unp", "replay-smoke"), variable=variant == "variable",
-                  overlaps=1 if variant == "replay-smoke" else seconds // 60 if "F" in roster else 0, roster=roster)
+                  overlaps=1 if variant == "replay-smoke" else seconds // 60 if "F" in roster else 0, roster=roster,
+                  physical=alsa_output is not None)
     input_models = {"F": models[0], "D": models[2], "L": ls}
     frequencies = [int(json.loads(input_models[kind].read_text())["engine"]["simulation_frequency"]) for kind in roster]
     checks, voice_samples = check_voice_clocks(out, rate, frequencies)
     row["criteria"].update(checks)
+    if alsa_output and cores is not None:
+        row["criteria"]["physical_callback_cpu"] = row["physical_device"]["clock"]["audio_cpu"] == cores[0]
     row["voice_snapshot_count"] = voice_samples
     row["mix_peak"] = struct.unpack("<f", struct.pack("<I", row["mix_peak_float_bits"]))[0]
     row.update(profile=profile, workload=workload, rate=rate, block=block, elapsed_target_s=seconds, native_exit=rc,
@@ -387,7 +439,8 @@ def installed_runner(args, root, linkage, observed, out):
          "--parallel", os.environ.get("R3_JOBS", "4")], log)
     run([cmake, "--install", build, "--config", "Release", "--prefix", prefix, "--component", "FleetSDK"], log)
     run([cmake, "-S", args.source / "test/runtime/fleet-bench", "-B", host, *generator, "-DCMAKE_BUILD_TYPE=Release",
-         *toolchain, f"-DCMAKE_PREFIX_PATH={prefix}"], log)
+         *toolchain, f"-DCMAKE_PREFIX_PATH={prefix}",
+         f"-DENGINE_SIM_FLEET_BENCH_PORTAUDIO={'ON' if observed and args.alsa_output else 'OFF'}"], log)
     run([cmake, "--build", host, "--config", "Release"], log)
     def executable(name):
         result = next((p for p in host.rglob(name + "*") if p.is_file() and p.name in (name, name + ".exe")), None)
@@ -434,6 +487,11 @@ def study(args):
     book = {"protocol": "r3-v1", "tree": tree, "tuple": conditions(cores), "models": [identified[name] for name in paths[:2]],
             "input_sha256": identified, "sdk_builds": {}, "controls": {}, "screens": [], "roster_screens": [],
             "paced_runs": [], "status": "incomplete"}
+    if args.alsa_output:
+        index, name = args.alsa_output
+        book["tuple"].update(host="native physical output", backend="PortAudio ALSA",
+                             alsa_output_index=int(index), alsa_output_name=name,
+                             physical_stream_and_loopback="physical output under test; acoustic delay unmeasured")
     save(summary, book)
     runners = {}
     for linkage in ("static", "shared"):
@@ -495,7 +553,8 @@ def study(args):
                 label = f"{linkage}-{profile.lower()}-{workload}-{trial}"
                 out = args.output / label
                 print(f"Starting {label}: {args.seconds}s", flush=True)
-                row = native_trial(runner, out, models, block, RATE, profile, args.seconds, workload, cores)
+                row = native_trial(runner, out, models, block, RATE, profile, args.seconds, workload, cores,
+                                   alsa_output=args.alsa_output)
                 if row["passed"]:
                     replay = Path(book["sdk_builds"][linkage + "-control"]["replay"])
                     outcome = replay_stems(replay, out, models, row)
@@ -530,11 +589,16 @@ def main():
     parser.add_argument("--seconds", type=int, default=600)
     parser.add_argument("--repeats", type=int, default=3)
     parser.add_argument("--cores", default=os.environ.get("ES_FLEET_BENCH_CORES"), help="A,W,load[,C] physical CPU IDs on Linux")
+    parser.add_argument("--alsa-output", nargs=2, metavar=("INDEX", "NAME"),
+                        help="run the sustained matrix on the exact named native ALSA device through PortAudio")
     args = parser.parse_args()
     for key, value in vars(args).items():
         if isinstance(value, Path):
             setattr(args, key, value.resolve())
     try:
+        if args.alsa_output and (sys.platform != "linux" or args.self_check or args.screen_only or
+                                 int(args.alsa_output[0]) < 0 or "(hw:" not in args.alsa_output[1]):
+            parser.error("--alsa-output requires the Linux sustained matrix and a native PortAudio index and name")
         if args.self_check:
             if not args.runner or not args.latency or not args.replay:
                 parser.error("--self-check requires --runner, --latency and --replay")

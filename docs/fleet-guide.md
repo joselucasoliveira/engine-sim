@@ -118,8 +118,8 @@ real-time scheduler. The experimental screens show workload and period
 limits. Use the [measurement procedure](fleet-performance.md) for the exact
 workload and independent stem checks.
 
-Native Windows and macOS qualification, an equipped physical endpoint,
-release detector coverage for each supported library boundary, hardware
-timing and physical loopback remain pending. A local functional result
-establishes the tested build and workload. The optional standalone PortAudio
-host is documented in the [example guide](../examples/fleet/README.md#optional-live-host).
+Sustained qualification on a physical endpoint, native Windows and macOS
+qualification, platform detector coverage and acoustic loopback remain
+pending. Linux hosts can run the sustained matrix through PortAudio on an
+explicit native ALSA output. The optional short live example is documented in
+the [example guide](../examples/fleet/README.md#optional-live-host).
