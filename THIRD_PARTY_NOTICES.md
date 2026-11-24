@@ -32,3 +32,10 @@ solver MIT notice and the nlohmann JSON MIT notice. Its default code-only
 component includes the engine configuration schema. The optional runtime
 example adds the canonical single-cylinder JSON, its synthetic impulse
 response and their original MIT notice.
+
+## Fleet SDK
+
+The Fleet SDK uses the locked Simple 2D Constraint Solver and JSON for
+Modern C++ under their MIT notices. The separate example component ships
+the original synthetic impulse and two MIT fixture recipes, with their
+licenses.

@@ -190,3 +190,29 @@ cmake --build "$CONSUMER_BUILD" --config Release
 Pass the absolute JSON model path and asset directory as UTF-8 arguments. The C consumer renders 88200 native frames; the C++ consumer renders 96000 frames at 48 kHz. They use caller-owned PCM and release handles only through `es_destroy`. The [integration guide](docs/runtime-guide.md) provides the complete static/shared run commands, optional CLI/ctypes examples, control timeline, compatibility and measured limits. The [ABI reference](docs/runtime-abi.md) specifies controls, counters and recovery. No audio device is opened.
 
 `runtime-test` provides private static unit tests. Shared SDK consumers run in separate processes against the installed shared library. `python3 -B test/runtime/installed_consumer.py --prefix "$SDK_PREFIX" --variant static --out "$FRESH_EXTERNAL_RESULT" --fixture /path/to/canonical-fixture` moves the prefix to a Unicode path and validates both consumers. Select `shared` for a shared installation. An installed example supplies the fixture when `--fixture` is omitted. On Linux, it requires bubblewrap and isolates source, producer build and desktop/device services. Other native hosts record relocation checks separately from source-hidden qualification. Run `RelocatedRuntimeStatic` and `RelocatedRuntimeShared` with `ENGINE_SIM_PROFILE_CACHE` set to exercise both minimal and combined Linux producers.
+
+## Fleet C SDK
+
+A runtime build also provides the `FleetSDK` install component with
+`EngineSimFleet 1.0`, the `EngineSim::Fleet` target and `engine_sim/fleet.h`.
+Use the `runtime-static` or `runtime-shared` preset to select linkage. Install
+each variant into its own prefix. The separate `RuntimeSDK` component can
+share that prefix. Use the corresponding host's x64 or arm64 toolchain
+with 64-bit pointers. On Windows, use x64 MSVC with the DLL CRT (`/MD` in
+Release, `/MDd` in Debug).
+
+Enable `ENGINE_SIM_INSTALL_FLEET_EXAMPLE=ON` at configure time to make the
+`FleetSDKExamples` component available. It includes the standalone consumer
+project and the two MIT fixture models. The `FleetSDK` component contains
+the library, public header, relocation metadata and notices.
+
+```sh
+cmake --preset runtime-static -DENGINE_SIM_INSTALL_FLEET_EXAMPLE=ON
+cmake --build --preset runtime-static --config Release
+cmake --install "$ES_OUT/runtime-static" --prefix /absolute/sdk --config Release --component FleetSDK
+cmake --install "$ES_OUT/runtime-static" --prefix /absolute/sdk --config Release --component FleetSDKExamples
+cmake -S /absolute/sdk/share/engine-sim-fleet/example -B /absolute/consumer-build -DCMAKE_PREFIX_PATH=/absolute/sdk
+cmake --build /absolute/consumer-build --config Release
+```
+
+See the [Fleet example](examples/fleet/README.md) for the model arguments.

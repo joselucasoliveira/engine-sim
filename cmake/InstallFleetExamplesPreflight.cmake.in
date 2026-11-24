@@ -1,0 +1,12 @@
+# Verify all SDK install inputs before the first file is copied.
+function(engine_sim_verify_sdk_input path expected)
+    if (NOT EXISTS "${path}" OR IS_DIRECTORY "${path}" OR IS_SYMLINK "${path}")
+        message(FATAL_ERROR "Missing or unsupported SDK install input: ${path}")
+    endif ()
+    file(SHA256 "${path}" actual)
+    if (NOT actual STREQUAL expected)
+        message(FATAL_ERROR "SDK input changed since configure: ${path}")
+    endif ()
+endfunction()
+
+@engine_sim_sdk_checks@

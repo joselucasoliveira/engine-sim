@@ -1,0 +1,23 @@
+cmake_minimum_required(VERSION 3.25)
+project(FleetInstalledWitness LANGUAGES C CXX)
+find_package(EngineSimFleet 1.0 CONFIG REQUIRED)
+find_package(EngineSimRuntime 2.0 CONFIG REQUIRED)
+
+add_executable(fleet-dual dual.c)
+set_target_properties(fleet-dual PROPERTIES
+    C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO LINKER_LANGUAGE CXX)
+target_link_libraries(fleet-dual PRIVATE EngineSim::Fleet EngineSim::Runtime)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    target_link_options(fleet-dual PRIVATE "LINKER:-Map,${CMAKE_CURRENT_BINARY_DIR}/fleet-dual.map")
+    if (FLEET_SHARED_WITNESS)
+        add_library(fleet-probe-heap SHARED observer.c)
+        add_library(fleet-probe-boundary SHARED boundary.c)
+        target_compile_options(fleet-probe-boundary PRIVATE -fno-builtin)
+        target_link_libraries(fleet-probe-boundary PRIVATE EngineSim::Fleet)
+        add_executable(fleet-shared-probe probe.cpp)
+        target_compile_features(fleet-shared-probe PRIVATE cxx_std_17)
+        target_link_libraries(fleet-shared-probe PRIVATE
+            EngineSim::Fleet fleet-probe-boundary "${CMAKE_DL_LIBS}")
+        target_link_options(fleet-shared-probe PRIVATE "LINKER:-z,now")
+    endif ()
+endif ()

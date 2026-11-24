@@ -1,0 +1,59 @@
+{
+  "files": [
+    {
+      "source": "examples/fleet/CMakeLists.txt",
+      "path": "CMakeLists.txt",
+      "sha256": "ac2c03d00f4098e91d8fe5bc6ab29be689aa1e7a71133ac4a36aa04cdaf64041"
+    },
+    {
+      "source": "examples/fleet/README.md",
+      "path": "README.md",
+      "sha256": "72a8ff9bb153a2fe66c1d9ed3f3b383a6a0d443f03b38173119995ad684d0464"
+    },
+    {
+      "source": "examples/fleet/host.c",
+      "path": "host.c",
+      "sha256": "e0de1606941f391bcde517cbd603733c94cb9d79e51e0bdb3f8d5e8dc618a17e"
+    },
+    {
+      "source": "examples/fleet/host.cpp",
+      "path": "host.cpp",
+      "sha256": "b45fcfdf3a6f2145b2173578968ee2d3d30d3f230ec1434473eef56cfd895185"
+    },
+    {
+      "source": "examples/fleet/verify.py",
+      "path": "verify.py",
+      "sha256": "5188b2fcc48d07128c376ca5a60acf2b27c0d61590ba5a0c116b2d4d7bcf145b"
+    },
+    {
+      "source": "examples/fleet/fixture-heavy/LICENSE",
+      "path": "fixture-heavy/LICENSE",
+      "sha256": "9f64449d4ef2db6b57d6af9d36e5eca5b6de3ece2db14a847ae71d4e0dcbff15"
+    },
+    {
+      "source": "examples/fleet/fixture-heavy/main.json",
+      "path": "fixture-heavy/main.json",
+      "sha256": "91ec13e56b6e759f8d21d4153a2a810ce62a9816393af14c8509ca80bfac7a45"
+    },
+    {
+      "source": "examples/fleet/fixture-heavy/impulse.wav",
+      "path": "fixture-heavy/impulse.wav",
+      "sha256": "97fb8b13c2ed77769f297659db76203f86d90d56201e02df38b5a295a1bb336b"
+    },
+    {
+      "source": "examples/runtime/fixture/LICENSE",
+      "path": "fixture-single/LICENSE",
+      "sha256": "9f64449d4ef2db6b57d6af9d36e5eca5b6de3ece2db14a847ae71d4e0dcbff15"
+    },
+    {
+      "source": "examples/runtime/fixture/main.json",
+      "path": "fixture-single/main.json",
+      "sha256": "e443a08b0c57d24792905423bcae9f5d6d0a25a299d3b438a9350932ef6fbdf9"
+    },
+    {
+      "source": "examples/runtime/fixture/impulse.wav",
+      "path": "fixture-single/impulse.wav",
+      "sha256": "97fb8b13c2ed77769f297659db76203f86d90d56201e02df38b5a295a1bb336b"
+    }
+  ]
+}

@@ -2,6 +2,7 @@
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 set(engine_sim_sdk_version 2.0.0)
+set(engine_sim_sdk_package EngineSimRuntime)
 set(engine_sim_sdk_destination "${CMAKE_INSTALL_LIBDIR}/cmake/EngineSimRuntime")
 set(engine_sim_sdk_private "${CMAKE_INSTALL_LIBDIR}/engine-sim-runtime")
 foreach(directory IN ITEMS CMAKE_INSTALL_LIBDIR CMAKE_INSTALL_BINDIR CMAKE_INSTALL_INCLUDEDIR CMAKE_INSTALL_DATADIR)

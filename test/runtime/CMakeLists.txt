@@ -384,6 +384,16 @@ if (TARGET engine-sim-runtime AND TARGET engine-sim-runtime-json-private)
         "${fleet_fixture}" "${PROJECT_SOURCE_DIR}")
     set_tests_properties(R3FaultPrefixes R3FaultNoUnwind PROPERTIES LABELS r3-fault TIMEOUT 120)
 
+    find_package(Python3 3.9 REQUIRED COMPONENTS Interpreter)
+    foreach(linkage IN ITEMS Static Shared)
+        string(TOLOWER "${linkage}" variant)
+        add_test(NAME FleetInstalled${linkage}
+            COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/fleet_sdk.py"
+                --variant "${variant}" --source "${PROJECT_SOURCE_DIR}"
+                --build "${PROJECT_BINARY_DIR}/fleet-sdk-${variant}-producer")
+        set_tests_properties(FleetInstalled${linkage} PROPERTIES LABELS r3-fleet-sdk TIMEOUT 600)
+    endforeach ()
+
     add_executable(engine-sim-fleet-owner-test fleet-owner/main.cpp fleet-owner/consumer.c)
     target_link_libraries(engine-sim-fleet-owner-test PRIVATE
         EngineSim::Fleet EngineSim::Runtime EngineSim::Config engine-sim-runtime-backend)

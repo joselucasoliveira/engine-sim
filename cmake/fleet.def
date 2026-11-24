@@ -1,0 +1,15 @@
+EXPORTS
+    es_rt_api_version
+    es_rt_create
+    es_rt_prepare_file
+    es_rt_prepare_bytes
+    es_rt_discard
+    es_rt_submit
+    es_rt_poll_result
+    es_rt_poll_snapshot
+    es_rt_get_transport
+    es_rt_start
+    es_rt_process
+    es_rt_quiesce
+    es_rt_collect
+    es_rt_destroy

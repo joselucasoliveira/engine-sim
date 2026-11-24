@@ -31,6 +31,8 @@ impulse with crank inertia set to 0.18 kg·m². See the [fixture license](fixtur
 The compact authored model expands to the canonical fixture whose SHA-256
 is `0dc441e0f9a8d2b740e7fe44d8a2371023f44184a96f972c57dbf49ea531507f`.
 
-The standalone CMake project using `find_package(EngineSimFleet 1.0)`
-requires the installed SDK. The current examples also build in the source
-tree through `EngineSim::Fleet`.
+With `FleetSDKExamples` installed, configure its `example` directory
+against the Fleet SDK prefix. Pass `fixture-single/main.json` and
+`fixture-heavy/main.json` together with their containing directories
+from that installed project. See [SDK installation](../../BUILDING.md)
+when working from a product checkout.

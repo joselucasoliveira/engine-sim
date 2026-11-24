@@ -263,3 +263,16 @@ clock and endpoint evidence.
 The [two-vehicle examples](../examples/fleet/README.md) build C11 and C++17
 hosts against the public Fleet interface and use synthetic licensed assets.
 They model control, audio and shutdown roles without a device backend.
+
+## Installed FleetSDK
+
+Use `find_package(EngineSimFleet 1.0 CONFIG REQUIRED)` and link
+`EngineSim::Fleet` from a standalone C11 or C++17 project. Static consumers
+need a C++ final linker. The imported target carries the required static
+definition, private archives and thread dependency. The installed shared
+variant exports the Fleet C entry points. SDK locations are relative to the
+installation, so the entire prefix can move before configuring the consumer.
+
+Fleet and the v2 `EngineSimRuntime` package can live in one prefix and process.
+Each API owns the handles it creates. Install `FleetSDKExamples` separately
+for the model fixtures and sample hosts. See [build commands](../BUILDING.md).
