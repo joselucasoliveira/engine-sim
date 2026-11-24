@@ -1,0 +1,67 @@
+{
+  "components": {
+    "banks": [
+      {"angle":0.0,"bore":0.08,"cylinders":[{"connecting_rod":"connecting_rod-000001","exhaust_system":"exhaust_system-000001","ignition_wire":"wire-000001","intake":"intake-000001","piston":"piston-000001","primary_length":0.0,"rod_journal":"rod_journal-000001","sound_attenuation":1.0}],"deck_height":0.22,"display_depth":0.5,"head":"head-000001","id":"cylinder_bank-000001","position_x":0.0,"position_y":0.0}
+    ],
+    "camshafts": [
+      {"advance":0.0,"base_radius":0.012,"id":"camshaft-000001","lobe_profile":"function-000002","lobes":[8.203047484373888]},
+      {"advance":0.0,"base_radius":0.012,"id":"camshaft-000002","lobe_profile":"function-000002","lobes":[4.363323129986111]}
+    ],
+    "crankshafts": [
+      {"flywheel_mass":4.0,"friction_torque":1.0,"id":"crankshaft-000001","journals":["rod_journal-000001"],"mass":4.0,"moment_of_inertia":0.18,"position_x":0.0,"position_y":0.0,"tdc":1.570796326795,"throw":0.04}
+    ],
+    "exhausts": [
+      {"audio_volume":1.0,"collector_cross_section_area":0.001,"id":"exhaust_system-000001","impulse_response":"impulse_response-000001","length":0.6,"outlet_flow_rate":0.006370126285097034,"primary_flow_rate":0.004777594713822776,"primary_tube_length":0.4,"velocity_decay":1.0}
+    ],
+    "fuels": [
+      {"burning_efficiency_randomness":0.0,"density":754.9999999999998,"energy_density":48100000.0,"id":"fuel-000001","low_efficiency_attenuation":0.6,"max_burning_efficiency":0.8,"max_dilution_effect":10.0,"max_turbulence_effect":2.0,"molecular_afr":12.5,"molecular_mass":0.1,"name":"Gasoline [Default]","turbulence_to_flame_speed_ratio":"function-000004"}
+    ],
+    "functions": [
+      {"id":"function-000001","kind":"port_flow_28_inh2o","table":"measured-port"},
+      {"id":"function-000002","kind":"cam_samples","filter_radius_deg":20.0,"points":[{"angle_deg":-100.0,"lift_m":0.0},{"angle_deg":-60.0,"lift_m":0.002},{"angle_deg":0.0,"lift_m":0.008},{"angle_deg":60.0,"lift_m":0.002},{"angle_deg":100.0,"lift_m":0.0}]},
+      {"id":"function-000003","kind":"ignition_timing","filter_radius_rpm":1000.0,"points":[{"rpm":0.0,"advance_deg":15.0},{"rpm":6000.0,"advance_deg":20.0}]},
+      {"id":"function-000004","kind":"fuel_flame_speed","filter_radius":5.0,"points":[{"turbulence_speed":0.0,"flame_speed":3.0},{"turbulence_speed":5.0,"flame_speed_multiplier":1.5},{"turbulence_speed":10.0,"flame_speed_multiplier":1.5},{"turbulence_speed":15.0,"flame_speed_multiplier":1.5},{"turbulence_speed":20.0,"flame_speed_multiplier":1.5},{"turbulence_speed":25.0,"flame_speed_multiplier":1.5},{"turbulence_speed":30.0,"flame_speed_multiplier":1.5},{"turbulence_speed":35.0,"flame_speed_multiplier":1.5},{"turbulence_speed":40.0,"flame_speed_multiplier":1.5},{"turbulence_speed":45.0,"flame_speed_multiplier":1.5}]},
+      {"id":"function-000005","kind":"legacy_default_turbulence"}
+    ],
+    "heads": [
+      {"chamber_volume":4e-05,"exhaust_port_flow":"function-000001","exhaust_runner_cross_section_area":0.0008,"exhaust_runner_volume":0.00015,"flip_display":false,"id":"head-000001","intake_port_flow":"function-000001","intake_runner_cross_section_area":0.0008,"intake_runner_volume":0.00015,"valvetrain":"valvetrain-000001"}
+    ],
+    "ignitions": [
+      {"id":"ignition-000001","limiter_duration":0.5,"posts":[{"angle":0.0,"wire":"wire-000001"}],"rev_limit":628.31853,"timing_curve":"function-000003"}
+    ],
+    "impulses": [
+      {"id":"impulse_response-000001","path":"impulse.wav","volume":0.01}
+    ],
+    "intakes": [
+      {"id":"intake-000001","idle_flow_rate":0.0,"idle_throttle_plate_position":0.95,"intake_flow_rate":0.0025480505140388133,"molecular_afr":12.5,"plenum_cross_section_area":0.001,"plenum_volume":0.001,"runner_flow_rate":0.006370126285097034,"runner_length":0.10160000000000001,"velocity_decay":0.25}
+    ],
+    "journals": [
+      {"angle":0.0,"id":"rod_journal-000001"}
+    ],
+    "pistons": [
+      {"blowby":0.0,"compression_height":0.03,"displacement":0.0,"id":"piston-000001","mass":0.4,"wrist_pin_position":0.0}
+    ],
+    "rods": [
+      {"center_of_mass":0.0,"id":"connecting_rod-000001","journals":[],"length":0.15,"mass":0.3,"moment_of_inertia":0.001,"slave_throw":0.0}
+    ],
+    "throttles": [
+      {"gamma":1.0,"id":"throttle-000001","kind":"direct"}
+    ],
+    "valvetrains": [
+      {"exhaust_camshaft":"camshaft-000002","id":"valvetrain-000001","intake_camshaft":"camshaft-000001","kind":"standard"}
+    ],
+    "wires": [
+      {"id":"wire-000001"}
+    ]
+  },
+  "desktop": {"boost_units":"psi","color_background":921618,"color_blue":7851744,"color_foreground":16777215,"color_green":12441705,"color_highlight1":15680837,"color_highlight2":16777215,"color_orange":16023594,"color_pink":15963326,"color_red":15615045,"color_shadow":921618,"color_yellow":16629038,"power_units":"hp","pressure_units":"inHg","speed_units":"mph","start_fullscreen":false,"torque_units":"lb-ft"},
+  "engine": {"banks":["cylinder_bank-000001"],"crankshafts":["crankshaft-000001"],"dyno_hold_step":10.4719755,"dyno_max_speed":628.31853,"dyno_min_speed":104.71975499999999,"fuel":"fuel-000001","hf_gain":0.01,"id":"engine-000001","ignition":"ignition-000001","jitter":0.0,"mean_piston_speed_to_turbulence":"function-000005","name":"Runtime Single Heavy Flywheel","noise":0.0,"redline":628.31853,"simulation_frequency":10000.0,"starter_speed":62.831852999999995,"starter_torque":40.0,"throttle":"throttle-000001"},
+  "format_version": 2,
+  "initialization": {"chamber_kelvin":298.15,"chamber_pa":101325,"crankcase_pa":101325,"profile":"r2-piston-v1"},
+  "selected_engine": "engine-000001",
+  "transmission": {"gears":[2.97,2.07,1.43,1.0,0.84,0.56],"max_clutch_torque":1355.817456},
+  "vehicle": {"cross_sectional_area":3.344509440000001,"diff_ratio":3.42,"drag_coefficient":0.25,"mass":1597.0,"rolling_resistance":2000.0,"tire_radius":0.254},
+  "port_flow_tables": [
+    {"id":"measured-port","lift_unit":"m","filter_radius":0.002,"points":[{"lift":0.0,"flow_scfm":0.0},{"lift":0.004,"flow_scfm":50.0},{"lift":0.008,"flow_scfm":90.0}]}
+  ]
+}

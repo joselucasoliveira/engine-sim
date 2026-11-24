@@ -259,3 +259,7 @@ can continue publishing a complete bus around an isolated numerical fault.
 A broken Fleet transport reports its verified prefix and fills the remainder
 of the callback with silence. Actual device recovery timing needs the host's
 clock and endpoint evidence.
+
+The [two-vehicle examples](../examples/fleet/README.md) build C11 and C++17
+hosts against the public Fleet interface and use synthetic licensed assets.
+They model control, audio and shutdown roles without a device backend.

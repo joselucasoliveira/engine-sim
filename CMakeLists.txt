@@ -584,6 +584,16 @@ if (ENGINE_SIM_INSTALL_CONFIG_SDK)
 endif ()
 if (ENGINE_SIM_BUILD_RUNTIME_EXAMPLES)
     add_subdirectory(examples/runtime)
+    add_subdirectory(examples/fleet)
+    if (BUILD_TESTING AND TARGET engine-sim-config-roundtrip)
+        find_package(Python3 3.9 REQUIRED COMPONENTS Interpreter)
+        add_test(NAME FleetHostNeutral COMMAND "${Python3_EXECUTABLE}" -B "${PROJECT_SOURCE_DIR}/examples/fleet/verify.py"
+            "$<TARGET_FILE:engine-sim-fleet-c-host>" "$<TARGET_FILE:engine-sim-fleet-cxx-host>"
+            "${PROJECT_SOURCE_DIR}/examples/runtime/fixture/main.json"
+            "${PROJECT_SOURCE_DIR}/examples/fleet/fixture-heavy/main.json"
+            --expand "$<TARGET_FILE:engine-sim-config-roundtrip>")
+        set_tests_properties(FleetHostNeutral PROPERTIES LABELS r3-fleet-host TIMEOUT 180)
+    endif ()
 endif ()
 if (TARGET engine-sim-render-legacy-test AND TARGET engine-sim-render AND TARGET engine-sim-config-roundtrip)
     find_package(Python3 3.9 COMPONENTS Interpreter REQUIRED)
