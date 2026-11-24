@@ -5,6 +5,7 @@
 #include "capacity.hpp"
 #include "ingress.hpp"
 #include "json_session.hpp"
+#include "pcm.hpp"
 #include "runtime.hpp"
 
 #include <atomic>
@@ -72,13 +73,15 @@ struct Cell {
 // The host gives one non-audio control owner exclusive access to this surface.
 struct es_rt_fleet {
     es_rt_fleet(es_rt_config setup, std::size_t count)
-        : config(setup), cellCount(count), cells(std::make_unique<engine_sim::fleet::Cell[]>(count)) {}
+        : config(setup), cellCount(count), cells(std::make_unique<engine_sim::fleet::Cell[]>(count)),
+          pcm(engine_sim::fleet::PcmTransport::slotCount(setup)) {}
 
     es_rt_config config;
     std::size_t cellCount;
     std::unique_ptr<engine_sim::fleet::Cell[]> cells;
     std::size_t prepared = 0;
     engine_sim::fleet::CommandTransport commands;
+    engine_sim::fleet::PcmTransport pcm;
 };
 
 namespace engine_sim::fleet {

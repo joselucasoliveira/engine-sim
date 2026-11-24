@@ -425,6 +425,16 @@ if (TARGET engine-sim-runtime AND TARGET engine-sim-runtime-json-private)
     add_test(NAME FleetRawScheduling COMMAND engine-sim-fleet-scheduler-test parity "${fleet_fixture}")
     set_tests_properties(FleetEventTimeline FleetRawScheduling PROPERTIES LABELS r3-timeline TIMEOUT 90)
 
+    add_executable(engine-sim-fleet-process-span-test fleet-process/span.cpp)
+    target_link_libraries(engine-sim-fleet-process-span-test PRIVATE
+        EngineSim::Fleet EngineSim::Config engine-sim-runtime-backend Threads::Threads)
+    target_include_directories(engine-sim-fleet-process-span-test PRIVATE
+        "${PROJECT_SOURCE_DIR}/src/fleet" "${PROJECT_SOURCE_DIR}/modules/assembly/src"
+        "${PROJECT_SOURCE_DIR}/src/runtime")
+    target_compile_features(engine-sim-fleet-process-span-test PRIVATE cxx_std_17)
+    engine_sim_diagnose(engine-sim-fleet-process-span-test TRUE)
+    add_test(NAME FleetProcessSpan COMMAND engine-sim-fleet-process-span-test)
+    set_tests_properties(FleetProcessSpan PROPERTIES LABELS r3-fleet-process TIMEOUT 90)
 endif ()
 
 if (TARGET engine-sim-runtime AND TARGET engine-sim-config-roundtrip AND ENGINE_SIM_BUILD_RUNTIME_EXAMPLES)
@@ -456,7 +466,7 @@ endif ()
 # GNU ELF observers cover diagnostic-only linked symbols on the LP64 ABI.
 if (TARGET engine-sim-runtime AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SIZEOF_VOID_P EQUAL 8
         AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|aarch64)$"
-        AND CMAKE_CXX_COMPILER_ID MATCHES "^(GNU|Clang)$" AND ENGINE_SIM_SANITIZER STREQUAL "none")
+        AND CMAKE_CXX_COMPILER_ID MATCHES "^(GNU|Clang)$" AND (ENGINE_SIM_SANITIZER STREQUAL "none" OR ENGINE_SIM_SANITIZER STREQUAL "thread"))
     find_package(Python3 3.9 REQUIRED COMPONENTS Interpreter)
     add_subdirectory(realtime-probe)
 endif ()

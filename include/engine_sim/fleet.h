@@ -97,6 +97,9 @@ ES_RT_DECL(int32_t, es_rt_prepare_bytes, (es_rt_fleet *, const es_rt_voice_confi
 ES_RT_DECL(int32_t, es_rt_discard, (es_rt_fleet *, es_rt_token));
 ES_RT_DECL(int32_t, es_rt_submit, (es_rt_fleet *, const es_rt_event *));
 ES_RT_DECL(int32_t, es_rt_poll_result, (es_rt_fleet *, uint64_t sequence, es_rt_result *));
+/* One audio owner. Valid nonempty spans always initialize the selected planes.
+ * ES_RT_BROKEN reports the supplied PCM prefix and positive-zero fallback. */
+ES_RT_DECL(int32_t, es_rt_process, (es_rt_fleet *, const es_rt_audio *, es_rt_block *));
 ES_RT_DECL(void, es_rt_destroy, (es_rt_fleet *));
 #undef ES_RT_DECL
 #ifdef __cplusplus

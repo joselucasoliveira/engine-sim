@@ -17,6 +17,37 @@ function(r3_probe_wrap target)
     endforeach()
 endfunction()
 
+if (TARGET engine-sim-fleet-process-span-test)
+    set(process_dir "${CMAKE_CURRENT_SOURCE_DIR}/../fleet-process")
+    add_library(engine-sim-fleet-process-boundary SHARED "${process_dir}/boundary.cpp")
+    add_executable(engine-sim-fleet-process-forbidden-test
+        "${process_dir}/forbidden.cpp" "${process_dir}/boundary.cpp")
+    target_compile_definitions(engine-sim-fleet-process-boundary PRIVATE ES_PROCESS_BOUNDARY=fleetProcessShared)
+    target_compile_definitions(engine-sim-fleet-process-forbidden-test PRIVATE ES_PROCESS_BOUNDARY=fleetProcessDirect)
+    target_link_options(engine-sim-fleet-process-boundary PRIVATE "LINKER:-Bsymbolic-functions")
+    add_dependencies(engine-sim-fleet-process-forbidden-test engine-sim-fleet-process-boundary)
+    target_link_libraries(engine-sim-fleet-process-forbidden-test PRIVATE "${CMAKE_DL_LIBS}")
+    target_include_directories(engine-sim-fleet-process-forbidden-test PRIVATE
+        "${PROJECT_SOURCE_DIR}/src/fleet" "${PROJECT_SOURCE_DIR}/modules/assembly/src"
+        "${PROJECT_SOURCE_DIR}/src/runtime")
+    target_link_libraries(engine-sim-fleet-process-forbidden-test PRIVATE EngineSim::Config engine-sim-runtime-backend)
+    foreach(target IN ITEMS engine-sim-fleet-process-boundary engine-sim-fleet-process-forbidden-test)
+        target_include_directories("${target}" PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+        target_link_libraries("${target}" PRIVATE EngineSim::Fleet)
+        target_compile_options("${target}" PRIVATE -fno-builtin)
+        target_link_options("${target}" PRIVATE "LINKER:-z,now")
+        r3_probe_wrap("${target}")
+        engine_sim_diagnose("${target}" TRUE)
+    endforeach()
+    add_test(NAME FleetProcessForbidden COMMAND "${Python3_EXECUTABLE}" -B "${process_dir}/forbidden.py"
+        "$<TARGET_FILE:engine-sim-fleet-process-forbidden-test>" "$<TARGET_FILE:engine-sim-fleet-process-boundary>")
+    set_tests_properties(FleetProcessForbidden PROPERTIES LABELS r3-fleet-process TIMEOUT 90)
+endif ()
+
+if (NOT ENGINE_SIM_SANITIZER STREQUAL "none")
+    return()
+endif ()
+
 if (TARGET engine-sim-fleet-fault-test)
     r3_probe_wrap(engine-sim-fleet-fault-test)
     target_include_directories(engine-sim-fleet-fault-test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")

@@ -186,10 +186,12 @@ std::int32_t ES_RT_CALL es_rt_create(const es_rt_config *input, es_rt_fleet **ou
             config.flags != ES_RT_EXPERIMENTAL || config.qualification_id != 0)
             return report(detail, ES_RT_UNSUPPORTED, ES_RT_DIAG_PROFILE, "Fleet profile has no admitted qualification on this build");
         auto retained = sizeof(es_rt_fleet);
-        if (!assembly::charge_capacity(retained, *cells, sizeof(engine_sim::fleet::Cell), assembly::fleet_storage_limit))
+        if (!assembly::charge_capacity(retained, *cells, sizeof(engine_sim::fleet::Cell), assembly::fleet_storage_limit) ||
+            !assembly::charge_capacity(retained, engine_sim::fleet::PcmTransport::slotCount(config),
+                    sizeof(engine_sim::fleet::PcmTile), assembly::fleet_storage_limit))
             return report(detail, ES_RT_CAPACITY, ES_RT_DIAG_PROFILE, "Fixed fleet storage exceeds capacity");
         auto owner = std::make_unique<es_rt_fleet>(config, *cells);
-        if (!owner->commands.lockFree())
+        if (!owner->commands.lockFree() || !owner->pcm.lockFree())
             return report(detail, ES_RT_UNSUPPORTED, ES_RT_DIAG_PROFILE, "Fleet transport atomics are not lock-free");
         for (std::size_t index = 0; index < *cells; ++index) {
             const auto &cell = owner->cells[index];

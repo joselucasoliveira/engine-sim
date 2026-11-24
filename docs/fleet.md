@@ -57,3 +57,34 @@ To schedule from a host clock, establish a monotonic-time and estimated DAC
 frame pair outside the engine. Convert later times to output frames by rounding
 up, using the fleet sample rate. Establish a fresh mapping after an epoch break
 or a device clock discontinuity.
+
+## Planar audio callback
+
+Only one audio callback may use an owner at a time. Supply separate, naturally
+aligned float arrays for any combination of the mono mix and configured stems.
+Use null pointers for skipped planes and lanes outside the configured count.
+Every supplied array must hold at least `capacity` samples and stay valid for
+the call. Pre-touch the arrays off the audio thread. For example, with two
+configured lanes and a requested maximum of 256 frames:
+
+```c
+float mix[256] = {0}, rear[256] = {0};
+es_rt_audio audio = {sizeof(audio), ES_RT_V1, 128, 256, mix, {0, rear}};
+es_rt_block result = {sizeof(result), ES_RT_V1, 0, 0, 0, 0};
+int32_t status = es_rt_process(fleet, &audio, &result);
+```
+
+The function accepts requests of zero to the configured maximum, with at least
+one selected destination for positive frame counts. Zero frames report the
+current position and leave the transport untouched. A rejected request leaves
+the destinations, timeline and result unchanged. `ES_RT_BROKEN` reports a valid
+request with a verified prefix in `result.pcm_frames` and positive-zero samples
+in each selected plane for the remaining `result.fallback_frames`. Further
+valid requests in that epoch advance the submission position and return
+silence. Quiesce the callback before releasing its owner.
+
+Balanced uses `H = 4 * max_frames` and Interactive uses `H = 3 * max_frames`.
+Creation reserves `H / 64 + 2` tagged tiles, each with one 64-frame mix and
+eight 64-frame stems. At Balanced 256 this is 18 tiles, with 41,760 bytes of
+tile payload and tags. The current producer is a test fixture that writes
+tagged shape samples. Engine priming and host/device qualification are pending.
