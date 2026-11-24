@@ -60,7 +60,7 @@ es_rt_lane_info Voice::laneInfo(es_rt_id id, std::uint32_t state) const noexcept
     info.load_reaction_nm = raw.load_reaction_nm;
     info.drive_reaction_nm = raw.drive_reaction_nm;
     info.gain = gain;
-    info.gate = info.state == ES_RT_PLAY ? 1. : 0.;
+    info.gate = state == ES_RT_VACANT ? 0. : gate;
     return info;
 }
 

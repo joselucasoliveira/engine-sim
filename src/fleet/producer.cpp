@@ -39,7 +39,7 @@ std::int32_t produce(es_rt_fleet &fleet, const std::atomic<bool> &stopping,
                     double mixed = 0;
                     for (std::uint32_t lane = 0; lane < fleet.config.lanes; ++lane)
                         mixed += output.stem[lane][frame];
-                    output.mix[frame] = static_cast<float>(std::clamp(mixed * scheduler.masterGain(), -1., 1.));
+                    output.mix[frame] = static_cast<float>(std::clamp(mixed * rendered.master[frame], -1., 1.));
                 }
                 if (!fleet.pcm.tryPublish(output)) return fleet.pcm.broken() ? ES_RT_BROKEN : ES_RT_INTERNAL;
                 generated = scheduler.generated();
@@ -61,10 +61,8 @@ std::int32_t produce(es_rt_fleet &fleet, const std::atomic<bool> &stopping,
 }
 
 std::int32_t producerCommand(const es_rt_fleet &fleet, const es_rt_event &event) noexcept {
-    if (event.kind == ES_RT_VECTOR) return ES_RT_OK;
-    if (event.duration_ms != 0) return ES_RT_UNSUPPORTED;
-    if (event.kind == ES_RT_STOP) return ES_RT_OK;
-    if (event.kind != ES_RT_ACTIVATE) return ES_RT_UNSUPPORTED;
+    if (event.kind == ES_RT_REPLACE) return ES_RT_UNSUPPORTED;
+    if (event.kind != ES_RT_ACTIVATE) return ES_RT_OK;
     for (std::size_t lane = 0; lane < fleet.config.lanes; ++lane) {
         if (lane != event.next_voice.lane && fleet.commands.lanes[lane].current.generation)
             return ES_RT_UNSUPPORTED;

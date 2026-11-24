@@ -39,9 +39,9 @@ on success. Poll a terminal result once to return its ticket credit.
 The current transport supports 256 ingress entries and 256 tickets. Structural
 events retain eight reserved entries and tickets. A full or otherwise rejected
 submission preserves the event sequence, candidate token and lane reservation.
-The experimental worker supports one occupied lane, complete physical
-vectors and zero-duration activation or stop. Start rejects a pending command
-outside this subset. While running, unsupported commands are rejected at submit.
+The experimental worker supports one occupied lane. Start rejects queued
+replacement commands or activations outside this limit. While running, those
+commands are rejected at submit.
 
 ## Output frames and numerical ticks
 
@@ -134,7 +134,30 @@ later spans.
 
 Stop and drain the host callback before calling `es_rt_quiesce`. Quiesce joins
 the producer even if no further frames will be consumed. Create a new fleet
-with a fresh epoch to restart. Lifecycle envelopes are pending.
+with a fresh epoch to restart.
+
+## Gain and lifecycle
+
+Gain and master are linear amplitude in [0,1]. They default to 1 and 0.5
+respectively. Activation, gain, mute, unmute, pause, resume and stop use a
+5 ms ramp by default. Set `duration_ms` to `ES_RT_DFLT_MS` for the default
+or an integer from 0 to 100. Zero takes effect at the requested output
+frame. A positive duration rounds up to a whole number of output frames.
+An interrupted transition starts from its value at the interruption frame.
+Restating the same target leaves the original endpoint in place.
+
+Mute sets the lane gate to zero while physics, filters and clocks continue.
+Pause fades to zero and then freezes those histories. The lane remembers
+its mute setting while paused. Resume continues from the retained history
+and restores the remembered gate target. Ignition changes combustion at a
+numerical tick, while mechanical sound and previously generated filter
+history may continue. Stop retires the engine at its zero endpoint and
+truncates its filter tail there. A silent gate permits immediate retirement.
+
+Lifecycle tickets complete when their transition reaches its endpoint.
+On interruption, the old ticket reports `ES_RT_INTERRUPTED` and the
+interruption frame. Shutdown preserves an applied frame on a canceled
+transition if the ramp had already begun.
 
 ## Observing voices and reclaiming cells
 

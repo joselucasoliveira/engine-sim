@@ -222,9 +222,12 @@ void horizon(const fs::path &model, unsigned rate) {
 
     start(*fleet);
     require(es_rt_start(fleet.get(), nullptr) == ES_RT_STATE, "start must be one-shot");
-    auto unsupported = event(4, 12000, ES_RT_MASTER);
-    unsupported.gain = .75;
-    require(es_rt_submit(fleet.get(), &unsupported) == ES_RT_UNSUPPORTED, "pending mix feature was admitted");
+    auto unsupported = event(4, 12000, ES_RT_REPLACE);
+    unsupported.voice = physical.voice;
+    unsupported.next_voice = {2, 1, 0};
+    unsupported.candidate = prepare(*fleet, model, rate);
+    require(es_rt_submit(fleet.get(), &unsupported) == ES_RT_UNSUPPORTED, "pending replacement was admitted");
+    require(es_rt_discard(fleet.get(), unsupported.candidate) == ES_RT_OK, "rejected replacement transferred its token");
     const auto primed = observe(*fleet, "primed");
     require(primed.submitted == 0 && primed.generated == high && primed.sealed == high &&
             primed.low_frames == high - maximum && primed.high_frames == high && primed.storage_frames == high + 128,
@@ -362,11 +365,12 @@ void breakInFlight(const fs::path &model) {
 
 void startupChecks(const fs::path &model) {
     auto blocked = create(44100, 64, ES_RT_INTERACTIVE);
-    auto command = event(1, 0, ES_RT_MUTE);
+    auto command = event(2, 0, ES_RT_REPLACE);
     const auto token = prepare(*blocked, model, 44100);
     activate(*blocked, token);
-    command.sequence = 2;
     command.voice = {1, 1, 0};
+    command.next_voice = {2, 1, 0};
+    command.candidate = prepare(*blocked, model, 44100);
     require(es_rt_submit(blocked.get(), &command) == ES_RT_OK, "fixture queued pending feature");
     require(es_rt_start(blocked.get(), nullptr) == ES_RT_UNSUPPORTED &&
             observe(*blocked, "preflight-reject").generated == 0, "startup admitted pending lifecycle");

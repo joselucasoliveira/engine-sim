@@ -40,9 +40,47 @@ void Scheduler::observeApply(const es_rt_event &event, const Voice *voice, es_rt
                                            ES_RT_NO_FRAME, id});
 }
 
-std::int32_t Scheduler::apply(const es_rt_event &event) noexcept {
+Scheduler::~Scheduler() {
+    for (auto &lane : lanes) cancel(lane, ES_RT_CANCELED, ES_RT_NO_FRAME);
+}
+
+void Scheduler::cancel(ScheduledLane &lane, std::uint32_t reason, std::uint64_t frame) noexcept {
+    if (!lane.transition) return;
+    const auto pending = *lane.transition;
+    lane.transition.reset();
+    finishCommand(fleet, pending, reason, pending.event.frame, frame);
+}
+
+void Scheduler::complete(ScheduledLane &lane, std::uint64_t frame) noexcept {
+    if (!lane.transition || lane.gate.endpoint() > frame) return;
+    auto &voice = *fleet.cells[lane.cell].voice;
+    voice.gate = lane.gate.at(frame);
+    voice.gain = lane.gain.at(frame);
+    const auto pending = *lane.transition;
+    lane.transition.reset();
+    if (lane.state == ES_RT_STOPPING) lane = {};
+    else if (lane.state == ES_RT_PAUSING) lane.state = ES_RT_PAUSED;
+    else lane.state = lane.muted ? ES_RT_MUTED : ES_RT_PLAY;
+    finishCommand(fleet, pending, ES_RT_OK, pending.event.frame, frame);
+}
+
+std::int32_t Scheduler::transition(ScheduledLane &lane, const Command &command,
+                                   std::uint32_t state, double target) noexcept {
+    const auto frame = command.event.frame;
+    cancel(lane, ES_RT_INTERRUPTED, frame);
+    lane.gate.retarget(frame, fadeFrames(command.event, fleet.config.rate), target);
+    lane.state = state;
+    lane.transition = command;
+    auto &voice = *fleet.cells[lane.cell].voice;
+    voice.gate = lane.gate.at(frame);
+    complete(lane, frame);
+    return ES_RT_PENDING;
+}
+
+std::int32_t Scheduler::apply(const Command &command) noexcept {
+    const auto &event = command.event;
     if (event.kind == ES_RT_MASTER) {
-        master = event.gain;
+        if (master.target() != event.gain) master.retarget(event.frame, fadeFrames(event, fleet.config.rate), event.gain);
         observeApply(event, nullptr, {});
         return ES_RT_OK;
     }
@@ -62,32 +100,56 @@ std::int32_t Scheduler::apply(const es_rt_event &event) noexcept {
         voice.request(voice.initial, event.sequence, event.frame);
         voice.lastSequence = event.sequence;
         observeApply(event, &voice, lane.id);
-        return ES_RT_OK;
+        cell.state.store(CellState::active, std::memory_order_release);
+        return transition(lane, command, ES_RT_ATTACK, 1.);
     }
     if (event.voice.lane >= fleet.config.lanes) return ES_RT_STALE;
     auto &lane = lanes[event.voice.lane];
     if (lane.cell == no_cell || lane.id.generation != event.voice.generation) return ES_RT_STALE;
+    if (lane.state == ES_RT_STOPPING) return ES_RT_BUSY;
     auto &voice = *fleet.cells[lane.cell].voice;
-    if (event.kind == ES_RT_STOP && event.duration_ms == 0) {
+    if (event.kind != ES_RT_STOP && voice.fault != ES_RT_OK) return ES_RT_STATE;
+
+    const auto applied = [&]() noexcept {
         voice.lastSequence = event.sequence;
         observeApply(event, &voice, lane.id);
-        lane = {};
         return ES_RT_OK;
-    }
-    if (voice.fault != ES_RT_OK || voice.runtime.telemetry().state != ES_READY) return ES_RT_STATE;
-    if (event.kind == ES_RT_GAIN) {
-        voice.gain = event.gain;
-    } else if (event.kind == ES_RT_VECTOR) {
+    };
+    switch (event.kind) {
+    case ES_RT_VECTOR:
         if ((voice.mode == ES_RT_FREE && event.physical.driven_rpm != 0) ||
             (voice.mode == ES_RT_DRIVEN && event.physical.starter)) return ES_RT_UNSUPPORTED;
         if (event.physical.driven_rpm > voice.drivenLimitRpm || !validVector(event.physical)) return ES_RT_INVALID;
         voice.request(event.physical, event.sequence, event.frame);
-    } else {
+        return applied();
+    case ES_RT_GAIN:
+        if (lane.gain.target() != event.gain)
+            lane.gain.retarget(event.frame, fadeFrames(event, fleet.config.rate), event.gain);
+        return applied();
+    case ES_RT_MUTE:
+    case ES_RT_UNMUTE: {
+        const bool mute = event.kind == ES_RT_MUTE;
+        if (lane.state == ES_RT_PAUSING) return ES_RT_STATE;
+        applied();
+        if (lane.muted == mute) return ES_RT_OK;
+        lane.muted = mute;
+        if (lane.state == ES_RT_PAUSED) return ES_RT_OK;
+        return transition(lane, command, mute ? ES_RT_MUTING : ES_RT_ATTACK, mute ? 0. : 1.);
+    }
+    case ES_RT_PAUSE:
+        applied();
+        if (lane.state == ES_RT_PAUSED || lane.state == ES_RT_PAUSING) return ES_RT_OK;
+        return transition(lane, command, ES_RT_PAUSING, 0.);
+    case ES_RT_RESUME:
+        applied();
+        if (lane.state != ES_RT_PAUSED && lane.state != ES_RT_PAUSING) return ES_RT_OK;
+        return transition(lane, command, ES_RT_ATTACK, lane.muted ? 0. : 1.);
+    case ES_RT_STOP:
+        applied();
+        return transition(lane, command, ES_RT_STOPPING, 0.);
+    default:
         return ES_RT_UNSUPPORTED;
     }
-    voice.lastSequence = event.sequence;
-    observeApply(event, &voice, lane.id);
-    return ES_RT_OK;
 }
 
 void Scheduler::snapshot(es_rt_snapshot &out) const noexcept {
@@ -106,28 +168,55 @@ void Scheduler::snapshot(es_rt_snapshot &out) const noexcept {
             vacant.latch_frame = ES_RT_NO_FRAME;
             vacant.latch_tick = ES_RT_NO_FRAME;
         } else {
-            out.lane[index] = fleet.cells[lane.cell].voice->laneInfo(lane.id, ES_RT_PLAY);
+            out.lane[index] = fleet.cells[lane.cell].voice->laneInfo(lane.id, lane.state);
+        }
+    }
+}
+
+void Scheduler::renderSegment(ScheduledTile &output, std::uint32_t begin, std::uint32_t end) {
+    for (auto i = begin; i < end; ++i) output.master[i] = master.at(output.first + i);
+    const auto first = output.first + begin;
+    for (std::size_t index = 0; index < fleet.config.lanes; ++index) {
+        auto &lane = lanes[index];
+        if (lane.cell == no_cell) continue;
+        auto &voice = *fleet.cells[lane.cell].voice;
+        std::uint32_t written = 0;
+        auto *destination = output.stem[index].data() + begin;
+        if (lane.state != ES_RT_PAUSED && voice.fault == ES_RT_OK) {
+            try {
+                const auto status = voice.renderAt(first, destination, end - begin, written);
+                if (status != ProcessingStatus::ok)
+                    voice.fault = status == ProcessingStatus::render_capacity ? ES_RT_CAPACITY : ES_RT_FAULT;
+            } catch (...) {
+                voice.fault = ES_RT_INTERNAL;
+            }
+        }
+        for (std::uint32_t i = 0; i < written; ++i) {
+            destination[i] = scaleStem(destination[i], lane.gain.at(first + i), lane.gate.at(first + i));
+        }
+        const auto last = output.first + end - 1;
+        voice.gain = lane.gain.at(last);
+        voice.gate = lane.gate.at(last);
+        if (voice.fault != ES_RT_OK && lane.state != ES_RT_FAILED) {
+            cancel(lane, ES_RT_FAULT, first + written);
+            lane.gate.retarget(first + written, 0, 0.);
+            lane.state = ES_RT_FAILED;
+            voice.gate = 0.;
         }
     }
 }
 
 void Scheduler::renderRange(ScheduledTile &output, std::uint32_t begin, std::uint32_t end) {
-    if (begin == end) return;
-    for (std::size_t index = 0; index < fleet.config.lanes; ++index) {
-        const auto &lane = lanes[index];
-        if (lane.cell == no_cell) continue;
-        auto &voice = *fleet.cells[lane.cell].voice;
-        if (voice.fault != ES_RT_OK || voice.runtime.telemetry().state != ES_READY) continue;
-        auto *destination = output.stem[index].data() + begin;
-        std::uint32_t written = 0;
-        try {
-            const auto status = voice.renderAt(output.first + begin, destination, end - begin, written);
-            if (status != ProcessingStatus::ok)
-                voice.fault = status == ProcessingStatus::render_capacity ? ES_RT_CAPACITY : ES_RT_FAULT;
-        } catch (...) {
-            voice.fault = ES_RT_INTERNAL;
+    while (begin < end) {
+        auto boundary = output.first + end;
+        for (std::size_t i = 0; i < fleet.config.lanes; ++i) {
+            const auto &lane = lanes[i];
+            if (lane.transition) boundary = std::min(boundary, lane.gate.endpoint());
         }
-        // The initialized suffix remains silent for a failed voice.
+        const auto fragment = static_cast<std::uint32_t>(boundary - output.first);
+        renderSegment(output, begin, fragment);
+        for (std::size_t i = 0; i < fleet.config.lanes; ++i) complete(lanes[i], boundary);
+        begin = fragment;
     }
 }
 
@@ -160,9 +249,11 @@ std::int32_t Scheduler::renderTile(ScheduledTile &output, SealObserver afterSnap
         renderRange(output, offset, location);
         offset = location;
         ++applied;
-        const auto status = apply(command.event);
-        const auto frame = status == ES_RT_OK ? command.event.frame : ES_RT_NO_FRAME;
-        finishCommand(fleet, command, static_cast<std::uint32_t>(status), frame, frame);
+        const auto status = apply(command);
+        if (status != ES_RT_PENDING) {
+            const auto frame = status == ES_RT_OK ? command.event.frame : ES_RT_NO_FRAME;
+            finishCommand(fleet, command, static_cast<std::uint32_t>(status), frame, frame);
+        }
     }
     renderRange(output, offset, quantum);
     next = end;

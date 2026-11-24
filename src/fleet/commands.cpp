@@ -1,4 +1,5 @@
 #include "owner.hpp"
+#include "envelope.hpp"
 
 #include <algorithm>
 #include <cassert>
@@ -82,7 +83,7 @@ void settle(es_rt_fleet &fleet, const es_rt_result &result) noexcept {
         --fleet.prepared;
         auto &lane = commands.lanes[result.next_voice.lane];
         if (result.kind == ES_RT_ACTIVATE) {
-            if (result.reason != ES_RT_OK && lane.current.generation == result.next_voice.generation) lane.current = {};
+            if (result.applied == ES_RT_NO_FRAME && lane.current.generation == result.next_voice.generation) lane.current = {};
         } else {
             assert(commands.overlap && lane.replacement.generation == result.next_voice.generation);
             if (result.reason == ES_RT_OK)
@@ -107,9 +108,11 @@ void finishCommand(es_rt_fleet &fleet, const Command &command, std::uint32_t rea
     const auto &event = command.event;
     if (hasCandidate(event.kind)) {
         auto &cell = fleet.cells[event.candidate.cell];
-        assert(cell.state.load(std::memory_order_relaxed) == CellState::queued);
-        if (reason == ES_RT_OK) cell.state.store(CellState::active, std::memory_order_release);
-        else returnCell(cell);
+        // A lifecycle ticket can finish after W already adopted the cell.
+        if (cell.state.load(std::memory_order_relaxed) == CellState::queued) {
+            if (reason == ES_RT_OK) cell.state.store(CellState::active, std::memory_order_release);
+            else returnCell(cell);
+        }
     }
     if (reason == ES_RT_OK && command.priorCell != no_cell) {
         auto &prior = fleet.cells[command.priorCell];
@@ -141,6 +144,8 @@ extern "C" std::int32_t ES_RT_CALL es_rt_submit(es_rt_fleet *fleet, const es_rt_
     if (event.frame > submitted && event.frame - submitted > 2 * fleet->config.rate) return ES_RT_INVALID;
     auto prior = no_cell;
     if (const auto status = validatePayload(*fleet, event, prior); status != ES_RT_OK) return status;
+    constexpr auto lastBoundary = UINT64_MAX - UINT64_MAX % quantum;
+    if (fadeFrames(event, fleet->config.rate) > lastBoundary - event.frame) return ES_RT_CAPACITY;
     auto *cell = hasCandidate(event.kind) ? preparedCell(*fleet, event.candidate) : nullptr;
     if (hasCandidate(event.kind) && !cell) return ES_RT_STALE;
     if (phase == FleetPhase::running) {

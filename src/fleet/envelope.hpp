@@ -1,0 +1,48 @@
+#ifndef ENGINE_SIM_PRIVATE_FLEET_ENVELOPE_HPP
+#define ENGINE_SIM_PRIVATE_FLEET_ENVELOPE_HPP
+
+#include "engine_sim/fleet.h"
+
+#include <cstdint>
+
+namespace engine_sim::fleet {
+
+inline std::uint32_t fadeFrames(const es_rt_event &event, std::uint32_t rate) noexcept {
+    const auto ms = event.duration_ms == ES_RT_DFLT_MS ? (event.kind == ES_RT_REPLACE ? 20u : 5u) : event.duration_ms;
+    return (ms * rate + 999) / 1000;
+}
+
+class Envelope {
+public:
+    explicit Envelope(double value = 0) noexcept : origin(value), goal(value) {}
+
+    double at(std::uint64_t frame) const noexcept {
+        if (frame >= end) return goal;
+        if (frame <= start) return origin;
+        return origin + (goal - origin) *
+            (static_cast<double>(frame - start) / static_cast<double>(end - start));
+    }
+    double target() const noexcept { return goal; }
+    std::uint64_t endpoint() const noexcept { return end; }
+
+    // The coordinator has checked frame + frames, and frame order is monotonic.
+    void retarget(std::uint64_t frame, std::uint32_t frames, double value) noexcept {
+        origin = at(frame);
+        goal = value;
+        start = frame;
+        end = origin == value ? frame : frame + frames;
+    }
+
+private:
+    double origin, goal;
+    std::uint64_t start = 0, end = 0;
+};
+
+inline float scaleStem(float sample, double gain, double gate) noexcept {
+    if (gain == 0 || gate == 0) return 0.f;
+    if (gain == 1 && gate == 1) return sample;
+    return static_cast<float>(static_cast<double>(sample) * gain * gate);
+}
+
+}
+#endif

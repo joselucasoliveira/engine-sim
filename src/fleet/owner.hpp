@@ -58,7 +58,7 @@ struct Voice {
 
     es_rt_vector requested{}, applied{};
     std::uint32_t fault = ES_RT_OK;
-    double gain = 1;
+    double gain = 1, gate = 0;
     std::uint64_t lastSequence = 0, requestedSequence = 0, requestedFrame = ES_RT_NO_FRAME;
     std::uint64_t latchedSequence = 0, latchFrame = ES_RT_NO_FRAME, latchTick = ES_RT_NO_FRAME;
 
