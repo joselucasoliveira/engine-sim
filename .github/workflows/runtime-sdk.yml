@@ -290,7 +290,6 @@ jobs:
     env:
       CC: gcc-13
       CXX: g++-13
-      ES_OUT: ${{ runner.temp }}/fleet-timing-build
     steps:
       - name: Require a full revision
         shell: bash
@@ -306,6 +305,8 @@ jobs:
           python3 -B tools/runtime_ci.py acquire --profile diagnostics
       - name: Run a functional timing smoke and retain the qualification gaps
         shell: bash
+        env:
+          ES_OUT: ${{ runner.temp }}/fleet-timing-build
         run: |
           set -euo pipefail
           run() { "$@" 2>&1 | tee -a "$RUNNER_TEMP/fleet-timing.log"; }
