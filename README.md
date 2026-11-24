@@ -25,6 +25,10 @@ example uses a synthetic impulse; code-only SDKs include no original recordings.
 Linux installed execution is exercised locally. Native Windows/macOS and hosted
 SDK jobs remain pending; callback deadlines are unqualified.
 
+For multiple independent vehicle voices, see the
+[Fleet SDK integration guide](docs/fleet-guide.md). Fleet 1.0 provides
+device-neutral C11 and C++17 examples with a shared mix and separate stems.
+
 ## Driving the simulator
 
 The default model is a Subaru EJ25 with equal-length headers and the default

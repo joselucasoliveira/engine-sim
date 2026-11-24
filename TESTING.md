@@ -366,6 +366,17 @@ equipment and reports.
 
 ## Documentation and ordinary consumers
 
+Run the [Fleet installation and consumer commands](docs/fleet-guide.md) from
+their documented environments. The Release test executes both command
+blocks, relocates each SDK, and runs the two installed language examples.
+Linux runs the consumer with the producer source hidden. The registry test
+checks the current rejection of unavailable qualified rows.
+
+```sh
+ctest --preset runtime-test --no-tests=error --output-on-failure \
+  -R '^(FleetGuideQuickstart|FleetProfileRegistry|RuntimeCAbi|RuntimeCxxAbi)$'
+```
+
 The [integration guide](docs/runtime-guide.md) defines every output/prefix variable
 and executes from an ordinary clone with only the public bootstrap, pinned solver
 and parser, and verified dependency archives. Its C11 and C++17 projects compile

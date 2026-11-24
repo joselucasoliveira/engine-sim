@@ -30,6 +30,14 @@ The runtime allowlist includes complete notices for its selected inputs. The roo
 
 ## Device-free runtime SDK
 
+The [Fleet 1.0 guide](fleet-guide.md) covers the separate worker-backed SDK
+and its experimental profiles. Linux x86-64 runs the static and shared
+installed C11/C++17 examples in a source-hidden environment. The nominal
+48 kHz timing protocol uses an exact roster and documented scheduler.
+Windows x64 and macOS arm64 native Fleet results and hardware presentation
+remain pending. The Fleet SDK currently ships without enabled qualification
+rows.
+
 The implementation at `254989e861f83a029b7e6f9570be353973e0f9dc` was exercised
 locally on Debian 13/Linux x86_64, glibc 2.41, GCC 14.2 and Clang 19. The final
 Release selection passed 155 cases; separate ASan/UBSan/LSan and TSan selections

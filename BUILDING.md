@@ -215,4 +215,5 @@ cmake -S /absolute/sdk/share/engine-sim-fleet/example -B /absolute/consumer-buil
 cmake --build /absolute/consumer-build --config Release
 ```
 
-See the [Fleet example](examples/fleet/README.md) for the model arguments.
+See the [Fleet integration guide](docs/fleet-guide.md) for the installed
+consumer commands, callback ownership and current admission limits.

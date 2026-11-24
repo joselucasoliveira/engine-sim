@@ -420,6 +420,17 @@ if (TARGET engine-sim-runtime AND TARGET engine-sim-runtime-json-private)
                 --build "${PROJECT_BINARY_DIR}/fleet-sdk-${variant}-producer")
         set_tests_properties(FleetInstalled${linkage} PROPERTIES LABELS r3-fleet-sdk TIMEOUT 600)
     endforeach ()
+    if (ENGINE_SIM_SANITIZER STREQUAL "none")
+        add_test(NAME FleetGuideQuickstart COMMAND "${Python3_EXECUTABLE}" -B
+            "${CMAKE_CURRENT_SOURCE_DIR}/fleet_guide.py" --source "${PROJECT_SOURCE_DIR}"
+            --deps-file "${ENGINE_SIM_DEPS_FILE}" --out "${CMAKE_CURRENT_BINARY_DIR}/fleet-guide")
+        add_executable(engine-sim-fleet-profile-registry-test fleet_profile_registry.cpp)
+        target_compile_features(engine-sim-fleet-profile-registry-test PRIVATE cxx_std_17)
+        target_link_libraries(engine-sim-fleet-profile-registry-test PRIVATE EngineSim::Fleet)
+        add_test(NAME FleetProfileRegistry COMMAND engine-sim-fleet-profile-registry-test)
+        set_tests_properties(FleetGuideQuickstart PROPERTIES LABELS fleet-guide TIMEOUT 900 RUN_SERIAL TRUE)
+        set_tests_properties(FleetProfileRegistry PROPERTIES LABELS fleet-guide TIMEOUT 60)
+    endif ()
 
     add_executable(engine-sim-fleet-adapter-test fleet-device/main.cpp)
     target_link_libraries(engine-sim-fleet-adapter-test PRIVATE EngineSim::Fleet

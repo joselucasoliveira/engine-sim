@@ -383,6 +383,10 @@ scheduler, many-vehicle budgets, acoustic LOD, new sound synthesis and plugin/ga
 integration are outside this SDK's current contract. See [tests](../TESTING.md)
 and [native status](platforms.md#device-free-runtime-sdk) for reproducible checks.
 
+For independent vehicles and a worker-backed planar audio interface, follow
+the [Fleet 1.0 guide](fleet-guide.md). The Runtime 2.0 SDK retains its own
+version query, synchronous rendering and handle lifecycle.
+
 ## Measure preparation and render costs
 
 The runtime benchmark can use an independent Release consumer linked through
