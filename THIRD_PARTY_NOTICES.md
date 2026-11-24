@@ -39,3 +39,7 @@ The Fleet SDK uses the locked Simple 2D Constraint Solver and JSON for
 Modern C++ under their MIT notices. The separate example component ships
 the original synthetic impulse and two MIT fixture recipes, with their
 licenses.
+
+The optional live Fleet example links to a user-provided shared PortAudio
+v19 library under the provider's upstream license. The example distributes
+adapter source. Neither SDK bundles PortAudio.

@@ -88,7 +88,7 @@ if (ENGINE_SIM_INSTALL_FLEET_EXAMPLE)
     set_property(GLOBAL PROPERTY ENGINE_SIM_SDK_INPUT_CHECKS "")
     engine_sim_sdk_verify("${manifest}")
     file(READ "${manifest}" examples)
-    set(allowed CMakeLists.txt README.md host.c host.cpp verify.py
+    set(allowed CMakeLists.txt README.md host.c host.cpp verify.py adapter.hpp live.cpp
         fixture-heavy/LICENSE fixture-heavy/main.json fixture-heavy/impulse.wav
         fixture-single/LICENSE fixture-single/main.json fixture-single/impulse.wav)
     string(JSON count LENGTH "${examples}" files)

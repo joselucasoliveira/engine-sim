@@ -276,3 +276,7 @@ installation, so the entire prefix can move before configuring the consumer.
 Fleet and the v2 `EngineSimRuntime` package can live in one prefix and process.
 Each API owns the handles it creates. Install `FleetSDKExamples` separately
 for the model fixtures and sample hosts. See [build commands](../BUILDING.md).
+
+The standalone example can optionally use a system PortAudio v19 provider.
+It reports callback and DAC-estimate timestamps separately from Fleet's
+submitted frame count. See [live host setup](../examples/fleet/README.md).

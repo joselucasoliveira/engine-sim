@@ -394,6 +394,27 @@ if (TARGET engine-sim-runtime AND TARGET engine-sim-runtime-json-private)
         set_tests_properties(FleetInstalled${linkage} PROPERTIES LABELS r3-fleet-sdk TIMEOUT 600)
     endforeach ()
 
+    add_executable(engine-sim-fleet-adapter-test fleet-device/main.cpp)
+    target_link_libraries(engine-sim-fleet-adapter-test PRIVATE EngineSim::Fleet
+        EngineSim::Config engine-sim-runtime-backend Threads::Threads)
+    target_include_directories(engine-sim-fleet-adapter-test PRIVATE
+        "${PROJECT_SOURCE_DIR}/examples/fleet" "${PROJECT_SOURCE_DIR}/src/fleet"
+        "${PROJECT_SOURCE_DIR}/modules/assembly/src" "${PROJECT_SOURCE_DIR}/src/runtime")
+    target_compile_features(engine-sim-fleet-adapter-test PRIVATE cxx_std_17)
+    engine_sim_diagnose(engine-sim-fleet-adapter-test TRUE)
+    add_test(NAME FleetPortAudioAdapter COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/fleet-device/check.py"
+        --source "${PROJECT_SOURCE_DIR}" --build "${PROJECT_BINARY_DIR}"
+        --kernel "$<TARGET_FILE:engine-sim-fleet-adapter-test>" --config "$<CONFIG>")
+    set_tests_properties(FleetPortAudioAdapter PROPERTIES LABELS r3-fleet-device TIMEOUT 180)
+
+    option(ENGINE_SIM_TEST_FLEET_DEVICE "Run the explicit local installed Fleet endpoint smoke" OFF)
+    if (ENGINE_SIM_TEST_FLEET_DEVICE)
+        add_test(NAME FleetPortAudioSmoke COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/fleet-device/check.py"
+            --source "${PROJECT_SOURCE_DIR}" --build "${PROJECT_BINARY_DIR}"
+            --config "$<CONFIG>" --physical)
+        set_tests_properties(FleetPortAudioSmoke PROPERTIES LABELS r3-fleet-device TIMEOUT 420 RUN_SERIAL TRUE)
+    endif ()
+
     add_executable(engine-sim-fleet-owner-test fleet-owner/main.cpp fleet-owner/consumer.c)
     target_link_libraries(engine-sim-fleet-owner-test PRIVATE
         EngineSim::Fleet EngineSim::Runtime EngineSim::Config engine-sim-runtime-backend)

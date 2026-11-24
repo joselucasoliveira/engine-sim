@@ -3,12 +3,12 @@
     {
       "source": "examples/fleet/CMakeLists.txt",
       "path": "CMakeLists.txt",
-      "sha256": "ac2c03d00f4098e91d8fe5bc6ab29be689aa1e7a71133ac4a36aa04cdaf64041"
+      "sha256": "7e5ca808f0131e19edeb292544db1bfcff141e3507a628ae6df8f060862724d7"
     },
     {
       "source": "examples/fleet/README.md",
       "path": "README.md",
-      "sha256": "72a8ff9bb153a2fe66c1d9ed3f3b383a6a0d443f03b38173119995ad684d0464"
+      "sha256": "39e4fe0890e7449da138f468dc2a6844af3482190f05f94db5f9fd5914c2c296"
     },
     {
       "source": "examples/fleet/host.c",
@@ -54,6 +54,16 @@
       "source": "examples/runtime/fixture/impulse.wav",
       "path": "fixture-single/impulse.wav",
       "sha256": "97fb8b13c2ed77769f297659db76203f86d90d56201e02df38b5a295a1bb336b"
+    },
+    {
+      "source": "examples/fleet/adapter.hpp",
+      "path": "adapter.hpp",
+      "sha256": "db1c162763fd4e8068b19b3c7facc82c9dc86e6f755263567fb5e1f332a04572"
+    },
+    {
+      "source": "examples/fleet/live.cpp",
+      "path": "live.cpp",
+      "sha256": "27f58d932f2421e49098d27445f4e9874fb5b18da696d84949a57cfb215c36f2"
     }
   ]
 }
