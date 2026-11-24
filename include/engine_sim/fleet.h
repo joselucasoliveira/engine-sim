@@ -101,7 +101,9 @@ ES_RT_DECL(int32_t, es_rt_poll_snapshot, (es_rt_fleet *, es_rt_snapshot *));
 ES_RT_DECL(int32_t, es_rt_get_transport, (es_rt_fleet *, es_rt_transport *));
 ES_RT_DECL(int32_t, es_rt_start, (es_rt_fleet *, es_rt_diagnostic *));
 /* One audio owner. Valid nonempty spans always initialize the selected planes.
- * ES_RT_BROKEN reports the supplied PCM prefix and positive-zero fallback. */
+ * ES_RT_BROKEN reports the supplied PCM prefix and positive-zero fallback.
+ * The first fallback frame is block.first + block.pcm_frames. A valid call
+ * advances the submitted position by both counts, even after a break. */
 ES_RT_DECL(int32_t, es_rt_process, (es_rt_fleet *, const es_rt_audio *, es_rt_block *));
 ES_RT_DECL(int32_t, es_rt_quiesce, (es_rt_fleet *));
 ES_RT_DECL(int32_t, es_rt_collect, (es_rt_fleet *, es_rt_token *, es_rt_lane_info *));

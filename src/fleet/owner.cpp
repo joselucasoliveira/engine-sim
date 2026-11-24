@@ -174,8 +174,9 @@ std::int32_t prepare_voice(es_rt_fleet *fleet, const es_rt_voice_config *voice, 
     return boundary(detail, [&]() -> std::int32_t {
         if (!fleet || !voice || !out)
             return report(detail, ES_RT_INVALID, ES_RT_DIAG_INPUT, "Fleet, voice settings and token destination are required");
-        if (fleet->producer.phase.load(std::memory_order_relaxed) == engine_sim::fleet::FleetPhase::stopped)
-            return report(detail, ES_RT_STATE, ES_RT_DIAG_PREPARE, "Fleet epoch is quiesced");
+        if (fleet->pcm.broken() ||
+            fleet->producer.phase.load(std::memory_order_relaxed) == engine_sim::fleet::FleetPhase::stopped)
+            return report(detail, ES_RT_STATE, ES_RT_DIAG_PREPARE, "Fleet epoch cannot accept another voice");
         if (const auto status = validate_voice(*voice, detail); status != ES_RT_OK) return status;
         if (fleet->prepared == 2)
             return report(detail, ES_RT_FULL, ES_RT_DIAG_PREPARE, "Both fleet candidate credits are occupied");

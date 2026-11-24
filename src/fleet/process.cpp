@@ -20,7 +20,7 @@ void clearPlane(float *out, std::uint32_t count) noexcept {
 bool PcmTransport::tryPublish(const PcmTile &tile) noexcept {
     const auto write = m_write.load(std::memory_order_relaxed);
     const auto read = m_read.load(std::memory_order_acquire);
-    if (write == std::numeric_limits<std::uint64_t>::max() || write - read == m_count || broken())
+    if (write == std::numeric_limits<std::uint64_t>::max() || write < read || write - read >= m_count || broken())
         return false;
     m_slots[write % m_count] = tile;
     m_write.store(write + 1, std::memory_order_release);
@@ -30,12 +30,14 @@ bool PcmTransport::tryPublish(const PcmTile &tile) noexcept {
 std::uint32_t PcmTransport::consume(std::uint64_t epoch, std::uint64_t first, std::uint32_t lanes,
                                    const es_rt_audio &audio) noexcept {
     std::uint32_t delivered = 0;
-    if (m_broken.load(std::memory_order_relaxed) == 0) {
+    const bool wasBroken = m_broken.load(std::memory_order_relaxed) != 0;
+    if (!wasBroken) {
         const auto published = m_write.load(std::memory_order_acquire);
         const auto previous = m_read.load(std::memory_order_relaxed);
         auto read = previous;
         auto offset = m_offset;
-        while (delivered < audio.frames && read != published) {
+        const bool validSnapshot = published >= previous && published - previous <= m_count;
+        while (validSnapshot && delivered < audio.frames && read != published) {
             const auto &tile = m_slots[read % m_count];
             if (tile.epoch != epoch || tile.first != first + delivered - offset) break;
             const auto count = std::min(audio.frames - delivered, tileFrames - offset);
@@ -61,7 +63,7 @@ std::uint32_t PcmTransport::consume(std::uint64_t epoch, std::uint64_t first, st
             if (audio.stem[lane]) clearPlane(audio.stem[lane] + delivered, remaining);
         }
         // A worker acquiring the subsequent fallback D must also see this break.
-        m_broken.store(1, std::memory_order_release);
+        if (!wasBroken) m_broken.store(1, std::memory_order_release);
     }
     return delivered;
 }

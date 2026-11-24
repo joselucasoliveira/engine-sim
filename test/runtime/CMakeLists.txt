@@ -504,6 +504,18 @@ if (TARGET engine-sim-runtime AND TARGET engine-sim-runtime-json-private)
     add_test(NAME FleetReplacement COMMAND engine-sim-fleet-replacement-test replace "${fleet_fixture}")
     add_test(NAME FleetFaultIsolation COMMAND engine-sim-fleet-replacement-test fault "${fleet_fixture}")
     set_tests_properties(FleetReplacement FleetFaultIsolation PROPERTIES LABELS r3-fleet-replacement TIMEOUT 90)
+
+    add_executable(engine-sim-fleet-recovery-test fleet-recovery/main.cpp)
+    target_link_libraries(engine-sim-fleet-recovery-test PRIVATE EngineSim::Fleet
+        EngineSim::Config engine-sim-runtime-backend Threads::Threads)
+    target_include_directories(engine-sim-fleet-recovery-test PRIVATE
+        "${PROJECT_SOURCE_DIR}/src/fleet" "${PROJECT_SOURCE_DIR}/modules/assembly/src"
+        "${PROJECT_SOURCE_DIR}/src/runtime")
+    target_compile_features(engine-sim-fleet-recovery-test PRIVATE cxx_std_17)
+    engine_sim_diagnose(engine-sim-fleet-recovery-test TRUE)
+    add_test(NAME FleetEpochRecovery COMMAND engine-sim-fleet-recovery-test epoch "${fleet_fixture}")
+    add_test(NAME FleetAdversarialThreads COMMAND engine-sim-fleet-recovery-test stress "${fleet_fixture}")
+    set_tests_properties(FleetEpochRecovery FleetAdversarialThreads PROPERTIES LABELS r3-fleet-recovery TIMEOUT 90)
 endif ()
 
 if (TARGET engine-sim-runtime AND TARGET engine-sim-config-roundtrip AND ENGINE_SIM_BUILD_RUNTIME_EXAMPLES)

@@ -99,11 +99,13 @@ std::int32_t ES_RT_CALL es_rt_get_transport(es_rt_fleet *fleet, es_rt_transport 
     for (std::size_t index = 0; index < fleet->cellCount; ++index) {
         if (fleet->cells[index].state.load(std::memory_order_acquire) == CellState::returned) ++returned;
     }
+    // Acquiring D first makes a visible fallback submission imply a visible break.
+    const auto submitted = fleet->commands.submitted.load(std::memory_order_acquire);
     *out = {out->size, out->abi,
         PcmTransport::lowFrames(fleet->config), PcmTransport::highFrames(fleet->config),
         static_cast<std::uint32_t>(PcmTransport::slotCount(fleet->config) * tileFrames),
         fleet->pcm.broken() ? 1u : 0u, returned, static_cast<std::uint32_t>(fleet->commands.outstanding),
-        fleet->config.epoch, fleet->commands.submitted.load(std::memory_order_acquire),
+        fleet->config.epoch, submitted,
         fleet->producer.generated.load(std::memory_order_acquire),
         fleet->commands.sealed.load(std::memory_order_acquire), fleet->commands.rejections, fleet->snapshots.dropped()};
     return ES_RT_OK;

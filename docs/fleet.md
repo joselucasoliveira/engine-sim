@@ -236,3 +236,26 @@ endpoint in place. The replacement ticket reports `ES_RT_FAULT` with its
 applied and end frames. The new generation remains the lane's identity.
 Inspect the returned old generation and the current snapshot for each
 source's fault and completed counters.
+
+## Recovering from a transport break
+
+For a valid broken span, the first fallback frame is `block.first +
+block.pcm_frames`. The returned PCM count and fallback count add up to the
+requested size. Every selected plane is initialized. Subsequent valid spans
+continue advancing submitted `D` and return silence until shutdown. The
+producer's published `G` and the engines' completed counters remain separate.
+
+If the device disappears, changes rate or reports a discontinuity, stop
+and drain its callbacks using the host's off-audio control path. Record the
+settled `D`, `G`, break status and any host-reported presentation gap.
+Quiesce the fleet even if the device never started. Recover terminal receipts
+and returned cells, then destroy that owner. Create a fresh epoch, prepare
+the new voices, schedule initial controls and prime with `es_rt_start` before
+opening the new stream. A new epoch starts at frame zero with new tokens and
+clock calibration.
+
+A raw v2 numerical fault returns its completed prefix. The Fleet producer
+can continue publishing a complete bus around an isolated numerical fault.
+A broken Fleet transport reports its verified prefix and fills the remainder
+of the callback with silence. Actual device recovery timing needs the host's
+clock and endpoint evidence.
