@@ -163,6 +163,12 @@ if (TARGET engine-sim-runtime)
             --out "${CMAKE_CURRENT_BINARY_DIR}/qualification-receipt-working")
         set_tests_properties(NativeMatrixContract QualificationReceiptIntegrity PROPERTIES
             LABELS r25-native RUN_SERIAL TRUE TIMEOUT 1200)
+        add_test(NAME FleetNativeMatrix COMMAND ${native_gate} fleet-matrix
+            --out "${CMAKE_CURRENT_BINARY_DIR}/fleet-native-matrix-working")
+        add_test(NAME FleetQualificationReceipts COMMAND ${native_gate} fleet-receipts
+            --out "${CMAKE_CURRENT_BINARY_DIR}/fleet-qualification-receipts-working")
+        set_tests_properties(FleetNativeMatrix FleetQualificationReceipts PROPERTIES
+            LABELS fleet-native RUN_SERIAL TRUE TIMEOUT 1200)
     endif ()
     # Timings require an optimized, unsanitized static implementation. The probe
     # is a different executable so allocation and stage clocks cannot affect it.

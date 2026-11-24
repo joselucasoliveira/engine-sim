@@ -319,6 +319,51 @@ consumers, plus rejection of a modified transfer before compiling a client.
 On Linux the latter requires bubblewrap. Windows and macOS exact-revision
 qualification requires the native producer and separate consumer jobs.
 
+### Native Fleet transfer, diagnostics and timing
+
+The exact-revision SDK workflow adds `--fleet` to both transfer ends. The
+producer binds the Fleet archive digest to the same revision and toolchain as
+RuntimeSDK. The consumer runs both packages from a relocated prefix with the
+producer checkout and build hidden. It compiles the C11 ABI test and C++17 cold
+callback, checks 32-bit and 64-bit lock-free atomics, and runs both installed
+example hosts. ELF, Mach-O and PE loaders have separate checks. The PE audit
+also records the dynamic Release CRT imports. Linux shared tests arm a
+thread-local observer around the first callback and verify C allocation,
+release-only free, aligned allocation, mutex, wait and throw controls through
+an installed library boundary.
+
+```sh
+ctest --preset runtime-test --no-tests=error --output-on-failure \
+  -R '^(FleetNativeMatrix|FleetQualificationReceipts|NativeMatrixContract|QualificationReceiptIntegrity)$'
+```
+
+Run the standalone transfer with the same `produce` and `consume` commands
+above, adding `--fleet` to both. Keep the producer and consumer on the same
+native toolchain and separate the source and build from transferred inputs.
+Linux needs a working bubblewrap namespace. The memory and race lanes use
+`runtime-asan`, `runtime-tsan`, `runtime-win-asan` and
+`runtime-darwin-tsan` on their respective native targets. Compiler effect
+and RTSan evidence requires a safe control plus an allocating control that the
+compiler or runtime actually rejects. The workflow keeps unsupported probes
+and installed DLL/dylib forbidden-operation coverage pending with their logs.
+
+The hosted Release smoke checks the benchmark's positive and negative controls.
+For an equipped native timing run, collect the static/shared paced study as
+described in [Measuring Fleet timing](docs/fleet-performance.md) from a clean
+checkout. Emit a separate receipt for the exact revision and study.
+
+```sh
+python3 -B tools/runtime_ci.py fleet-evidence \
+  --revision "$(git rev-parse HEAD)" --study "$EVIDENCE/fleet-study/summary.json" \
+  --out "$EVIDENCE/fleet-timing-receipt"
+```
+
+The device-neutral receipt records the native tuple, build identities,
+timing distributions, independent stem replay and the remaining endpoint
+gates. A `--junit` smoke receipt carries zero sustained timing cells.
+Physical stream tests, xruns, DAC calibration and loopback need their own
+equipment and reports.
+
 ## Documentation and ordinary consumers
 
 The [integration guide](docs/runtime-guide.md) defines every output/prefix variable

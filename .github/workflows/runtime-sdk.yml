@@ -71,7 +71,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 -B tools/runtime_ci.py produce --hosted \
+          python3 -B tools/runtime_ci.py produce --hosted --fleet \
             --out "$RUNNER_TEMP/sdk-producer" --revision "$EXPECTED_REVISION" --variant "$VARIANT" --profile "$PROFILE"
       - name: Produce MSVC SDK and consumer payload
         if: runner.os == 'Windows'
@@ -83,7 +83,7 @@ jobs:
           if ($LASTEXITCODE -ne 0 -or !$vs) { throw 'VS 2022 x64 C++ tools are required' }
           Import-Module (Join-Path $vs 'Common7\Tools\Microsoft.VisualStudio.DevShell.dll')
           Enter-VsDevShell -VsInstallPath $vs -SkipAutomaticLocation -DevCmdArguments '-arch=x64 -host_arch=x64'
-          & py -3 -B tools/runtime_ci.py produce --hosted --out (Join-Path $env:RUNNER_TEMP 'sdk-producer') --revision $env:EXPECTED_REVISION --variant $env:VARIANT --profile $env:PROFILE
+          & py -3 -B tools/runtime_ci.py produce --hosted --fleet --out (Join-Path $env:RUNNER_TEMP 'sdk-producer') --revision $env:EXPECTED_REVISION --variant $env:VARIANT --profile $env:PROFILE
           if ($LASTEXITCODE -ne 0) { throw "SDK production failed: $LASTEXITCODE" }
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
@@ -158,7 +158,7 @@ jobs:
           for profile in minimal combined; do
             mkdir -p "$RUNNER_TEMP/sdk-consumer/$profile"
             "${prefix[@]}" "${args[@]}" --ro-bind "$RUNNER_TEMP/sdk-payloads/$PAYLOAD_NAME-$profile" /payload \
-              --bind "$RUNNER_TEMP/sdk-consumer/$profile" /result /usr/bin/python3 -B /payload/runtime_ci.py consume --hosted \
+              --bind "$RUNNER_TEMP/sdk-consumer/$profile" /result /usr/bin/python3 -B /payload/runtime_ci.py consume --hosted --fleet \
               --payload /payload --out /result/run --revision "$EXPECTED_REVISION" --variant "$VARIANT" --profile "$profile"
           done
       - name: Consume Apple transfer without producer trees
@@ -168,7 +168,7 @@ jobs:
           set -euo pipefail
           for profile in minimal combined; do
             payload="$RUNNER_TEMP/sdk-payloads/$PAYLOAD_NAME-$profile"
-            python3 -B "$payload/runtime_ci.py" consume --hosted \
+            python3 -B "$payload/runtime_ci.py" consume --hosted --fleet \
               --payload "$payload" --out "$RUNNER_TEMP/sdk-consumer/$profile/run" \
               --revision "$EXPECTED_REVISION" --variant "$VARIANT" --profile "$profile"
           done
@@ -184,7 +184,7 @@ jobs:
           Enter-VsDevShell -VsInstallPath $vs -SkipAutomaticLocation -DevCmdArguments '-arch=x64 -host_arch=x64'
           foreach ($profile in @('minimal', 'combined')) {
             $payload = Join-Path $env:RUNNER_TEMP "sdk-payloads/$env:PAYLOAD_NAME-$profile"
-            & py -3 -B (Join-Path $payload 'runtime_ci.py') consume --hosted --payload $payload --out (Join-Path $env:RUNNER_TEMP "sdk-consumer/$profile/run") --revision $env:EXPECTED_REVISION --variant $env:VARIANT --profile $profile
+            & py -3 -B (Join-Path $payload 'runtime_ci.py') consume --hosted --fleet --payload $payload --out (Join-Path $env:RUNNER_TEMP "sdk-consumer/$profile/run") --revision $env:EXPECTED_REVISION --variant $env:VARIANT --profile $profile
             if ($LASTEXITCODE -ne 0) { throw "Clean SDK consumption failed for ${profile}: $LASTEXITCODE" }
           }
       - name: Compare installed SDK scopes and JSON results
@@ -283,6 +283,54 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+  fleet-timing-smoke:
+    name: Hosted Fleet Release smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      CC: gcc-13
+      CXX: g++-13
+      ES_OUT: ${{ runner.temp }}/fleet-timing-build
+    steps:
+      - name: Require a full revision
+        shell: bash
+        run: '[[ "$EXPECTED_REVISION" =~ ^[0-9a-f]{40}$ ]]'
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ inputs.revision }}
+          persist-credentials: false
+      - name: Prepare the Release toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes gcc-13 g++-13 ninja-build
+          python3 -B tools/runtime_ci.py acquire --profile diagnostics
+      - name: Run a functional timing smoke and retain the qualification gaps
+        shell: bash
+        run: |
+          set -euo pipefail
+          run() { "$@" 2>&1 | tee -a "$RUNNER_TEMP/fleet-timing.log"; }
+          run python3 -B tools/bootstrap.py --profile runtime --tests --out "$ES_OUT"
+          run cmake --preset runtime-test -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+          run cmake --build --preset runtime-test --config Release --parallel 2 \
+            --target engine-sim-fleet-paced-smoke engine-sim-fleet-stem-replay engine-sim-fleet-latency-probe
+          run ctest --preset runtime-test --no-tests=error --output-on-failure \
+            -R '^(FleetBenchmarkSelfCheck|FleetLatencyProbe)$' --output-junit "$ES_OUT/smoke.xml"
+          run python3 -B tools/runtime_ci.py fleet-evidence --hosted --revision "$EXPECTED_REVISION" \
+            --junit "$ES_OUT/smoke.xml" --out "$RUNNER_TEMP/fleet-timing-evidence"
+      - name: Retain hosted smoke output
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: fleet-hosted-release-smoke
+          path: |
+            ${{ runner.temp }}/fleet-timing.log
+            ${{ runner.temp }}/fleet-timing-build/smoke.xml
+            ${{ runner.temp }}/fleet-timing-build/runtime-test/compile_commands.json
+            ${{ runner.temp }}/fleet-timing-build/runtime-test/**/fleet-benchmark-smoke/**/*.json
+            ${{ runner.temp }}/fleet-timing-evidence/
+          if-no-files-found: warn
+          retention-days: 7
+
   diagnostics:
     name: Runtime ${{ matrix.preset }} diagnostics
     runs-on: ${{ matrix.os }}
@@ -297,6 +345,8 @@ jobs:
             preset: runtime-tsan
           - os: windows-2022
             preset: runtime-win-asan
+          - os: macos-15
+            preset: runtime-darwin-tsan
     env:
       PRESET: ${{ matrix.preset }}
     steps:
@@ -325,9 +375,29 @@ jobs:
           run python3 -B tools/runtime_ci.py probe --hosted --out "$RUNNER_TEMP/sdk-diagnostic-probe" --revision "$EXPECTED_REVISION" --variant static
           run python3 -B tools/bootstrap.py --profile runtime --tests --out "$ES_OUT"
           compiler=()
-          if test "$PRESET" = runtime-asan; then compiler=(-DCMAKE_C_COMPILER=clang-18 -DCMAKE_CXX_COMPILER=clang++-18); fi
+          if test "$PRESET" = runtime-asan; then
+            compiler=(-DCMAKE_C_COMPILER=clang-18 -DCMAKE_CXX_COMPILER=clang++-18)
+            ES_FLEET_EVIDENCE="$RUNNER_TEMP/sdk-diagnostic-probe" \
+              run python3 -B test/runtime/realtime-probe/verify.py features clang-18 clang++-18
+          fi
           run cmake --preset "$PRESET" "${compiler[@]}"
           ASAN_OPTIONS=detect_leaks=0 run cmake --build --preset "$PRESET" --config RelWithDebInfo --parallel 2
+          run ctest --preset "$PRESET" --no-tests=error --output-on-failure --output-junit "$ES_OUT/tests.xml"
+      - name: Diagnose Apple ownership and race paths
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          export DEVELOPER_DIR=/Applications/Xcode_16.4.app/Contents/Developer
+          test -d "$DEVELOPER_DIR"
+          export ES_OUT="$RUNNER_TEMP/sdk-diagnostics"
+          run() { "$@" 2>&1 | tee -a "$RUNNER_TEMP/sdk-diagnostics.log"; }
+          run python3 -B tools/runtime_ci.py probe --hosted --out "$RUNNER_TEMP/sdk-diagnostic-probe" --revision "$EXPECTED_REVISION" --variant static
+          ES_FLEET_EVIDENCE="$RUNNER_TEMP/sdk-diagnostic-probe" \
+            run python3 -B test/runtime/realtime-probe/verify.py features clang clang++
+          run python3 -B tools/bootstrap.py --profile runtime --tests --out "$ES_OUT"
+          run cmake --preset "$PRESET"
+          run cmake --build --preset "$PRESET" --config RelWithDebInfo --parallel 2
           run ctest --preset "$PRESET" --no-tests=error --output-on-failure --output-junit "$ES_OUT/tests.xml"
       - name: Run separate native MSVC address diagnostics
         if: runner.os == 'Windows'
@@ -359,6 +429,8 @@ jobs:
           path: |
             ${{ runner.temp }}/sdk-diagnostic-probe/*.json
             ${{ runner.temp }}/sdk-diagnostic-probe/*.log
+            ${{ runner.temp }}/sdk-diagnostic-probe/features/*.json
+            ${{ runner.temp }}/sdk-diagnostic-probe/features/*.log
             ${{ runner.temp }}/sdk-diagnostics/tests.xml
             ${{ runner.temp }}/sdk-diagnostics.log
             ${{ runner.temp }}/sdk-diagnostics/dependency-receipt.json

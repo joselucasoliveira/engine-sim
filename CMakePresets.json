@@ -236,6 +236,25 @@
       }
     },
     {
+      "name": "runtime-darwin-tsan",
+      "inherits": "runtime-test",
+      "generator": "Ninja",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      },
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++",
+        "CMAKE_OSX_ARCHITECTURES": "arm64",
+        "CMAKE_OSX_DEPLOYMENT_TARGET": "15.0",
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": true,
+        "ENGINE_SIM_SANITIZER": "thread"
+      }
+    },
+    {
       "name": "runtime-win-asan",
       "inherits": "runtime-test",
       "generator": "Visual Studio 17 2022",
@@ -368,6 +387,11 @@
     {
       "name": "runtime-tsan",
       "configurePreset": "runtime-tsan",
+      "configuration": "RelWithDebInfo"
+    },
+    {
+      "name": "runtime-darwin-tsan",
+      "configurePreset": "runtime-darwin-tsan",
       "configuration": "RelWithDebInfo"
     },
     {
@@ -549,6 +573,25 @@
       },
       "environment": {
         "TSAN_OPTIONS": "halt_on_error=1:exitcode=66"
+      }
+    },
+    {
+      "name": "runtime-darwin-tsan",
+      "configurePreset": "runtime-darwin-tsan",
+      "configuration": "RelWithDebInfo",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error"
+      },
+      "environment": {
+        "TSAN_OPTIONS": "halt_on_error=1:exitcode=66"
+      },
+      "filter": {
+        "include": {
+          "name": "^Fleet(IngressRace|TelemetryRace|Retirement|LifecycleEnvelopes|PauseAndTails|EpochRecovery|AdversarialThreads)$"
+        }
       }
     },
     {

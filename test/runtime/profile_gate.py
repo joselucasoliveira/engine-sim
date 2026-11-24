@@ -22,11 +22,15 @@ ROOT_FILES = ("CMakeLists.txt", "CMakePresets.json", "cmake/Diagnostics.cmake",
               "cmake/dependencies.lock.json", "tools/bootstrap.py")
 SOLVER = "simple-2d-constraint-solver"
 SOLVER_FILES = ("dependencies/CMakeLists.txt", "dependencies/submodules/CMakeLists.txt",
-                "cmake/LockedSources.cmake", "cmake/SolverCompatibility.h")
+                "cmake/LockedSources.cmake", "cmake/SolverCompatibility.h", "cmake/SolverOverlay.cmake",
+                "dependencies/patches/solver-reservation.patch")
 JSON_FILES = ("modules/json", "schemas/engine-config-v1.schema.json", "schemas/engine-config-v2.schema.json",
               "cmake/compile_config_schema.py", "include/legacy_curves.h", "include/units.h", "include/constants.h")
 SDK_FILES = ("LICENSE", "THIRD_PARTY_NOTICES.md", "cmake/RuntimeSdk.cmake", "cmake/runtime.elf.exports",
+             "cmake/runtime.def", "cmake/runtime.macos.exports",
              "cmake/EngineSimRuntimeConfig.cmake.in", "cmake/InstallSdkPreflight.cmake.in", "cmake/runtime-sdk-notices.md",
+             "cmake/Fleet.cmake", "cmake/FleetSdk.cmake", "cmake/EngineSimFleetConfig.cmake.in", "cmake/fleet-sdk-notices.md",
+             "cmake/fleet.def", "cmake/fleet.elf.exports", "cmake/fleet.macos.exports", "include/engine_sim/fleet.h", "src/fleet",
              "modules/assembly", "include/engine_sim/runtime.h",
              *(f"src/runtime/{path}" for path in (
                  "api.cpp", "api_text.hpp", "json_runtime.cpp", "json_runtime.hpp", "json_session.hpp",

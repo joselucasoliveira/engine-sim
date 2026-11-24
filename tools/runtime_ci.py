@@ -2,6 +2,7 @@
 import argparse
 import ctypes
 import hashlib
+import itertools
 import json
 import os
 from pathlib import Path, PurePosixPath, PureWindowsPath
@@ -11,6 +12,7 @@ import shutil
 import subprocess
 import sys
 import tarfile
+from xml.etree import ElementTree
 
 ROOT = Path(__file__).resolve().parents[1]
 PRODUCER_RUNNER = {"Linux": ("Linux", "x86_64"), "Windows": ("Windows", "x86_64"), "Darwin": ("macOS", "arm64")}
@@ -22,6 +24,8 @@ ACQUISITION = {
 SEARCH_ENV = ("CPATH", "C_INCLUDE_PATH", "CPLUS_INCLUDE_PATH", "LIBRARY_PATH", "CMAKE_PREFIX_PATH",
               "CMAKE_LIBRARY_PATH", "CMAKE_INCLUDE_PATH", "CMAKE_MODULE_PATH", "PKG_CONFIG_PATH", "PKG_CONFIG_LIBDIR")
 OPTIONAL_TARGET = re.compile(r"piranha|delta|converter|engine-sim-(?:app|capture|host|frontend|desktop)|sdl|boost|discord|googletest|direct-to-video", re.I)
+FLEET_PERIODS = {"Interactive": (128, 384), "Balanced": (256, 1024)}
+FLEET_TIMING_FIELDS = ("consumer", "wake_late", "host_work", "producer")
 
 
 def sha256(path):
@@ -313,6 +317,9 @@ def produce(args, records, identity):
     source = args.source.resolve()
     revision, dirty = source_identity(args, records)
     overlays, options, targets = sdk_plan(args.variant, args.profile, identity["system"])
+    if args.fleet:
+        options.append("-DENGINE_SIM_INSTALL_FLEET_EXAMPLE=ON")
+        targets.append("engine-sim-fleet")
     build = args.out / "build"
     env = {key: value for key, value in os.environ.items() if key not in SEARCH_ENV}
     home = args.out / "empty-home"; home.mkdir()
@@ -351,6 +358,13 @@ def produce(args, records, identity):
     inputs = args.out / "consumer-inputs"; consumer_sources(source, inputs)
     archive(prefix, payload / "sdk.tar")
     archive(inputs, payload / "consumers.tar")
+    if args.fleet:
+        fleet = args.out / "fleet-inputs"
+        execute([sys.executable, "-B", source / "test/runtime/fleet_sdk.py", "--variant", args.variant,
+                 "--source", source, "--build", build / preset, "--transfer", fleet, "--prepared-build"],
+                source, args.out, records, env)
+        (fleet / "producer.log").replace(args.out / "fleet-install.log")
+        archive(fleet, payload / "fleet.tar")
     shutil.copyfile(__file__, payload / "runtime_ci.py")
     shutil.copyfile(source / "test/runtime/installed_consumer.py", payload / "installed_consumer.py")
     manifest = {"version": 1, "revision": revision, "variant": args.variant, "profile": args.profile, "dirty": dirty, "native": identity,
@@ -383,7 +397,10 @@ def consume(args, records, identity):
         raise ValueError("Producer and consumer runner images differ")
     if args.hosted and manifest["native"]["runner"]["GITHUB_RUN_ID"] != identity["runner"]["GITHUB_RUN_ID"]:
         raise ValueError("Transfer came from another workflow run")
-    if set(manifest["files"]) != {"sdk.tar", "consumers.tar", "runtime_ci.py", "installed_consumer.py"}:
+    required = {"sdk.tar", "consumers.tar", "runtime_ci.py", "installed_consumer.py"}
+    if args.fleet:
+        required.add("fleet.tar")
+    if set(manifest["files"]) != required:
         raise ValueError("Unexpected transfer inventory")
     for name, value in manifest["files"].items():
         if sha256(payload / name) != value: raise ValueError("Transfer file identity differs: " + name)
@@ -401,14 +418,139 @@ def consume(args, records, identity):
     result = json.loads((work / "result.json").read_text())
     if result["status"] != "pass": raise ValueError("Installed consumer failed")
     shutil.copyfile(payload / "manifest.json", args.out / "transfer-manifest.json")
-    return {"status": "pass", "role": "consumer", "revision": args.revision, "variant": args.variant, "profile": args.profile,
-            "native": identity, "producer_trees_absent": hidden, "manifest_sha256": sha256(payload / "manifest.json"),
-            "installed_result_sha256": sha256(work / "result.json"), "commands": result["commands"]}
+    proof = {"status": "pass", "role": "consumer", "revision": args.revision, "variant": args.variant, "profile": args.profile,
+             "native": identity, "producer_trees_absent": hidden, "manifest_sha256": sha256(payload / "manifest.json"),
+             "installed_result_sha256": sha256(work / "result.json"), "commands": result["commands"]}
+    if args.fleet:
+        fleet = args.out / "fleet"
+        extract(payload / "fleet.tar", fleet)
+        execute([sys.executable, "-B", fleet / "fleet_sdk.py", "--variant", args.variant, "--consume", fleet],
+                fleet, args.out, records)
+        proof["fleet"] = {"archive_sha256": manifest["files"]["fleet.tar"],
+                          "installed_manifest_sha256": sha256(fleet / "transfer.json"),
+                          "consumer_log_sha256": sha256(fleet / "consumer.log")}
+    return proof
+
+
+def check_fleet_lane(run, revision, stage):
+    """Apply the scope and claim rules to receipt records."""
+    if run["revision"] != revision or run["stage"] != stage or run["status"] != "pass":
+        raise ValueError("Fleet receipt revision, stage or status differs")
+    if stage == "diagnostic":
+        if any(run[key] is not True for key in ("feature_available", "safe_control", "violation_control")):
+            raise ValueError("A diagnostic pass requires an available observer and both controls")
+    if stage == "physical":
+        if run["hosted"] or run["backend"] != "physical" or not run["selected_endpoint"]:
+            raise ValueError("Physical qualification requires an equipped, selected native endpoint")
+    if stage == "native-paced":
+        if run["hosted"] or run["backend"] != "native-device-neutral" or run["instrumentation"] != "release":
+            raise ValueError("Sustained timing requires a native optimized device-neutral host")
+
+
+def check_fleet_timed_row(row):
+    block, high = FLEET_PERIODS[row["profile"]]
+    if (row["rate"] != 48000 or row["block"] != block or row["frames"] != 600 * 48000 or
+            row["elapsed_ns"] < 600 * 10**9 or not row["cold_first_included"] or
+            row["callbacks"] != row["frames"] // block):
+        raise ValueError("Incomplete nominal Fleet timing observation")
+    if (not 0 < row["max_consumer_ns"] * 4 * 48000 <= block * 10**9 or
+            not 0 < row["max_active_ns_per_750_tiles"] <= 750_000_000 or row["max_sealed_lead_frames"] > high or
+            any(row[key] for key in ("deadline_misses", "transport_breaks", "fallback_frames", "unexpected_faults",
+                                      "late_events", "unsubmitted_events", "bad_stem_windows", "queue_rejections"))):
+        raise ValueError("Fleet transport, reserve or absolute deadline gate failed")
+    if (len(row["nonzero_windows"]) != 2 or min(row["nonzero_windows"]) < 599 or row["overlap_completions"] < 10 or
+            min(row["ticks0"], row["ticks1"], row["voice_snapshot_count"]) <= 0 or
+            row["stem0"] == row["stem1"] or row["criteria"]["independent_voice_pcm"] is not True):
+        raise ValueError("Missing independent productive Fleet witnesses")
+    if row["workload"] == "live-loaded":
+        bound = (high + 64 + block) * 10**9
+        if (row["live_events"] <= 0 or not 0 < row["max_lookahead_frames"] <= high + 64 or
+                any(not 0 < row[key] * 48000 <= bound for key in ("max_control_to_publish_ns", "max_control_to_submit_ns"))):
+            raise ValueError("Fleet live control bound failed")
+    for field in FLEET_TIMING_FIELDS:
+        distribution = row["distribution_ns"][field]
+        count = row["tiles"] if field == "producer" else row["callbacks"]
+        ranks = [distribution[key] for key in ("min", "p50", "p95", "p99")]
+        if count >= 10000:
+            ranks.append(distribution["p99.9"])
+        ranks.append(distribution["max"])
+        if distribution["count"] != count or count <= 0 or ranks != sorted(ranks) or ranks[0] < 0:
+            raise ValueError("Missing or invalid Fleet timing distribution")
+    if row["distribution_ns"]["consumer"]["max"] != row["max_consumer_ns"]:
+        raise ValueError("Fleet callback maximum differs from the distribution")
+
+
+def inspect_fleet_study(location, tree, input_hashes):
+    data = json.loads(location.read_text(encoding="utf-8"))
+    if (data["protocol"] != "r3-v1" or data["status"] != "passed" or data["tree"] != tree or
+            data["input_sha256"] != input_hashes or data["tuple"]["host"] != "native-device-neutral"):
+        raise ValueError("Fleet benchmark tree, profile, model or host identity differs")
+    required = set(itertools.product(("static", "shared"), FLEET_PERIODS, ("scheduled", "live-loaded"), (1, 2, 3)))
+    for row in data["paced_runs"]:
+        key = tuple(row[field] for field in ("linkage", "profile", "workload", "trial"))
+        if key not in required or not row["passed"]:
+            raise ValueError("Unexpected or failed Fleet timing cell")
+        required.remove(key)
+        check_fleet_timed_row(row)
+        artifacts = {}
+        for item in row["artifacts"]:
+            local = location.parent.joinpath(*safe_parts(item["path"])).resolve(strict=True)
+            if (not local.is_relative_to(location.parent) or not local.is_file() or local.name in artifacts or
+                    sha256(local) != item["sha256"]):
+                raise ValueError("Fleet timing artifact inventory differs")
+            artifacts[local.name] = local
+        if not {"callbacks.bin", "tiles.bin", "counts.tsv", "events.tsv", "voices.tsv", "windows.tsv", "replay.json"} <= artifacts.keys():
+            raise ValueError("Incomplete Fleet timing and stem artifacts")
+        replay = json.loads(artifacts["replay.json"].read_text(encoding="utf-8"))
+        if replay["match"] is not True or replay["compared_digests"] != 1202 or replay["different_digests"] != 0:
+            raise ValueError("Fleet independent replay did not match all digests")
+    if required or set(data["controls"]) != {"static", "shared"} or not all(
+            instance["pcm_digest_match"] for instance in data["controls"].values()):
+        raise ValueError("Incomplete Fleet matrix or failed installed observation control")
+    sdk_builds = data["sdk_builds"]
+    compilation = {}
+    for linkage in ("static", "shared"):
+        observed, control = sdk_builds[linkage], sdk_builds[linkage + "-control"]
+        if (observed["observed"] is not True or control["observed"] is not False or
+                any(not instance["installed_digests"] for instance in (observed, control))):
+            raise ValueError("Missing static/shared Release SDK build identity")
+        for suffix in ("", "-control"):
+            name = f"build-{linkage}{suffix}-compile.json"
+            commands = location.parent / name
+            if not commands.is_file() or "-fsanitize=" in commands.read_text(encoding="utf-8"):
+                raise ValueError("Missing Release compilation records or diagnostic timing build")
+            compilation[name] = sha256(commands)
+    return {"timing_cells": len(data["paced_runs"]), "tuple": data["tuple"],
+            "sdk_builds": sdk_builds, "compile_sha256": compilation, "study_sha256": sha256(location)}
+
+
+def fleet_evidence(args, records, identity):
+    revision, _ = source_identity(args, records)
+    tree = execute(["git", "rev-parse", revision + "^{tree}"], args.source, args.out, records)
+    result = {"status": "pass", "role": args.role, "revision": revision, "tree": tree, "native": identity,
+              "hosted": args.hosted, "instrumentation": "release",
+              "physical": "pending equipped native endpoint, real stems, xruns and device timing",
+              "loopback": "pending independent physical capture"}
+    if args.study:
+        from fleet_bench import PRIVATE_INPUTS
+        result.update(stage="native-paced", backend="native-device-neutral")
+        check_fleet_lane(result, revision, "native-paced")
+        result.update(inspect_fleet_study(args.study.resolve(strict=True), tree, PRIVATE_INPUTS))
+        if (result["tuple"]["os"], result["tuple"]["machine"]) != (identity["platform"], identity["architecture"]):
+            raise ValueError("Fleet study differs from the collecting host OS or architecture")
+    else:
+        tests = list(ElementTree.parse(args.junit).getroot().iter("testcase"))
+        if ({case.attrib["name"] for case in tests} != {"FleetBenchmarkSelfCheck", "FleetLatencyProbe"} or
+                len(tests) != 2 or any(child.tag in {"failure", "skipped", "error"} for case in tests for child in case)):
+            raise ValueError("Fleet smoke JUnit is incomplete or failed")
+        result.update(stage="functional-smoke", backend="native-device-neutral", junit_sha256=sha256(args.junit),
+                      timing_cells=0, sustained="pending independent native Release matrix")
+    return result
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
-    parser.add_argument("role", choices=("produce", "consume", "probe", "acquire", "profiles", "compare"))
+    parser.add_argument("role", choices=("produce", "consume", "probe", "acquire", "profiles", "compare", "fleet-evidence"))
     parser.add_argument("--out", type=Path)
     parser.add_argument("--revision")
     parser.add_argument("--variant", choices=("static", "shared"), default="static")
@@ -423,7 +565,17 @@ def main():
     parser.add_argument("--hosted", action="store_true")
     parser.add_argument("--allow-dirty", action="store_true")
     parser.add_argument("--relocation-only", action="store_true")
+    parser.add_argument("--fleet", action="store_true", help="Transfer and run the installed Fleet SDK alongside RuntimeSDK")
+    parser.add_argument("--study", type=Path, help="Native Fleet paced study summary")
+    parser.add_argument("--junit", type=Path, help="Fleet Release smoke JUnit")
     args = parser.parse_args()
+    if args.fleet and args.role not in ("produce", "consume"):
+        parser.error("Fleet transfer applies to SDK production and consumption")
+    if args.role == "fleet-evidence":
+        if bool(args.study) == bool(args.junit) or args.allow_dirty or (args.hosted and args.study):
+            parser.error("Fleet evidence requires a clean revision and one JUnit or an equipped native study")
+    elif args.study or args.junit:
+        parser.error("Study and JUnit paths apply to Fleet evidence only")
     if args.role == "compare":
         if not all(path and path.is_absolute() for path in (args.payload, args.combined, args.out)) or args.out.exists():
             parser.error("Use absolute minimal and combined consumer result paths and a fresh output file")
@@ -447,7 +599,7 @@ def main():
         parser.error("Relocation-only consumption is for local Windows/macOS checks")
     if not re.fullmatch("[0-9a-f]{40}", args.revision or "") or not args.out or not args.out.is_absolute() or args.out.exists() or args.jobs < 1:
         parser.error("Use a full revision and a fresh absolute output")
-    for path in (args.source, args.payload, args.deps_root, args.cache):
+    for path in (args.source, args.payload, args.deps_root, args.cache, args.study, args.junit):
         if path is not None and not path.is_absolute(): parser.error("All supplied paths must be absolute")
     if args.out.resolve().is_relative_to(args.payload.resolve() if args.role == "consume" else args.source.resolve()):
         parser.error("Output must be separate from source/payload")
@@ -455,7 +607,9 @@ def main():
     records = []
     try:
         identity = native_tuple(args.out, records, args.hosted)
-        if args.role in ("probe", "profiles"):
+        if args.role == "fleet-evidence":
+            result = fleet_evidence(args, records, identity)
+        elif args.role in ("probe", "profiles"):
             actual, dirty = source_identity(args, records)
             if args.role == "profiles":
                 command = [sys.executable, "-B", args.source / "test/runtime/profile_gate.py", args.profile,

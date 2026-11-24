@@ -1,6 +1,7 @@
 """Run independent cold processes for each operation and retain unfiltered observations."""
 import contextlib
 import hashlib
+import json
 import os
 from pathlib import Path
 import re
@@ -95,7 +96,7 @@ def identity(out, readelf, objdump, binaries, disassemble=False):
                 run(out, binary.name + "-disassembly", [objdump, "-d", "-C", binary])
 
 
-def features(out, label, compiler, language, standard):
+def feature_controls(out, label, compiler, language, standard):
     source = Path(__file__).parent / "feature.c"
     args = [compiler, "-x", language, "-std=" + standard, "-O1", source]
     run(out, label + "-version", [compiler, "--version"])
@@ -115,7 +116,24 @@ def features(out, label, compiler, language, standard):
         r"error:.*(?:malloc|free).*nonblocking|error:.*nonblocking.*(?:malloc|free)", static[1].stdout))
     rtsan_pass = (all(dynamic) and dynamic[0].returncode == 0 and dynamic[1].returncode != 0
                   and "RealtimeSanitizer" in dynamic[1].stdout and "malloc" in dynamic[1].stdout)
-    return f"{label} effect-check={bool(effect_pass)} rtsan={bool(rtsan_pass)}"
+    return {"effect_check": bool(effect_pass), "rtsan": bool(rtsan_pass),
+            "effect_compile_exit": [case.returncode for case in static],
+            "rtsan_sentinel_exit": [case.returncode if case is not None else None for case in dynamic]}
+
+
+def features(out, label, compiler, language, standard):
+    result = feature_controls(out, label, compiler, language, standard)
+    return f"{label} effect-check={result['effect_check']} rtsan={result['rtsan']}"
+
+
+def record_features(out, cc, cxx):
+    versions = {label: feature_controls(out, label, compiler, language, standard)
+                for label, compiler, language, standard in (
+                    ("c11", cc, "c", "c11"), ("cxx17", cxx, "c++", "c++17"))}
+    result = {**versions, "scope": "compiler capability and matched adverse controls",
+              "installed_boundary": "pending an independently observed installed ABI boundary"}
+    (out / "features.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps(result, indent=2))
 
 
 def coverage(out, static, shared, shared_kernel, nested, cc, cxx, readelf, objdump):
@@ -195,4 +213,4 @@ def output(mode):
 if __name__ == "__main__":
     kind, *arguments = sys.argv[1:]
     with output(kind) as destination:
-        {"coverage": coverage, "raw": raw}[kind](destination, *arguments)
+        {"coverage": coverage, "raw": raw, "features": record_features}[kind](destination, *arguments)

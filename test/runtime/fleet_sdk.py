@@ -130,12 +130,16 @@ def produce(args, work, log):
     run(["cmake", "-S", source, "-B", build, *options], work, log)
     run(["cmake", "--build", build, "--config", "Release", "--parallel", "8", "--target",
          "engine-sim-fleet", "engine-sim-runtime"], work, log)
+    return stage_transfer(source, build, args.variant, work, log)
+
+
+def stage_transfer(source, build, variant, work, log):
     code = work / "original prefix"
     examples = work / "example component"
     for component, destination in (("FleetSDK", code), ("FleetSDKExamples", examples)):
         run(["cmake", "--install", build, "--config", "Release", "--prefix", destination, "--component", component],
             work, log)
-    code_files = audit_code(code, args.variant, source)
+    code_files = audit_code(code, variant, source)
     sample_dir = next(examples.rglob("fixture-single")).parent
     example_files = inventory(sample_dir)
     manifest = json.loads((source / "cmake/fleet-example.json").read_text())["files"]
@@ -149,7 +153,8 @@ def produce(args, work, log):
     shutil.copytree(sample_dir, work / "examples")
     shutil.copytree(source / "test/runtime/fleet-sdk", work / "consumer")
     shutil.copy2(__file__, work / "fleet_sdk.py")
-    data = {"variant": args.variant, "closure": closure(build), "code_only": code_files,
+    shutil.rmtree(examples)
+    data = {"variant": variant, "closure": closure(build), "code_only": code_files,
             "examples": example_files, "payload": inventory(moved)}
     (work / "transfer.json").write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return data
@@ -172,6 +177,40 @@ def symbols(lib, names, work, log):
     return dynamic
 
 
+def native_shared_checks(prefix, binary, work, log):
+    system = platform.system()
+    if system == "Darwin":
+        libraries = (("fleet", 1, FLEET_EXPORTS), ("runtime", 2, V2_EXPORTS))
+        loaded = run(["otool", "-L", binary], work, log)
+        loader = run(["otool", "-l", binary], work, log)
+        need(str(prefix) in loader, "relocated Fleet and Runtime rpath is absent")
+        for component, major, names in libraries:
+            basename = f"libengine-sim-{component}.{major}.dylib"
+            library = next(prefix.rglob(basename))
+            exports = run(["nm", "-gUj", library], work, log)
+            need({name.removeprefix("_") for name in exports.splitlines()} == names,
+                 f"incorrect Mach-O dynamic allowlist: {library}")
+            linked = run(["otool", "-L", library], work, log)
+            identity = "@rpath/" + basename
+            need(identity in linked and identity in loaded, f"wrong Mach-O loader identity: {basename}")
+            need(not re.search(r"piranha|delta|sdl|portaudio", linked, re.I), "optional Mach-O dependency in SDK")
+    if system == "Windows":
+        libraries = (("fleet", 1, FLEET_EXPORTS), ("runtime", 2, V2_EXPORTS))
+        imports = run(["dumpbin", "/dependents", binary], work, log).lower()
+        for component, major, names in libraries:
+            basename = f"engine-sim-{component}-{major}.dll"
+            library = next(prefix.rglob(basename))
+            exports = run(["dumpbin", "/exports", library], work, log)
+            actual = set(re.findall(r"^\s*\d+\s+[\da-f]+\s+[\da-f]+\s+(\S+)", exports, re.I | re.M))
+            need(actual == names, f"incorrect PE dynamic allowlist: {library}")
+            linked = run(["dumpbin", "/dependents", library], work, log).lower()
+            need(basename in imports, "relocated PE imports omit a required DLL")
+            need(re.search(r"(?:vcruntime140|msvcp140|ucrtbase|api-ms-win-crt-)", linked)
+                 and not re.search(r"vcruntime140d|msvcp140d|ucrtbased", linked),
+                 "shared SDK does not use the Release dynamic CRT")
+            need(not re.search(r"piranha|delta|sdl|portaudio", linked), "optional PE dependency in SDK")
+
+
 def consume(work, variant, log):
     moved = work / "SDK espaço Ω"
     examples = work / "examples"
@@ -184,7 +223,8 @@ def consume(work, variant, log):
     dual = work / "dual-build"
     example_build = work / "hosts-build"
     prefix = f"-DCMAKE_PREFIX_PATH={moved}"
-    build_flags = [prefix, "-DCMAKE_BUILD_TYPE=Release"]
+    build_flags = [prefix, "-DCMAKE_BUILD_TYPE=Release", "-DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF",
+                   "-DCMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY=OFF"]
     for src, build in ((work / "consumer", dual), (examples, example_build)):
         run(["cmake", "-S", src, "-B", build, *build_flags,
              f"-DFLEET_SHARED_WITNESS={'ON' if src.name == 'consumer' and variant == 'shared' else 'OFF'}"],
@@ -194,7 +234,9 @@ def consume(work, variant, log):
     if os.name == "nt":
         dlls = [str(file.parent) for file in moved.rglob("*.dll")]
         env["PATH"] = os.pathsep.join([*dlls, env.get("PATH", "")])
-    run([gear("fleet-dual", dual)], work, log, env=env)
+    dual_binary = gear("fleet-dual", dual)
+    run([dual_binary], work, log, env=env)
+    run([gear("fleet-cold", dual)], work, log, env=env)
     run([sys.executable, "-B", examples / "verify.py", gear("engine-sim-fleet-c-host", example_build),
          gear("engine-sim-fleet-cxx-host", example_build), examples / "fixture-single/main.json",
          examples / "fixture-heavy/main.json"], work, log, env=env)
@@ -206,13 +248,16 @@ def consume(work, variant, log):
         symbols(runtime, V2_EXPORTS, work, log)
         need("libengine-sim-fleet.so.1" in dynamic and "$ORIGIN" in dynamic and "BIND_NOW" in dynamic,
              "shared Fleet library loader identity")
-        dependencies = run(["ldd", gear("fleet-dual", dual)], work, log)
+        dependencies = run(["ldd", dual_binary], work, log)
         need(str(fleet.parent) in dependencies and "libengine-sim-fleet.so.1" in dependencies and
              "libengine-sim-runtime.so.2" in dependencies and "not found" not in dependencies,
              "wrong relocated runtime loader paths")
         env["LD_PRELOAD"] = str(next(dual.rglob("libfleet-probe-heap.so")))
         probe = run([gear("fleet-shared-probe", dual)], work, log, env=env)
-        need("cold=0 injected=2" in probe, "installed shared heap negative control was not observed")
+        need("cold=0 injected=2 release=1 aligned=1 lock=1 wait=1 throw=1" in probe,
+             "installed shared forbidden-operation controls were not observed")
+    if variant == "shared":
+        native_shared_checks(moved, dual_binary, work, log)
     if platform.system() == "Linux":
         shutil.copy2(dual / "fleet-dual.map", work / "link.map")
     wrong = work / "wrong-major"
@@ -241,7 +286,10 @@ def main():
     parser.add_argument("--combined-deps", type=Path)
     parser.add_argument("--consume", type=Path)
     parser.add_argument("--transfer", type=Path, help="Prepare declared consumer payload for another native host")
+    parser.add_argument("--prepared-build", action="store_true", help="Stage from the caller's configured Release build")
     args = parser.parse_args()
+    if args.prepared_build and (not args.transfer or args.consume or args.combined_deps):
+        parser.error("A prepared build requires a transfer output and its existing configuration")
     if args.consume:
         consume(args.consume.resolve(), args.variant, args.consume / "consumer.log")
         return
@@ -251,7 +299,10 @@ def main():
     if args.transfer:
         work = args.transfer.resolve()
         work.mkdir(parents=True, exist_ok=False)
-        produce(args, work, work / "producer.log")
+        if args.prepared_build:
+            stage_transfer(args.source.resolve(), args.build.resolve(), args.variant, work, work / "producer.log")
+        else:
+            produce(args, work, work / "producer.log")
         return
     with tempfile.TemporaryDirectory(prefix="fleet-sdk-") as temp:
         work = Path(temp)
