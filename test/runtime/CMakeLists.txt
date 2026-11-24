@@ -459,6 +459,18 @@ if (TARGET engine-sim-runtime AND TARGET engine-sim-runtime-json-private)
     add_test(NAME FleetTelemetryRace COMMAND engine-sim-fleet-telemetry-test telemetry "${fleet_fixture}")
     add_test(NAME FleetRetirement COMMAND engine-sim-fleet-telemetry-test retirement "${fleet_fixture}")
     set_tests_properties(FleetTelemetryRace FleetRetirement PROPERTIES LABELS r3-fleet-telemetry TIMEOUT 90)
+
+    add_executable(engine-sim-fleet-physical-test fleet-physical/main.cpp)
+    target_link_libraries(engine-sim-fleet-physical-test PRIVATE EngineSim::Fleet EngineSim::Runtime
+        EngineSim::Config engine-sim-runtime-json-private engine-sim-runtime-backend Threads::Threads)
+    target_include_directories(engine-sim-fleet-physical-test PRIVATE
+        "${PROJECT_SOURCE_DIR}/src/fleet" "${PROJECT_SOURCE_DIR}/modules/assembly/src"
+        "${PROJECT_SOURCE_DIR}/src/runtime")
+    target_compile_features(engine-sim-fleet-physical-test PRIVATE cxx_std_17)
+    engine_sim_diagnose(engine-sim-fleet-physical-test TRUE)
+    add_test(NAME FleetPhysicalCurves COMMAND engine-sim-fleet-physical-test curves "${PROJECT_SOURCE_DIR}")
+    add_test(NAME FleetPhysicalResponse COMMAND engine-sim-fleet-physical-test response "${PROJECT_SOURCE_DIR}")
+    set_tests_properties(FleetPhysicalCurves FleetPhysicalResponse PROPERTIES LABELS r3-fleet-physical TIMEOUT 90)
 endif ()
 
 if (TARGET engine-sim-runtime AND TARGET engine-sim-config-roundtrip AND ENGINE_SIM_BUILD_RUNTIME_EXAMPLES)

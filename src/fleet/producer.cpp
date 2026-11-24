@@ -65,8 +65,6 @@ std::int32_t producerCommand(const es_rt_fleet &fleet, const es_rt_event &event)
     if (event.duration_ms != 0) return ES_RT_UNSUPPORTED;
     if (event.kind == ES_RT_STOP) return ES_RT_OK;
     if (event.kind != ES_RT_ACTIVATE) return ES_RT_UNSUPPORTED;
-    const auto &voice = fleet.cells[event.candidate.cell].voice;
-    if (!voice || voice->controlsPolicy != ES_RT_RAW) return ES_RT_UNSUPPORTED;
     for (std::size_t lane = 0; lane < fleet.config.lanes; ++lane) {
         if (lane != event.next_voice.lane && fleet.commands.lanes[lane].current.generation)
             return ES_RT_UNSUPPORTED;

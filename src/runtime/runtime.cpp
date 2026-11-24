@@ -43,11 +43,12 @@ Runtime::Session::Session(std::unique_ptr<EngineSession> value, Recipe source, s
 Runtime::Session::~Session() = default;
 void Runtime::Session::latch() {
     auto &sim = *prepared.session->simulator;
-    sim.getEngine()->setSpeedControl(requested.demand);
-    sim.getEngine()->getIgnitionModule()->m_enabled = requested.ignition != 0;
-    sim.m_starterMotor.m_enabled = !drive && requested.starter != 0;
-    if (drive) drive->latch(requested.driven_rpm, requested.load_nm);
-    else static_cast<PistonEngineSimulator &>(sim).setExternalLoadNm(requested.load_nm);
+    const auto controls = shapeControls ? shapeControls(shapeContext) : requested;
+    sim.getEngine()->setSpeedControl(controls.demand);
+    sim.getEngine()->getIgnitionModule()->m_enabled = controls.ignition != 0;
+    sim.m_starterMotor.m_enabled = !drive && controls.starter != 0;
+    if (drive) drive->latch(controls.driven_rpm, controls.load_nm);
+    else static_cast<PistonEngineSimulator &>(sim).setExternalLoadNm(controls.load_nm);
 }
 ProcessingStatus Runtime::snapshot(const Session &session, es_telemetry &value) const noexcept {
     const auto &sim = *session.prepared.session->simulator;

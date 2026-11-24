@@ -39,7 +39,7 @@ on success. Poll a terminal result once to return its ticket credit.
 The current transport supports 256 ingress entries and 256 tickets. Structural
 events retain eight reserved entries and tickets. A full or otherwise rejected
 submission preserves the event sequence, candidate token and lane reservation.
-The experimental worker supports one occupied RAW lane, complete physical
+The experimental worker supports one occupied lane, complete physical
 vectors and zero-duration activation or stop. Start rejects a pending command
 outside this subset. While running, unsupported commands are rejected at submit.
 
@@ -60,6 +60,28 @@ To schedule from a host clock, establish a monotonic-time and estimated DAC
 frame pair outside the engine. Convert later times to output frames by rounding
 up, using the fleet sample rate. Establish a fresh mapping after an epoch break
 or a device clock discontinuity.
+
+### Physical control policy
+
+Choose `ES_RT_GAME` when preparing a voice for time-shaped controls. The direct
+throttle reaches requested demand over 10 ms of numerical ticks. A governor
+receives the new setpoint at the first eligible tick. The requested load in
+N·m ramps over 5 ms. Both ramps round up to a whole tick. In DRIVEN mode the
+shaft target slews up or down by at most 2,400 RPM per second, within the
+engine's validated range. A request for zero RPM decelerates toward a stationary
+shaft. Ignition and starter take effect at the first eligible tick. The starter
+is available in FREE mode.
+
+A retarget begins from the trajectory's value at that tick. Sending the same
+target preserves the current trajectory. Choose `ES_RT_RAW` for step changes
+at the first eligible tick and for comparison with the v2 raw stem. The shaft
+solver retains its existing authority checks in both policies. A valid target
+can still lead to a numerical fault.
+
+Snapshot `requested` is the full target associated with the applied event.
+Snapshot `applied` contains the values passed to the engine at the most recent
+numerical tick start. Measured RPM, plate angle and reactions come from the
+last completed engine frame.
 
 ## Planar audio callback
 
@@ -93,8 +115,8 @@ tile payload and tags. Host and device qualification remain pending.
 
 ## Starting the producer
 
-Prepare the voice with `ES_RT_RAW`, then submit `ES_RT_ACTIVATE` at frame zero
-with the prepared token, lane generation 1 and `duration_ms = 0`. Schedule any
+Prepare the voice, then submit `ES_RT_ACTIVATE` at frame zero with the prepared
+token, lane generation 1 and `duration_ms = 0`. Schedule any
 initial vectors before `es_rt_start`. Start launches one library-owned producer
 and returns after retaining exactly `H` frames. Start the host callback after
 that return. The first callback starts at frame zero. The RAW stem has unity

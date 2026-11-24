@@ -12,7 +12,7 @@ void Voice::attachTimeline(es_rt_id id, TimelineTrace observer, void *context) n
         auto &voice = *static_cast<Voice *>(source);
         if (voice.requestedSequence == voice.latchedSequence) return;
         voice.latchedSequence = voice.requestedSequence;
-        voice.applied = voice.requested;
+        if (voice.controlsPolicy == ES_RT_RAW) voice.applied = voice.requested;
         voice.latchFrame = voice.renderOrigin + (frame - voice.localOrigin);
         voice.latchTick = tick;
         if (voice.trace) voice.trace(voice.traceContext,

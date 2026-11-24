@@ -18,6 +18,7 @@ namespace json_runtime {
 struct PreparedModel {
     std::unique_ptr<EngineSession> session;
     std::shared_ptr<const JsonRecipe> recipe;
+    bool governor = false;
 };
 using PreparedModelResult = std::variant<PreparedModel, config_v1::Diagnostic>;
 using InputVisitor = std::function<void(const std::filesystem::path &, std::string_view)>;

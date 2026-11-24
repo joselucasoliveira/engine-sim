@@ -46,6 +46,8 @@ private:
         void latch();
         PreparedGraph prepared;
         es_controls requested{sizeof(es_controls), ES_ABI_V2, 0, 0, 0, 0, 0};
+        es_controls (*shapeControls)(void *) noexcept = nullptr;
+        void *shapeContext = nullptr;
         std::unique_ptr<DrivenShaft> drive;
         std::unique_ptr<PullEngine> pull;
     };

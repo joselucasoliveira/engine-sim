@@ -23,6 +23,19 @@ Voice::Voice(const es_config &config, const es_rt_voice_config &settings,
         actual.rows != expected.rows || actual.generators != expected.generators)
         throw SimulationFault("Final voice graph differs from its admitted solver dimensions");
     drivenLimitRpm = runtime.telemetry().driven_limit_rpm;
+    if (controlsPolicy == ES_RT_GAME) {
+        game.emplace(initial, runtime.telemetry().simulation_hz, graph.governor);
+        runtime.m_session->shapeContext = this;
+        runtime.m_session->shapeControls = [](void *source) noexcept {
+            auto &voice = *static_cast<Voice *>(source);
+            const auto tick = voice.nextTick;
+            if (tick != UINT64_MAX) ++voice.nextTick;
+            const auto applied = voice.game->at(tick, voice.requested);
+            voice.applied = applied;
+            return es_controls{sizeof(es_controls), ES_ABI_V2, applied.ignition, applied.starter,
+                               applied.demand, applied.load_nm, applied.driven_rpm};
+        };
+    }
 }
 
 es_rt_lane_info Voice::laneInfo(es_rt_id id, std::uint32_t state) const noexcept {

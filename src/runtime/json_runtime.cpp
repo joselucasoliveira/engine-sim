@@ -165,7 +165,16 @@ PreparedModelResult prepare(JsonRecipe recipe, const JsonRecipe *expected,
     if (checkpoint) checkpoint(Phase::prepared);
     auto prepared = std::get<assembly::PreparedSession>(std::move(result));
     recipe.resources = std::move(prepared.inputs);
-    return PreparedModel{std::move(prepared.session), std::make_shared<const JsonRecipe>(std::move(recipe))};
+    bool governor = false;
+    if (profile.fleet) {
+        const auto &values = model.values();
+        const auto &throttles = values.components.throttles;
+        governor = std::any_of(throttles.begin(), throttles.end(), [&](const cfg::Throttle &value) {
+            const auto *candidate = std::get_if<cfg::Governor>(&value);
+            return candidate && candidate->id == values.engine.throttle;
+        });
+    }
+    return PreparedModel{std::move(prepared.session), std::make_shared<const JsonRecipe>(std::move(recipe)), governor};
 }
 
 PreparedModelResult prepare_fleet(JsonRecipe recipe, const es_config &config, assembly::FleetCapacity &capacity,

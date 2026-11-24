@@ -9,10 +9,12 @@
 #include "producer.hpp"
 #include "runtime.hpp"
 #include "snapshot.hpp"
+#include "trajectory.hpp"
 
 #include <atomic>
 #include <cmath>
 #include <memory>
+#include <optional>
 
 namespace engine_sim::fleet {
 
@@ -61,6 +63,8 @@ struct Voice {
     std::uint64_t latchedSequence = 0, latchFrame = ES_RT_NO_FRAME, latchTick = ES_RT_NO_FRAME;
 
 private:
+    std::optional<GameControls> game;
+    std::uint64_t nextTick = 0;
     es_rt_id timelineId{};
     TimelineTrace trace = nullptr;
     void *traceContext = nullptr;
