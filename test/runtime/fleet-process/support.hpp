@@ -24,6 +24,7 @@ inline Owner create(std::uint32_t maximum, std::uint32_t lanes,
     es_rt_config config{sizeof(config), ES_RT_V1, 48000, profile, maximum, lanes, ES_RT_EXPERIMENTAL, 0, epoch};
     es_rt_fleet *fleet = nullptr;
     require(es_rt_create(&config, &fleet, nullptr) == ES_RT_OK && fleet, "create transport");
+    fleet->producer.phase.store(engine_sim::fleet::FleetPhase::running);
     return {fleet, es_rt_destroy};
 }
 

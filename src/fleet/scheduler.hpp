@@ -14,6 +14,7 @@ struct ScheduledLane {
     es_rt_id id{};
     std::uint32_t cell = no_cell;
     double gain = 1;
+    bool failed = false;
 };
 
 // One serial W owns this timeline and its active voice borrows. The C-side

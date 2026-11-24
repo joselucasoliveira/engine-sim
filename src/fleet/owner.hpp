@@ -6,6 +6,7 @@
 #include "ingress.hpp"
 #include "json_session.hpp"
 #include "pcm.hpp"
+#include "producer.hpp"
 #include "runtime.hpp"
 
 #include <atomic>
@@ -82,6 +83,7 @@ struct es_rt_fleet {
     std::size_t prepared = 0;
     engine_sim::fleet::CommandTransport commands;
     engine_sim::fleet::PcmTransport pcm;
+    engine_sim::fleet::Producer producer;
 };
 
 namespace engine_sim::fleet {

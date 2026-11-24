@@ -65,7 +65,12 @@ std::int32_t Scheduler::apply(const es_rt_event &event) noexcept {
     auto &lane = lanes[event.voice.lane];
     if (lane.cell == no_cell || lane.id.generation != event.voice.generation) return ES_RT_STALE;
     auto &voice = *fleet.cells[lane.cell].voice;
-    if (voice.runtime.telemetry().state != ES_READY) return ES_RT_STATE;
+    if (event.kind == ES_RT_STOP && event.duration_ms == 0) {
+        observeApply(event, &voice, lane.id);
+        lane = {};
+        return ES_RT_OK;
+    }
+    if (lane.failed || voice.runtime.telemetry().state != ES_READY) return ES_RT_STATE;
     if (event.kind == ES_RT_GAIN) {
         lane.gain = event.gain;
     } else if (event.kind == ES_RT_VECTOR) {
@@ -83,15 +88,18 @@ std::int32_t Scheduler::apply(const es_rt_event &event) noexcept {
 void Scheduler::renderRange(ScheduledTile &output, std::uint32_t begin, std::uint32_t end) {
     if (begin == end) return;
     for (std::size_t index = 0; index < fleet.config.lanes; ++index) {
-        const auto &lane = lanes[index];
-        if (lane.cell == no_cell) continue;
+        auto &lane = lanes[index];
+        if (lane.cell == no_cell || lane.failed) continue;
         auto &voice = *fleet.cells[lane.cell].voice;
         if (voice.runtime.telemetry().state != ES_READY) continue;
         auto *destination = output.stem[index].data() + begin;
         std::uint32_t written = 0;
-        (void)voice.renderAt(output.first + begin, destination, end - begin, written);
-        // The tile was zero-initialized before rendering. A failed numerical
-        // interval leaves the unfinished suffix available for later fault policy.
+        try {
+            lane.failed = voice.renderAt(output.first + begin, destination, end - begin, written) != ProcessingStatus::ok;
+        } catch (...) {
+            lane.failed = true;
+        }
+        // The initialized suffix remains silent for a failed voice.
     }
 }
 

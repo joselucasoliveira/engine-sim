@@ -122,6 +122,8 @@ extern "C" std::int32_t ES_RT_CALL es_rt_submit(es_rt_fleet *fleet, const es_rt_
     using namespace engine_sim::fleet;
     if (!fleet || !input) return ES_RT_INVALID;
     if (const auto status = prefix(*input); status != ES_RT_OK) return status;
+    const auto phase = fleet->producer.phase.load(std::memory_order_relaxed);
+    if (phase == FleetPhase::stopped || fleet->pcm.broken()) return ES_RT_STATE;
     const auto event = *input;
     auto &commands = fleet->commands;
     if (event.epoch != fleet->config.epoch) return ES_RT_STALE;
@@ -136,6 +138,9 @@ extern "C" std::int32_t ES_RT_CALL es_rt_submit(es_rt_fleet *fleet, const es_rt_
     if (const auto status = validatePayload(*fleet, event, prior); status != ES_RT_OK) return status;
     auto *cell = hasCandidate(event.kind) ? preparedCell(*fleet, event.candidate) : nullptr;
     if (hasCandidate(event.kind) && !cell) return ES_RT_STALE;
+    if (phase == FleetPhase::running) {
+        if (const auto status = producerCommand(*fleet, event); status != ES_RT_OK) return status;
+    }
 
     const auto bucket = event.frame / quantum;
     const auto inBucket = bucket == commands.bucket ? commands.inBucket : 0;

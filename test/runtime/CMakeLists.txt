@@ -435,6 +435,18 @@ if (TARGET engine-sim-runtime AND TARGET engine-sim-runtime-json-private)
     engine_sim_diagnose(engine-sim-fleet-process-span-test TRUE)
     add_test(NAME FleetProcessSpan COMMAND engine-sim-fleet-process-span-test)
     set_tests_properties(FleetProcessSpan PROPERTIES LABELS r3-fleet-process TIMEOUT 90)
+
+    add_executable(engine-sim-fleet-producer-test fleet-producer/main.cpp)
+    target_link_libraries(engine-sim-fleet-producer-test PRIVATE EngineSim::Fleet EngineSim::Runtime
+        EngineSim::Config engine-sim-runtime-json-private engine-sim-runtime-backend Threads::Threads)
+    target_include_directories(engine-sim-fleet-producer-test PRIVATE
+        "${PROJECT_SOURCE_DIR}/src/fleet" "${PROJECT_SOURCE_DIR}/modules/assembly/src"
+        "${PROJECT_SOURCE_DIR}/src/runtime")
+    target_compile_features(engine-sim-fleet-producer-test PRIVATE cxx_std_17)
+    engine_sim_diagnose(engine-sim-fleet-producer-test TRUE)
+    add_test(NAME FleetProducerHorizon COMMAND engine-sim-fleet-producer-test horizon "${fleet_fixture}")
+    add_test(NAME FleetProducerFaultPrefix COMMAND engine-sim-fleet-producer-test fault "${fleet_fixture}")
+    set_tests_properties(FleetProducerHorizon FleetProducerFaultPrefix PROPERTIES LABELS r3-fleet-producer TIMEOUT 90)
 endif ()
 
 if (TARGET engine-sim-runtime AND TARGET engine-sim-config-roundtrip AND ENGINE_SIM_BUILD_RUNTIME_EXAMPLES)

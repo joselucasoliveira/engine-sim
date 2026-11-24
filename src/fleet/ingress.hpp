@@ -43,6 +43,9 @@ public:
         tail.store(index + 1, std::memory_order_release);
     }
 
+    // C may inspect queued slots while W has never run.
+    const Command &atBeforeStart(std::uint64_t index) const noexcept { return commands[index % ingress_slots]; }
+
     // W borrows the current slot until consume. Its snapshot never expands.
     const Command *peek(std::uint64_t limit) const noexcept {
         const auto index = head.load(std::memory_order_relaxed);

@@ -1,8 +1,9 @@
-# Experimental Fleet preparation
+# Experimental Fleet
 
 The build-tree C11 and C++17 interface in `engine_sim/fleet.h` is available through
 `EngineSim::Fleet` when the device-free runtime is enabled. This increment supports
-owner creation, detached voice preparation, discard and destruction.
+owner creation, detached voice preparation, ordered commands, one serial
+producer and a planar callback.
 
 Initialize each extensible input with its size and `ES_RT_V1`. For local
 experiments, create an owner with `ES_RT_EXPERIMENTAL` and qualification ID zero.
@@ -21,7 +22,7 @@ existing candidates retain their values. Release an unused token with
 `es_rt_discard`. Tokens carry the owning epoch and a cell generation.
 
 The non-audio control owner serializes these calls and destroys the fleet after
-its last use. For optional diagnostics, initialize `es_rt_diagnostic.size` and
+quiescence. For optional diagnostics, initialize `es_rt_diagnostic.size` and
 `es_rt_diagnostic.abi`. The call writes a bounded UTF-8 message and numeric stage
 and status. Success clears the diagnostic.
 
@@ -38,7 +39,9 @@ on success. Poll a terminal result once to return its ticket credit.
 The current transport supports 256 ingress entries and 256 tickets. Structural
 events retain eight reserved entries and tickets. A full or otherwise rejected
 submission preserves the event sequence, candidate token and lane reservation.
-Worker integration and audio generation belong to later increments.
+The experimental worker supports one occupied RAW lane, complete physical
+vectors and zero-duration activation or stop. Start rejects a pending command
+outside this subset. While running, unsupported commands are rejected at submit.
 
 ## Output frames and numerical ticks
 
@@ -86,5 +89,29 @@ silence. Quiesce the callback before releasing its owner.
 Balanced uses `H = 4 * max_frames` and Interactive uses `H = 3 * max_frames`.
 Creation reserves `H / 64 + 2` tagged tiles, each with one 64-frame mix and
 eight 64-frame stems. At Balanced 256 this is 18 tiles, with 41,760 bytes of
-tile payload and tags. The current producer is a test fixture that writes
-tagged shape samples. Engine priming and host/device qualification are pending.
+tile payload and tags. Host and device qualification remain pending.
+
+## Starting the producer
+
+Prepare the voice with `ES_RT_RAW`, then submit `ES_RT_ACTIVATE` at frame zero
+with the prepared token, lane generation 1 and `duration_ms = 0`. Schedule any
+initial vectors before `es_rt_start`. Start launches one library-owned producer
+and returns after retaining exactly `H` frames. Start the host callback after
+that return. The first callback starts at frame zero. The RAW stem has unity
+gain and uses the same numerical pipeline as v2. The reference mix applies
+the default master gain of 0.5.
+
+While running, `es_rt_get_transport` reports separate observations of submitted
+frames `D`, published frames `G` and the first unsealed frame `S`. Schedule
+from a fresh observation. `D + H + 64` is the practical earliest request for
+additional sequencing margin on this transport. The producer refills when
+the number of frames ahead reaches the low watermark. Its target never exceeds
+`D + H`, and it generates only whole 64-frame tiles. A failed voice preserves
+its completed prefix and contributes zero for the rest of the tile and
+later spans.
+
+Stop and drain the host callback before calling `es_rt_quiesce`. Quiesce joins
+the producer even if no further frames will be consumed. Create a new fleet
+with a fresh epoch to restart. The current preview releases detached cells
+when the owner is destroyed. Cell collection, snapshot delivery and lifecycle
+envelopes are pending.

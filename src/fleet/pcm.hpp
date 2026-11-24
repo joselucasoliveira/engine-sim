@@ -19,9 +19,14 @@ struct PcmTile {
 
 class PcmTransport {
 public:
+    static std::uint32_t highFrames(const es_rt_config &config) noexcept {
+        return (config.profile == ES_RT_INTERACTIVE ? 3 : 4) * config.max_frames;
+    }
+    static std::uint32_t lowFrames(const es_rt_config &config) noexcept {
+        return highFrames(config) - config.max_frames;
+    }
     static std::size_t slotCount(const es_rt_config &config) noexcept {
-        const auto high = (config.profile == ES_RT_INTERACTIVE ? 3 : 4) * config.max_frames;
-        return high / tileFrames + 2;
+        return highFrames(config) / tileFrames + 2;
     }
 
     explicit PcmTransport(std::size_t count)

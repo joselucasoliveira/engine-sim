@@ -85,6 +85,8 @@ extern "C" std::int32_t ES_RT_CALL es_rt_process(es_rt_fleet *fleet, const es_rt
         hasOutput = true;
     }
     if (frames && !hasOutput) return ES_RT_INVALID;
+    if (fleet->producer.phase.load(std::memory_order_acquire) != engine_sim::fleet::FleetPhase::running)
+        return ES_RT_STATE;
     auto &submitted = fleet->commands.submitted;
     const auto first = submitted.load(std::memory_order_relaxed);
     if (frames > std::numeric_limits<std::uint64_t>::max() - first) return ES_RT_CAPACITY;

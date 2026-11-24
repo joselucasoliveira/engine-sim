@@ -122,6 +122,8 @@ std::int32_t prepare_voice(es_rt_fleet *fleet, const es_rt_voice_config *voice, 
     return boundary(detail, [&]() -> std::int32_t {
         if (!fleet || !voice || !out)
             return report(detail, ES_RT_INVALID, ES_RT_DIAG_INPUT, "Fleet, voice settings and token destination are required");
+        if (fleet->producer.phase.load(std::memory_order_relaxed) == engine_sim::fleet::FleetPhase::stopped)
+            return report(detail, ES_RT_STATE, ES_RT_DIAG_PREPARE, "Fleet epoch is quiesced");
         if (const auto status = validate_voice(*voice, detail); status != ES_RT_OK) return status;
         if (fleet->prepared == 2)
             return report(detail, ES_RT_FULL, ES_RT_DIAG_PREPARE, "Both fleet candidate credits are occupied");
@@ -191,7 +193,8 @@ std::int32_t ES_RT_CALL es_rt_create(const es_rt_config *input, es_rt_fleet **ou
                     sizeof(engine_sim::fleet::PcmTile), assembly::fleet_storage_limit))
             return report(detail, ES_RT_CAPACITY, ES_RT_DIAG_PROFILE, "Fixed fleet storage exceeds capacity");
         auto owner = std::make_unique<es_rt_fleet>(config, *cells);
-        if (!owner->commands.lockFree() || !owner->pcm.lockFree())
+        if (!owner->commands.lockFree() || !owner->pcm.lockFree() ||
+            !owner->producer.phase.is_lock_free() || !owner->producer.generated.is_lock_free())
             return report(detail, ES_RT_UNSUPPORTED, ES_RT_DIAG_PROFILE, "Fleet transport atomics are not lock-free");
         for (std::size_t index = 0; index < *cells; ++index) {
             const auto &cell = owner->cells[index];
@@ -234,5 +237,17 @@ std::int32_t ES_RT_CALL es_rt_discard(es_rt_fleet *fleet, es_rt_token token) {
     return ES_RT_OK;
 }
 
-void ES_RT_CALL es_rt_destroy(es_rt_fleet *fleet) { delete fleet; }
+std::int32_t ES_RT_CALL es_rt_start(es_rt_fleet *fleet, es_rt_diagnostic *detail) {
+    return boundary(detail, [&]() -> std::int32_t {
+        if (!fleet) return report(detail, ES_RT_INVALID, ES_RT_DIAG_INPUT, "Fleet is required");
+        const auto status = fleet->producer.start(*fleet);
+        if (status != ES_RT_OK)
+            return report(detail, status, ES_RT_DIAG_PROFILE, "Fleet producer could not prime the requested epoch");
+        return ES_RT_OK;
+    });
+}
+
+void ES_RT_CALL es_rt_destroy(es_rt_fleet *fleet) {
+    if (fleet && es_rt_quiesce(fleet) == ES_RT_OK) delete fleet;
+}
 }
