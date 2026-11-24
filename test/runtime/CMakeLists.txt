@@ -413,6 +413,18 @@ if (TARGET engine-sim-runtime AND TARGET engine-sim-runtime-json-private)
     add_test(NAME FleetIngressRace COMMAND engine-sim-fleet-ingress-test race "${fleet_fixture}")
     set_tests_properties(FleetIngressBounds FleetIngressRace PROPERTIES LABELS r3-ingress TIMEOUT 90)
 
+    add_executable(engine-sim-fleet-scheduler-test fleet-scheduler/main.cpp)
+    target_link_libraries(engine-sim-fleet-scheduler-test PRIVATE
+        EngineSim::Fleet EngineSim::Runtime EngineSim::Config engine-sim-runtime-backend)
+    target_include_directories(engine-sim-fleet-scheduler-test PRIVATE
+        "${PROJECT_SOURCE_DIR}/src/fleet" "${PROJECT_SOURCE_DIR}/modules/assembly/src"
+        "${PROJECT_SOURCE_DIR}/src/runtime")
+    target_compile_features(engine-sim-fleet-scheduler-test PRIVATE cxx_std_17)
+    engine_sim_diagnose(engine-sim-fleet-scheduler-test TRUE)
+    add_test(NAME FleetEventTimeline COMMAND engine-sim-fleet-scheduler-test timeline "${fleet_fixture}")
+    add_test(NAME FleetRawScheduling COMMAND engine-sim-fleet-scheduler-test parity "${fleet_fixture}")
+    set_tests_properties(FleetEventTimeline FleetRawScheduling PROPERTIES LABELS r3-timeline TIMEOUT 90)
+
 endif ()
 
 if (TARGET engine-sim-runtime AND TARGET engine-sim-config-roundtrip AND ENGINE_SIM_BUILD_RUNTIME_EXAMPLES)

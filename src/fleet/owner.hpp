@@ -29,9 +29,19 @@ inline bool validVector(const es_rt_vector &value) noexcept {
         finiteRange(value.driven_rpm, 12000) && value.ignition <= 1 && value.starter <= 1;
 }
 
+struct TimelinePoint {
+    enum class Kind { apply, latch } kind;
+    std::uint64_t sequence, frame, localFrame, tick;
+    es_rt_id voice;
+};
+using TimelineTrace = void (*)(void *, const TimelinePoint &) noexcept;
+
 struct Voice {
     Voice(const es_config &config, const es_rt_voice_config &initial,
           assembly::FleetCapacity estimate, json_runtime::PreparedModel graph);
+    void attachTimeline(es_rt_id voice, TimelineTrace observer, void *context) noexcept;
+    void request(es_rt_vector vector, std::uint64_t sequence, std::uint64_t frame) noexcept;
+    ProcessingStatus renderAt(std::uint64_t start, float *output, std::uint32_t count, std::uint32_t &written);
 
     Runtime runtime;
     assembly::FleetCapacity capacity;
@@ -39,6 +49,15 @@ struct Voice {
     std::uint32_t controlsPolicy;
     std::uint32_t mode;
     double drivenLimitRpm = 0;
+
+    std::uint64_t requestedSequence = 0, requestedFrame = ES_RT_NO_FRAME;
+    std::uint64_t latchedSequence = 0, latchFrame = ES_RT_NO_FRAME, latchTick = ES_RT_NO_FRAME;
+
+private:
+    es_rt_id timelineId{};
+    TimelineTrace trace = nullptr;
+    void *traceContext = nullptr;
+    std::uint64_t renderOrigin = 0, localOrigin = 0;
 };
 
 enum class CellState : std::uint32_t { free, prepared, queued, active, returned };

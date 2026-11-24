@@ -25,6 +25,7 @@ PullEngine::PullEngine(Simulator &simulator, Synthesizer &synthesis, ControlLatc
 
 void PullEngine::latch() {
     if (m_controls) m_controls();
+    if (m_latchObserver) m_latchObserver(m_latchContext, m_clock.counts().frames, m_latchTick);
 }
 
 bool PullEngine::tick(double *endpoint, std::size_t capacity) {
@@ -57,7 +58,9 @@ ProcessingStatus PullEngine::tickChecked(double *endpoint, std::size_t capacity)
     std::copy_n(excitation.data, excitation.count, endpoint);
     if (m_observer) m_observer(m_simulator);
     if (m_afterTick) m_afterTick();
-    return m_checkedAfterTick ? m_checkedAfterTick() : ProcessingStatus::ok;
+    const auto completed = m_checkedAfterTick ? m_checkedAfterTick() : ProcessingStatus::ok;
+    if (m_latchObserver && completed == ProcessingStatus::ok) ++m_latchTick;
+    return completed;
 }
 
 bool PullEngine::native(AcousticExcitation input, std::int16_t &sample) {

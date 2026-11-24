@@ -39,3 +39,21 @@ The current transport supports 256 ingress entries and 256 tickets. Structural
 events retain eight reserved entries and tickets. A full or otherwise rejected
 submission preserves the event sequence, candidate token and lane reservation.
 Worker integration and audio generation belong to later increments.
+
+## Output frames and numerical ticks
+
+The scheduler orders events by absolute output frame and sequence. It seals one
+64-frame tile at a time. An event that arrives after the seal snapshot can
+receive a terminal `ES_RT_LATE` even when submission accepted it. The control
+side also rejects requests more than two seconds ahead of reported submission.
+
+Physical controls take effect at the first eligible numerical tick start. A
+tick that completes on a frame boundary belongs to the preceding interval.
+For example, two vectors queued at frame 64 are both applied in sequence at
+frame 64. The next tick observes the second vector if both arrive before it
+starts. The scheduler preserves the receipt for each applied vector.
+
+To schedule from a host clock, establish a monotonic-time and estimated DAC
+frame pair outside the engine. Convert later times to output frames by rounding
+up, using the fleet sample rate. Establish a fresh mapping after an epoch break
+or a device clock discontinuity.

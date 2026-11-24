@@ -14,6 +14,7 @@ public:
     using ControlLatch = std::function<void()>;
     using CheckedCommand = std::function<ProcessingStatus()>;
     using TickObserver = std::function<void(const Simulator &)>;
+    using LatchObserver = void (*)(void *, std::uint64_t localFrame, std::uint64_t tick) noexcept;
     PullEngine(Simulator &simulator, Synthesizer &synthesis, ControlLatch controls,
         SampleClock::Profile profile = SampleClock::Profile::Public,
         std::uint32_t outputRate = SampleClock::NativeRate);
@@ -25,6 +26,11 @@ public:
     std::size_t lastWritten() const { return m_clock.lastWritten(); }
     bool faulted() const { return m_clock.faulted(); }
     void setTickObserver(TickObserver observer) { m_observer = std::move(observer); }
+    void setLatchObserver(LatchObserver observer, void *context) noexcept {
+        m_latchObserver = observer;
+        m_latchContext = context;
+        m_latchTick = m_clock.counts().ticks;
+    }
     void setTickCommands(ControlLatch before, ControlLatch after) {
         m_beforeTick = std::move(before);
         m_afterTick = std::move(after);
@@ -53,6 +59,9 @@ private:
     ControlLatch m_beforeTick, m_afterTick;
     CheckedCommand m_checkedAfterTick;
     SampleClock m_clock;
+    LatchObserver m_latchObserver = nullptr;
+    void *m_latchContext = nullptr;
+    std::uint64_t m_latchTick = 0;
     std::vector<double> m_flowTotals;
     double m_presentationSeconds = 0;
     bool m_presenting = false;

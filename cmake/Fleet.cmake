@@ -1,5 +1,6 @@
 add_library(engine-sim-fleet STATIC
-    "${PROJECT_SOURCE_DIR}/src/fleet/owner.cpp" "${PROJECT_SOURCE_DIR}/src/fleet/commands.cpp")
+    "${PROJECT_SOURCE_DIR}/src/fleet/owner.cpp" "${PROJECT_SOURCE_DIR}/src/fleet/commands.cpp"
+    "${PROJECT_SOURCE_DIR}/src/fleet/scheduler.cpp")
 add_library(EngineSim::Fleet ALIAS engine-sim-fleet)
 target_include_directories(engine-sim-fleet
     PUBLIC "$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>"
