@@ -1,6 +1,8 @@
 # Credits and third-party notices
 
-Ange Yaghi created the original Engine Simulator. This fork retains the original copyright and complete [MIT license](LICENSE). The inherited engine descriptions, scene and examples retain their attribution, and the preset collection readmes credit the original demonstrations. [Original project](https://github.com/ange-yaghi/engine-sim)
+The library grew out of Engine Simulator, originally created by Ange Yaghi. [Original project](https://github.com/ange-yaghi/engine-sim)
+
+The project's [MIT license](LICENSE) retains the original Engine Simulator copyright notice. The inherited engine descriptions, scene and examples retain their attribution, and the preset collection readmes credit the original demonstrations.
 
 | Component | License and attribution | Source or accompanying notice |
 | --- | --- | --- |
@@ -27,11 +29,11 @@ whitespace removed.
 The original copyright notices and MIT license accompany that copy, with
 source paths and SHA-256 identities in `library/UPSTREAM.json`.
 
-The C runtime SDK installs the original Engine Simulator MIT notice, the
-solver MIT notice and the nlohmann JSON MIT notice. Its default code-only
-component includes the engine configuration schema. The optional runtime
-example adds the canonical single-cylinder JSON, its synthetic impulse
-response and their original MIT notice.
+The C runtime SDK installs the project's MIT license, the solver MIT
+notice and the nlohmann JSON MIT notice. Its default code-only component
+includes the engine configuration schema. The optional runtime example
+adds the canonical single-cylinder JSON, its synthetic impulse response
+and their original MIT notice.
 
 ## Fleet SDK
 

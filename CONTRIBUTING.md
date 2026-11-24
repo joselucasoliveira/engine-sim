@@ -1,6 +1,6 @@
 # Contributing
 
-Work from a fresh source checkout of this fork with the pinned submodules. Keep changes focused on the behavior you intend to modify. Preserve attribution and include the original notices when incorporating third-party files. Use the license in the relevant component directory when a dependency carries its own license.
+Work from a fresh source checkout of libengine-sim with the pinned submodules. Keep changes focused on the behavior you intend to modify. Preserve attribution and include the original notices when incorporating third-party files. Use the license in the relevant component directory when a dependency carries its own license.
 
 Start with [BUILDING](BUILDING.md), run the affected checks in [TESTING](TESTING.md), and describe your result within the [platform evidence limits](docs/platforms.md).
 
@@ -10,7 +10,7 @@ Identify the revision with `git rev-parse HEAD` and list dependencies with `git 
 
 ## Propose a change
 
-Prepare a focused branch, add a regression that distinguishes the corrected behavior from its parent, and run the affected checks in the documented configurations. In your pull request to this fork describe the problem, the behavior change, validation, and the environments you exercised. Use the fork's Pull requests tab. Contribution channels are listed on the actual fork page. [Fork repository](https://github.com/joselucasoliveira/engine-sim)
+Prepare a focused branch, add a regression that distinguishes the corrected behavior from its parent, and run the affected checks in the documented configurations. Open a pull request in the libengine-sim repository and describe the problem, the behavior change, validation, and the environments you exercised. [Repository](https://github.com/joselucasoliveira/libengine-sim)
 
 Keep build output, PCM captures, traces, coverage, large test cases and machine-specific settings out of the source tree. A reusable small fixture should include its origin, permitted uses, hash and the property it tests. A solver or audio change should include comparable before/after evidence and explain intentional differences. Identify device, headless and native validation individually.
 

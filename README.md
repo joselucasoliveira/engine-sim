@@ -1,13 +1,17 @@
-# Engine Simulator
+# libengine-sim
 
-This independently maintained fork of Ange Yaghi's Engine Simulator models internal combustion engines in real time. You can load an engine description, operate its starter and controls, and hear the simulated exhaust. The model is intended for exploring engine response and sound. Its predictions are unsuitable for engineering validation or tuning decisions. [Original project](https://github.com/ange-yaghi/engine-sim)
+libengine-sim is a library for real-time internal combustion engine simulation and procedural engine audio, with a C API for embedding in other applications.
+
+The library grew out of Engine Simulator, originally created by Ange Yaghi. [Original project](https://github.com/ange-yaghi/engine-sim)
+
+The simulation is intended for exploring engine response and sound. Its predictions are unsuitable for engineering validation or tuning decisions.
 
 ## Getting the source
 
-Clone this fork, including its pinned dependencies. Run this command in a terminal in the parent directory where you want the checkout.
+Clone the repository with its pinned dependencies. Run this command in a terminal in the parent directory where you want the checkout.
 
 ```text
-git clone --recurse-submodules https://github.com/joselucasoliveira/engine-sim.git
+git clone --recurse-submodules https://github.com/joselucasoliveira/libengine-sim.git
 ```
 
 The Linux desktop runs the existing engine views and controls through SDL 3, Vulkan and SDL audio. The Windows adapter retains Win32, Direct3D and DirectSound. The macOS Metal/CoreAudio path is implemented but awaits a native run. Read the [build instructions](BUILDING.md), [tests](TESTING.md) and [feature-by-feature platform status](docs/platforms.md). Source builds and explicitly private validation installs are the current delivery path.
@@ -30,6 +34,8 @@ For multiple independent vehicle voices, see the
 device-neutral C11 and C++17 examples with a shared mix and separate stems.
 
 ## Driving the simulator
+
+The desktop application lets you load an engine description, operate its starter and controls, and hear the simulated exhaust.
 
 The default model is a Subaru EJ25 with equal-length headers and the default
 theme. Pass `--model ABSOLUTE_JSON_PATH` to select another engine. For example,
@@ -57,6 +63,6 @@ Engage the dynamometer with D after enabling hold with H. Read the target on the
 
 ## Credit and contributions
 
-Ange Yaghi created the original simulator. The original copyright and license accompany this fork. See the contribution guide for reproducing a problem and proposing a change. [License](LICENSE) · [Third-party notices](THIRD_PARTY_NOTICES.md) · [Contributing](CONTRIBUTING.md)
+The project's MIT license retains the original Engine Simulator copyright notice. See the contribution guide for reproducing a problem and proposing a change. [License](LICENSE) · [Third-party notices](THIRD_PARTY_NOTICES.md) · [Contributing](CONTRIBUTING.md)
 
 The original impulse recordings retain their upstream provenance. Separate recording redistribution clearance is unresolved; the default installer blocks a distributable stage. See [private staging and resource layout](BUILDING.md). Physical playback, listening and complete native Windows/macOS qualification remain pending.

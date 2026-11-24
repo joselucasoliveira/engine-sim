@@ -1,12 +1,12 @@
-# Building Engine Simulator
+# Building libengine-sim
 
 Use CMake 3.25 or newer, Python 3.9 or newer, Git and a C++17 compiler. Linux development has been exercised with CMake 3.25.3 and 3.31.6, GCC 14.2 and Clang 19. See [platform evidence and limitations](docs/platforms.md) before treating a configuration as supported.
 
 ## Source and dependencies
 
 ```sh
-git clone https://github.com/joselucasoliveira/engine-sim.git
-cd engine-sim
+git clone https://github.com/joselucasoliveira/libengine-sim.git
+cd libengine-sim
 git rev-parse HEAD
 ```
 

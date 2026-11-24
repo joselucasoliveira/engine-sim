@@ -90,7 +90,7 @@
       "source": "project",
       "path": "LICENSE",
       "destination": "licenses/engine-sim-MIT.txt",
-      "sha256": "9f64449d4ef2db6b57d6af9d36e5eca5b6de3ece2db14a847ae71d4e0dcbff15",
+      "sha256": "bddb99fbc59781686e3a9cd3cb766c3157dad90b674678099a332c5d24018548",
       "license": "MIT",
       "distribution": "permitted",
       "component": "base"
@@ -99,7 +99,7 @@
       "source": "project",
       "path": "THIRD_PARTY_NOTICES.md",
       "destination": "licenses/THIRD_PARTY_NOTICES.md",
-      "sha256": "165d8d9b0eb5b81d923bfa8c83e25a6433686eebe9d063bdf59488d0e0260b96",
+      "sha256": "5caa5d02fb335c29f76aedbf37197ac2b7772d4bb6f09c9ce551bc59fd902d6a",
       "license": "Project notices",
       "distribution": "permitted",
       "component": "base"
