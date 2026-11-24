@@ -2,6 +2,10 @@
 #include "scheduler.hpp"
 #include "mix.hpp"
 
+#ifdef ENGINE_SIM_FLEET_BENCH_OBSERVE
+#include "bench_trace.hpp"
+#endif
+
 #include <chrono>
 #include <future>
 
@@ -13,6 +17,9 @@ static_assert(tileFrames == quantum);
 std::int32_t produce(es_rt_fleet &fleet, const std::atomic<bool> &stopping,
                      std::promise<std::int32_t> &startup, bool &primed) {
     Scheduler scheduler(fleet);
+#ifdef ENGINE_SIM_FLEET_BENCH_OBSERVE
+    BenchTrace trace;
+#endif
     ScheduledTile rendered;
     PcmTile output;
     const auto high = PcmTransport::highFrames(fleet.config);
@@ -30,6 +37,9 @@ std::int32_t produce(es_rt_fleet &fleet, const std::atomic<bool> &stopping,
         if (generated < submitted) return ES_RT_INTERNAL;
         if (generated - submitted <= low) {
             while (generated - submitted <= high - quantum) {
+#ifdef ENGINE_SIM_FLEET_BENCH_OBSERVE
+                trace.startTile(generated, submitted);
+#endif
                 if (const auto status = scheduler.renderTile(rendered); status != ES_RT_OK) return status;
                 if (const auto status = check(); status != ES_RT_OK) return status;
                 output.first = rendered.first;
@@ -39,7 +49,13 @@ std::int32_t produce(es_rt_fleet &fleet, const std::atomic<bool> &stopping,
                 if (!fleet.pcm.tryPublish(output)) return fleet.pcm.broken() ? ES_RT_BROKEN : ES_RT_INTERNAL;
                 generated = scheduler.generated();
                 published.store(generated, std::memory_order_release);
+#ifdef ENGINE_SIM_FLEET_BENCH_OBSERVE
+                const auto publishedAt = trace.begin();
+#endif
                 fleet.snapshots.publish([&](es_rt_snapshot &out) noexcept { scheduler.snapshot(out); });
+#ifdef ENGINE_SIM_FLEET_BENCH_OBSERVE
+                trace.finishTile(rendered.first, publishedAt);
+#endif
                 submitted = fleet.commands.submitted.load(std::memory_order_acquire);
                 if (const auto status = check(); status != ES_RT_OK) return status;
                 if (generated < submitted) return ES_RT_INTERNAL;
@@ -49,7 +65,17 @@ std::int32_t produce(es_rt_fleet &fleet, const std::atomic<bool> &stopping,
             startup.set_value(ES_RT_OK);
             primed = true;
         }
+#ifdef ENGINE_SIM_FLEET_BENCH_OBSERVE
+        const auto idleStarted = trace.begin();
+#endif
         std::this_thread::sleep_for(std::chrono::microseconds{100});
+#ifdef ENGINE_SIM_FLEET_BENCH_OBSERVE
+        if (idleStarted) {
+            const auto idleFinished = BenchTrace::now();
+            trace.idle(idleStarted, idleFinished, generated, submitted,
+                       fleet.commands.submitted.load(std::memory_order_acquire));
+        }
+#endif
     }
 }
 

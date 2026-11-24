@@ -128,6 +128,27 @@ endif ()
 
 if (TARGET engine-sim-runtime)
     find_package(Python3 3.9 COMPONENTS Interpreter REQUIRED)
+    if (TARGET EngineSim::Fleet AND ENGINE_SIM_SANITIZER STREQUAL "none")
+        find_package(Threads REQUIRED)
+        add_executable(engine-sim-fleet-paced-smoke fleet-bench/bench.cpp)
+        add_executable(engine-sim-fleet-stem-replay fleet-bench/replay.cpp)
+        add_executable(engine-sim-fleet-latency-probe fleet-bench/latency.cpp)
+        target_compile_features(engine-sim-fleet-paced-smoke PRIVATE cxx_std_17)
+        target_compile_features(engine-sim-fleet-stem-replay PRIVATE cxx_std_17)
+        target_compile_features(engine-sim-fleet-latency-probe PRIVATE cxx_std_17)
+        target_link_libraries(engine-sim-fleet-paced-smoke PRIVATE EngineSim::Fleet Threads::Threads)
+        target_link_libraries(engine-sim-fleet-stem-replay PRIVATE EngineSim::Fleet Threads::Threads)
+        target_link_libraries(engine-sim-fleet-latency-probe PRIVATE EngineSim::Fleet Threads::Threads)
+        target_include_directories(engine-sim-fleet-latency-probe PRIVATE "${PROJECT_SOURCE_DIR}/src/fleet")
+        add_test(NAME FleetBenchmarkSelfCheck COMMAND "${Python3_EXECUTABLE}" -B "${PROJECT_SOURCE_DIR}/tools/fleet_bench.py"
+            --self-check --runner "$<TARGET_FILE:engine-sim-fleet-paced-smoke>" --source "${PROJECT_SOURCE_DIR}"
+            --latency "$<TARGET_FILE:engine-sim-fleet-latency-probe>"
+            --replay "$<TARGET_FILE:engine-sim-fleet-stem-replay>"
+            --output "${CMAKE_CURRENT_BINARY_DIR}/fleet-benchmark-smoke")
+        add_test(NAME FleetLatencyProbe COMMAND engine-sim-fleet-latency-probe
+            "${PROJECT_SOURCE_DIR}/examples/runtime/fixture/main.json" "${PROJECT_SOURCE_DIR}/examples/runtime/fixture")
+        set_tests_properties(FleetBenchmarkSelfCheck FleetLatencyProbe PROPERTIES LABELS "fleet-benchmark" TIMEOUT 90)
+    endif ()
     add_test(NAME RuntimeConsumerTools COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/consumer_tool_tests.py"
         --out "${CMAKE_CURRENT_BINARY_DIR}/consumer-tool-working")
     set_tests_properties(RuntimeConsumerTools PROPERTIES LABELS "r2-sdk-tools" TIMEOUT 60)
