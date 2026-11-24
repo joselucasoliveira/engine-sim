@@ -14,11 +14,17 @@ struct ScheduledTile {
 
 struct ScheduledLane {
     es_rt_id id{};
-    std::uint32_t cell = no_cell;
+    std::uint32_t cell = no_cell, oldCell = no_cell;
     std::uint32_t state = ES_RT_VACANT;
-    Envelope gate{0}, gain{1};
+    Envelope gate{0}, gain{1}, blend{0};
     std::optional<Command> transition;
     bool muted = false;
+    bool forcedStop = false;
+    double stopSample = 0;
+
+    std::uint64_t endpoint() const noexcept {
+        return state == ES_RT_OVERLAP ? blend.endpoint() : gate.endpoint();
+    }
 };
 
 // One serial W owns this timeline and its active voice borrows. The C-side
@@ -40,7 +46,10 @@ private:
     void renderRange(ScheduledTile &output, std::uint32_t begin, std::uint32_t end);
     void renderSegment(ScheduledTile &output, std::uint32_t begin, std::uint32_t end);
     std::int32_t apply(const Command &command) noexcept;
-    std::int32_t transition(ScheduledLane &lane, const Command &command, std::uint32_t state, double target) noexcept;
+    std::int32_t replace(ScheduledLane &lane, const Command &command) noexcept;
+    void adopt(ScheduledLane &lane, Cell &cell, const es_rt_event &event) noexcept;
+    std::int32_t transition(ScheduledLane &lane, const Command &command, std::uint32_t state,
+                            double target, std::uint32_t frames) noexcept;
     void complete(ScheduledLane &lane, std::uint64_t frame) noexcept;
     void cancel(ScheduledLane &lane, std::uint32_t reason, std::uint64_t frame) noexcept;
     void observeApply(const es_rt_event &event, const Voice *voice, es_rt_id id) const noexcept;
@@ -51,6 +60,7 @@ private:
     std::uint64_t next;
     std::array<ScheduledLane, 8> lanes{};
     Envelope master{0.5};
+    std::array<float, quantum> source{}, previous{};
 };
 
 }

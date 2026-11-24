@@ -222,12 +222,10 @@ void horizon(const fs::path &model, unsigned rate) {
 
     start(*fleet);
     require(es_rt_start(fleet.get(), nullptr) == ES_RT_STATE, "start must be one-shot");
-    auto unsupported = event(4, 12000, ES_RT_REPLACE);
-    unsupported.voice = physical.voice;
-    unsupported.next_voice = {2, 1, 0};
-    unsupported.candidate = prepare(*fleet, model, rate);
-    require(es_rt_submit(fleet.get(), &unsupported) == ES_RT_UNSUPPORTED, "pending replacement was admitted");
-    require(es_rt_discard(fleet.get(), unsupported.candidate) == ES_RT_OK, "rejected replacement transferred its token");
+    auto invalid = event(4, 12000, ES_RT_MASTER);
+    invalid.gain = .75;
+    invalid.duration_ms = 101;
+    require(es_rt_submit(fleet.get(), &invalid) == ES_RT_INVALID, "invalid master duration was admitted");
     const auto primed = observe(*fleet, "primed");
     require(primed.submitted == 0 && primed.generated == high && primed.sealed == high &&
             primed.low_frames == high - maximum && primed.high_frames == high && primed.storage_frames == high + 128,
@@ -288,6 +286,8 @@ void fault(const fs::path &model) {
     renderRaw(*reference, expected.data(), prefix);
     require(std::any_of(expected.begin(), expected.begin() + prefix, [](float v) { return v != 0.f; }),
             "fault prefix must retain useful audio");
+    const auto last = static_cast<double>(expected[prefix - 1]);
+    for (unsigned i = 0; i < 31; ++i) expected[prefix + i] = static_cast<float>(last * (31 - i) / 32.);
     es_telemetry rawState{};
     rawState.size = sizeof(rawState);
     rawState.abi = ES_ABI_V2;
@@ -318,7 +318,7 @@ void fault(const fs::path &model) {
     actual.state = ES_READY;
     require(std::memcmp(&actual, &rawState, sizeof(actual)) == 0, "fault last-success telemetry");
     std::cout << "W thread=" << producerThread << " first-tick=0 fault-frame=" << prefix <<
-        " pcm-prefix=" << prefix << " source-silent=" << high - prefix << " callbacks-report-fallback=0\n";
+        " pcm-prefix=" << prefix << " fault-tail-frames=32 callbacks-report-fallback=0\n";
 }
 
 void breakInFlight(const fs::path &model) {
@@ -363,17 +363,7 @@ void breakInFlight(const fs::path &model) {
             visits == high + 64, "released in-flight tile published stale PCM or generated more work");
 }
 
-void startupChecks(const fs::path &model) {
-    auto blocked = create(44100, 64, ES_RT_INTERACTIVE);
-    auto command = event(2, 0, ES_RT_REPLACE);
-    const auto token = prepare(*blocked, model, 44100);
-    activate(*blocked, token);
-    command.voice = {1, 1, 0};
-    command.next_voice = {2, 1, 0};
-    command.candidate = prepare(*blocked, model, 44100);
-    require(es_rt_submit(blocked.get(), &command) == ES_RT_OK, "fixture queued pending feature");
-    require(es_rt_start(blocked.get(), nullptr) == ES_RT_UNSUPPORTED &&
-            observe(*blocked, "preflight-reject").generated == 0, "startup admitted pending lifecycle");
+void startupChecks() {
     auto shutdown = create(44100, 64, ES_RT_INTERACTIVE);
     require(es_rt_quiesce(shutdown.get()) == ES_RT_OK && es_rt_start(shutdown.get(), nullptr) == ES_RT_STATE,
             "quiesce before start");
@@ -386,7 +376,7 @@ int main(int argc, char **argv) {
         const auto input = fs::absolute(argv[2]);
         const std::string_view scenario = argv[1];
         if (scenario == "horizon") {
-            startupChecks(input);
+            startupChecks();
             horizon(input, 44100);
             horizon(input, 48000);
         } else if (scenario == "fault") {

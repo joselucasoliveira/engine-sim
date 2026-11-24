@@ -39,8 +39,8 @@ on success. Poll a terminal result once to return its ticket credit.
 The current transport supports 256 ingress entries and 256 tickets. Structural
 events retain eight reserved entries and tickets. A full or otherwise rejected
 submission preserves the event sequence, candidate token and lane reservation.
-The experimental worker supports the configured number of independent lanes.
-Replacement remains outside this increment.
+The experimental worker supports the configured number of independent lanes
+and one replacement at a time.
 
 ## Output frames and numerical ticks
 
@@ -128,8 +128,8 @@ from a fresh observation. `D + H + 64` is the practical earliest request for
 additional sequencing margin on this transport. The producer refills when
 the number of frames ahead reaches the low watermark. Its target never exceeds
 `D + H`, and it generates only whole 64-frame tiles. A failed voice preserves
-its completed prefix and contributes zero for the rest of the tile and
-later spans.
+its completed prefix and applies a 32-frame decay from its last valid source
+sample.
 
 Stop and drain the host callback before calling `es_rt_quiesce`. Quiesce joins
 the producer even if no further frames will be consumed. Create a new fleet
@@ -208,3 +208,31 @@ until collected. The fixed-storage ceiling is 8 MiB and each live cell is
 bounded to 16 MiB of accounted payload. Thread stacks, allocation overhead,
 transient preparation and device buffers are measured separately. The
 normal profile still requires a measured whole-roster admission record.
+
+
+## Replacement and numerical faults
+
+Prepare a separate token, then submit `ES_RT_REPLACE` with the current lane
+identity and its next generation. One overlap permit remains held until the
+replacement receipt is consumed. The default duration is 20 ms. The new
+engine starts at local frame zero and the old one keeps its preceding target.
+The lane blends the sources using complementary weights and keeps its gain
+and mute setting. At the exact endpoint only the new source renders. A
+zero-duration replacement detaches the old engine at the requested frame.
+
+While an overlap is active, new physical targets use the new identity. The
+old identity no longer accepts controls. Other lanes continue independently.
+The old cell remains reserved until the endpoint and then awaits collection.
+
+A numerical fault preserves the completed prefix and the last successful
+mechanical state. The source contributes its last valid value with weights
+31/32, 30/32 through 0/32 on successive frames. A source with no completed
+samples contributes zero. Its physics and DSP stop at the fault. The decay
+uses the existing gain and gate. A later stop can fade from the residual
+value and retire early if it is already silent.
+
+A fault in either side of a replacement leaves the original crossfade and
+endpoint in place. The replacement ticket reports `ES_RT_FAULT` with its
+applied and end frames. The new generation remains the lane's identity.
+Inspect the returned old generation and the current snapshot for each
+source's fault and completed counters.

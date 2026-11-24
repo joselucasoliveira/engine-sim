@@ -55,18 +55,8 @@ std::int32_t produce(es_rt_fleet &fleet, const std::atomic<bool> &stopping,
 
 }
 
-std::int32_t producerCommand(const es_rt_event &event) noexcept {
-    return event.kind == ES_RT_REPLACE ? ES_RT_UNSUPPORTED : ES_RT_OK;
-}
-
 std::int32_t Producer::start(es_rt_fleet &fleet) {
     if (phase.load(std::memory_order_relaxed) != FleetPhase::initial) return ES_RT_STATE;
-    const auto &ingress = fleet.commands.ingress;
-    const auto last = ingress.snapshot();
-    for (auto index = ingress.acquireHead(); index < last; ++index) {
-        const auto &event = ingress.atBeforeStart(index).event;
-        if (const auto status = producerCommand(event); status != ES_RT_OK) return status;
-    }
     std::promise<std::int32_t> startup;
     auto ready = startup.get_future();
     phase.store(FleetPhase::starting, std::memory_order_release);
@@ -140,7 +130,8 @@ std::int32_t ES_RT_CALL es_rt_quiesce(es_rt_fleet *fleet) {
         }
         for (std::size_t i = 0; i < fleet->cellCount; ++i) {
             auto &cell = fleet->cells[i];
-            if (cell.state.load(std::memory_order_relaxed) == CellState::active) returnCell(cell);
+            const auto state = cell.state.load(std::memory_order_relaxed);
+            if (state == CellState::active || state == CellState::overlap_old) returnCell(cell);
         }
         return ES_RT_OK;
     } catch (...) {

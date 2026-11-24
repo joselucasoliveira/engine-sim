@@ -58,6 +58,8 @@ struct Voice {
 
     es_rt_vector requested{}, applied{};
     std::uint32_t fault = ES_RT_OK;
+    std::uint64_t failureFrame = ES_RT_NO_FRAME;
+    float lastSample = 0;
     double gain = 1, gate = 0;
     std::uint64_t lastSequence = 0, requestedSequence = 0, requestedFrame = ES_RT_NO_FRAME;
     std::uint64_t latchedSequence = 0, latchFrame = ES_RT_NO_FRAME, latchTick = ES_RT_NO_FRAME;
@@ -71,7 +73,7 @@ private:
     std::uint64_t renderOrigin = 0, localOrigin = 0;
 };
 
-enum class CellState : std::uint32_t { free, prepared, queued, active, returned };
+enum class CellState : std::uint32_t { free, prepared, queued, active, overlap_old, returned };
 struct Cell {
     std::atomic<CellState> state{CellState::free};
     std::atomic<std::uint64_t> generation{0};

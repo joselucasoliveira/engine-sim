@@ -388,6 +388,8 @@ void saturation(const Model &model) {
     std::uint32_t count = 0;
     require(es_render(isolated.get(), complete, reference.data(), complete, &count, &detail) == ES_OK && count == complete,
             detail.message);
+    const auto last = static_cast<double>(reference[complete - 1]);
+    for (unsigned i = 0; i < 31; ++i) reference[complete + i] = static_cast<float>(last * (31 - i) / 32.);
     require(es_render(raw.get(), transition, actual.data(), transition, &count, &detail) == ES_OK && count == transition,
             detail.message);
     controls(*raw, script[1].value);

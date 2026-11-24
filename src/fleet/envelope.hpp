@@ -38,10 +38,23 @@ private:
     std::uint64_t start = 0, end = 0;
 };
 
-inline float scaleStem(float sample, double gain, double gate) noexcept {
+inline constexpr std::uint32_t faultFrames = 32;
+
+inline double faultSample(float last, std::uint64_t elapsed) noexcept {
+    if (elapsed >= faultFrames - 1 || last == 0.f) return 0.;
+    return static_cast<double>(last) * static_cast<double>(faultFrames - 1 - elapsed) / faultFrames;
+}
+
+inline double crossfade(double from, double to, double weight) noexcept {
+    if (weight == 0.) return from;
+    if (weight == 1.) return to;
+    return (1. - weight) * from + weight * to;
+}
+
+inline float scaleStem(double sample, double gain, double gate) noexcept {
     if (gain == 0 || gate == 0) return 0.f;
-    if (gain == 1 && gate == 1) return sample;
-    return static_cast<float>(static_cast<double>(sample) * gain * gate);
+    if (gain == 1 && gate == 1) return static_cast<float>(sample);
+    return static_cast<float>(sample * gain * gate);
 }
 
 }

@@ -23,7 +23,5 @@ private:
     std::thread worker;
 };
 
-std::int32_t producerCommand(const es_rt_event &event) noexcept;
-
 }
 #endif
