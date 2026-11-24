@@ -1,7 +1,7 @@
 #include "producer.hpp"
 #include "scheduler.hpp"
+#include "mix.hpp"
 
-#include <algorithm>
 #include <chrono>
 #include <future>
 
@@ -13,6 +13,8 @@ static_assert(tileFrames == quantum);
 std::int32_t produce(es_rt_fleet &fleet, const std::atomic<bool> &stopping,
                      std::promise<std::int32_t> &startup, bool &primed) {
     Scheduler scheduler(fleet);
+    ScheduledTile rendered;
+    PcmTile output;
     const auto high = PcmTransport::highFrames(fleet.config);
     const auto low = PcmTransport::lowFrames(fleet.config);
     auto &published = fleet.producer.generated;
@@ -28,19 +30,12 @@ std::int32_t produce(es_rt_fleet &fleet, const std::atomic<bool> &stopping,
         if (generated < submitted) return ES_RT_INTERNAL;
         if (generated - submitted <= low) {
             while (generated - submitted <= high - quantum) {
-                ScheduledTile rendered;
                 if (const auto status = scheduler.renderTile(rendered); status != ES_RT_OK) return status;
                 if (const auto status = check(); status != ES_RT_OK) return status;
-                PcmTile output;
                 output.first = rendered.first;
                 output.epoch = fleet.config.epoch;
                 output.stem = rendered.stem;
-                for (std::uint32_t frame = 0; frame < quantum; ++frame) {
-                    double mixed = 0;
-                    for (std::uint32_t lane = 0; lane < fleet.config.lanes; ++lane)
-                        mixed += output.stem[lane][frame];
-                    output.mix[frame] = static_cast<float>(std::clamp(mixed * rendered.master[frame], -1., 1.));
-                }
+                writeMix(output, fleet.config.lanes, rendered.master);
                 if (!fleet.pcm.tryPublish(output)) return fleet.pcm.broken() ? ES_RT_BROKEN : ES_RT_INTERNAL;
                 generated = scheduler.generated();
                 published.store(generated, std::memory_order_release);
@@ -60,14 +55,8 @@ std::int32_t produce(es_rt_fleet &fleet, const std::atomic<bool> &stopping,
 
 }
 
-std::int32_t producerCommand(const es_rt_fleet &fleet, const es_rt_event &event) noexcept {
-    if (event.kind == ES_RT_REPLACE) return ES_RT_UNSUPPORTED;
-    if (event.kind != ES_RT_ACTIVATE) return ES_RT_OK;
-    for (std::size_t lane = 0; lane < fleet.config.lanes; ++lane) {
-        if (lane != event.next_voice.lane && fleet.commands.lanes[lane].current.generation)
-            return ES_RT_UNSUPPORTED;
-    }
-    return ES_RT_OK;
+std::int32_t producerCommand(const es_rt_event &event) noexcept {
+    return event.kind == ES_RT_REPLACE ? ES_RT_UNSUPPORTED : ES_RT_OK;
 }
 
 std::int32_t Producer::start(es_rt_fleet &fleet) {
@@ -76,7 +65,7 @@ std::int32_t Producer::start(es_rt_fleet &fleet) {
     const auto last = ingress.snapshot();
     for (auto index = ingress.acquireHead(); index < last; ++index) {
         const auto &event = ingress.atBeforeStart(index).event;
-        if (const auto status = producerCommand(fleet, event); status != ES_RT_OK) return status;
+        if (const auto status = producerCommand(event); status != ES_RT_OK) return status;
     }
     std::promise<std::int32_t> startup;
     auto ready = startup.get_future();

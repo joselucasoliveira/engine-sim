@@ -23,7 +23,7 @@ private:
     std::thread worker;
 };
 
-std::int32_t producerCommand(const es_rt_fleet &fleet, const es_rt_event &event) noexcept;
+std::int32_t producerCommand(const es_rt_event &event) noexcept;
 
 }
 #endif

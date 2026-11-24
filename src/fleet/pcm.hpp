@@ -5,6 +5,8 @@
 
 #include <array>
 #include <atomic>
+#include <cstddef>
+#include <cstdint>
 #include <memory>
 
 namespace engine_sim::fleet {

@@ -39,9 +39,8 @@ on success. Poll a terminal result once to return its ticket credit.
 The current transport supports 256 ingress entries and 256 tickets. Structural
 events retain eight reserved entries and tickets. A full or otherwise rejected
 submission preserves the event sequence, candidate token and lane reservation.
-The experimental worker supports one occupied lane. Start rejects queued
-replacement commands or activations outside this limit. While running, those
-commands are rejected at submit.
+The experimental worker supports the configured number of independent lanes.
+Replacement remains outside this increment.
 
 ## Output frames and numerical ticks
 
@@ -186,3 +185,26 @@ receive terminal cancellation receipts. The settled difference between `G`
 and `D`, when positive, counts generated frames abandoned at shutdown. Drain
 snapshots, receipts and returned cells as needed, discard any untransferred
 tokens, and destroy the fleet after all users are done.
+
+
+## Independent lanes and the reference mix
+
+Each occupied lane owns an independent model, seed, clock, solver and DSP
+history. The producer advances occupied lanes in ascending index. An unused
+or fully paused lane supplies positive zero. Adding another voice leaves the
+existing stems and their gains unchanged.
+
+Each output stem is mono binary32 with the lane's gain and gate applied.
+The reference bus adds the stems as binary64 values in ascending lane order,
+applies master gain, clamps to [-1,1] and casts to binary32. The mix and stems
+requested in the same callback describe the same frames. Later calls consume
+later frames. Use activation receipts and their effective frame and generation
+to associate older samples with an engine. Hosts can spatialize stems or
+duplicate the reference mix to device channels.
+
+The experimental limit is eight logical lanes with `V + 3` physical cells
+and two preparation credits. A returned cell retains its accounted payload
+until collected. The fixed-storage ceiling is 8 MiB and each live cell is
+bounded to 16 MiB of accounted payload. Thread stacks, allocation overhead,
+transient preparation and device buffers are measured separately. The
+normal profile still requires a measured whole-roster admission record.

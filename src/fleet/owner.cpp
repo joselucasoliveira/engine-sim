@@ -1,5 +1,6 @@
 #include "owner.hpp"
 #include "api_text.hpp"
+#include "scheduler.hpp"
 
 #include <cmath>
 #include <filesystem>
@@ -113,6 +114,12 @@ std::int32_t boundary(es_rt_diagnostic *detail, const Operation &operation) noex
     }
 }
 
+void release_cell(es_rt_fleet &fleet, engine_sim::fleet::Cell &cell) noexcept {
+    fleet.retainedBytes -= cell.voice->capacity.retained_bytes;
+    cell.voice.reset();
+    cell.state.store(CellState::free, std::memory_order_release);
+}
+
 bool absolute_path(const char *text, fs::path &out) {
     if (!text || !engine_sim::api::utf8(text)) return false;
     out = fs::u8path(text);
@@ -187,6 +194,10 @@ std::int32_t prepare_voice(es_rt_fleet *fleet, const es_rt_voice_config *voice, 
         if (const auto *error = std::get_if<Diagnostic>(&result)) return rejected(detail, *error);
         if (!assembly::charge_capacity(capacity.retained_bytes, 1, sizeof(Voice), assembly::fleet_cell_limit))
             return report(detail, ES_RT_CAPACITY, ES_RT_DIAG_PREPARE, "Voice owner exceeds the retained cell byte limit");
+        auto retained = fleet->retainedBytes;
+        const auto ceiling = fleet->fixedBytes + fleet->cellCount * assembly::fleet_cell_limit;
+        if (!assembly::charge_capacity(retained, 1, capacity.retained_bytes, ceiling))
+            return report(detail, ES_RT_CAPACITY, ES_RT_DIAG_PREPARE, "Fleet model payload exceeds the aggregate limit");
         auto candidate = std::make_unique<Voice>(options, *voice, capacity,
             std::get<json::PreparedModel>(std::move(result)));
         const auto &initial = voice->initial;
@@ -199,6 +210,7 @@ std::int32_t prepare_voice(es_rt_fleet *fleet, const es_rt_voice_config *voice, 
         cell.voice = std::move(candidate);
         cell.generation.store(generation, std::memory_order_relaxed);
         cell.state.store(CellState::prepared, std::memory_order_release);
+        fleet->retainedBytes = retained;
         ++fleet->prepared;
         *out = {fleet->config.epoch, generation, static_cast<std::uint32_t>(index), 0};
         return ES_RT_OK;
@@ -232,12 +244,13 @@ std::int32_t ES_RT_CALL es_rt_create(const es_rt_config *input, es_rt_fleet **ou
         if (!supported_layout() || (config.rate != 44100 && config.rate != 48000) ||
             config.flags != ES_RT_EXPERIMENTAL || config.qualification_id != 0)
             return report(detail, ES_RT_UNSUPPORTED, ES_RT_DIAG_PROFILE, "Fleet profile has no admitted qualification on this build");
-        auto retained = sizeof(es_rt_fleet);
+        auto retained = sizeof(es_rt_fleet) + sizeof(engine_sim::fleet::Scheduler) +
+            sizeof(engine_sim::fleet::ScheduledTile) + sizeof(engine_sim::fleet::PcmTile);
         if (!assembly::charge_capacity(retained, *cells, sizeof(engine_sim::fleet::Cell), assembly::fleet_storage_limit) ||
             !assembly::charge_capacity(retained, engine_sim::fleet::PcmTransport::slotCount(config),
                     sizeof(engine_sim::fleet::PcmTile), assembly::fleet_storage_limit))
             return report(detail, ES_RT_CAPACITY, ES_RT_DIAG_PROFILE, "Fixed fleet storage exceeds capacity");
-        auto owner = std::make_unique<es_rt_fleet>(config, *cells);
+        auto owner = std::make_unique<es_rt_fleet>(config, *cells, retained);
         if (!owner->commands.lockFree() || !owner->pcm.lockFree() ||
             !owner->producer.phase.is_lock_free() || !owner->producer.generated.is_lock_free() ||
             !owner->snapshots.lockFree())
@@ -277,9 +290,8 @@ std::int32_t ES_RT_CALL es_rt_discard(es_rt_fleet *fleet, es_rt_token token) {
     if (!fleet || token.reserved) return ES_RT_INVALID;
     auto *cell = preparedCell(*fleet, token);
     if (!cell) return ES_RT_STALE;
-    cell->voice.reset();
+    release_cell(*fleet, *cell);
     --fleet->prepared;
-    cell->state.store(CellState::free, std::memory_order_release);
     return ES_RT_OK;
 }
 
@@ -291,8 +303,7 @@ std::int32_t ES_RT_CALL es_rt_collect(es_rt_fleet *fleet, es_rt_token *out, es_r
         if (cell.state.load(std::memory_order_acquire) != CellState::returned) continue;
         *out = {fleet->config.epoch, cell.generation.load(std::memory_order_relaxed), static_cast<std::uint32_t>(i), 0};
         *info = cell.finalInfo;
-        cell.voice.reset();
-        cell.state.store(CellState::free, std::memory_order_release);
+        release_cell(*fleet, cell);
         return ES_RT_OK;
     }
     return ES_RT_EMPTY;

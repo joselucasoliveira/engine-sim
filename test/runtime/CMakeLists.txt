@@ -480,6 +480,18 @@ if (TARGET engine-sim-runtime AND TARGET engine-sim-runtime-json-private)
     add_test(NAME FleetLifecycleEnvelopes COMMAND engine-sim-fleet-lifecycle-test shape "${fleet_fixture}")
     add_test(NAME FleetPauseAndTails COMMAND engine-sim-fleet-lifecycle-test real "${fleet_fixture}")
     set_tests_properties(FleetLifecycleEnvelopes FleetPauseAndTails PROPERTIES LABELS r3-fleet-lifecycle TIMEOUT 90)
+
+    add_executable(engine-sim-fleet-mix-test fleet-mix/main.cpp)
+    target_link_libraries(engine-sim-fleet-mix-test PRIVATE EngineSim::Fleet EngineSim::Runtime
+        EngineSim::Config engine-sim-runtime-backend Threads::Threads)
+    target_include_directories(engine-sim-fleet-mix-test PRIVATE
+        "${PROJECT_SOURCE_DIR}/src/fleet" "${PROJECT_SOURCE_DIR}/modules/assembly/src"
+        "${PROJECT_SOURCE_DIR}/src/runtime")
+    target_compile_features(engine-sim-fleet-mix-test PRIVATE cxx_std_17)
+    engine_sim_diagnose(engine-sim-fleet-mix-test TRUE)
+    add_test(NAME FleetIndependentStems COMMAND engine-sim-fleet-mix-test independent "${PROJECT_SOURCE_DIR}")
+    add_test(NAME FleetOrderedMix COMMAND engine-sim-fleet-mix-test ordered "${PROJECT_SOURCE_DIR}")
+    set_tests_properties(FleetIndependentStems FleetOrderedMix PROPERTIES LABELS r3-fleet-mix TIMEOUT 90)
 endif ()
 
 if (TARGET engine-sim-runtime AND TARGET engine-sim-config-roundtrip AND ENGINE_SIM_BUILD_RUNTIME_EXAMPLES)

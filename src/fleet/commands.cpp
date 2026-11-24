@@ -149,7 +149,7 @@ extern "C" std::int32_t ES_RT_CALL es_rt_submit(es_rt_fleet *fleet, const es_rt_
     auto *cell = hasCandidate(event.kind) ? preparedCell(*fleet, event.candidate) : nullptr;
     if (hasCandidate(event.kind) && !cell) return ES_RT_STALE;
     if (phase == FleetPhase::running) {
-        if (const auto status = producerCommand(*fleet, event); status != ES_RT_OK) return status;
+        if (const auto status = producerCommand(event); status != ES_RT_OK) return status;
     }
 
     const auto bucket = event.frame / quantum;

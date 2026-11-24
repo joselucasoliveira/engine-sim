@@ -86,14 +86,16 @@ void returnCell(Cell &cell) noexcept;
 
 // The host gives one non-audio control owner exclusive access to this surface.
 struct es_rt_fleet {
-    es_rt_fleet(es_rt_config setup, std::size_t count)
+    es_rt_fleet(es_rt_config setup, std::size_t count, std::size_t fixed)
         : config(setup), cellCount(count), cells(std::make_unique<engine_sim::fleet::Cell[]>(count)),
-          pcm(engine_sim::fleet::PcmTransport::slotCount(setup)) {}
+          fixedBytes(fixed), retainedBytes(fixed), pcm(engine_sim::fleet::PcmTransport::slotCount(setup)) {}
 
     es_rt_config config;
     std::size_t cellCount;
     std::unique_ptr<engine_sim::fleet::Cell[]> cells;
     std::size_t prepared = 0;
+    const std::size_t fixedBytes;
+    std::size_t retainedBytes; // C counts live cells through discard or collection.
     engine_sim::fleet::CommandTransport commands;
     engine_sim::fleet::PcmTransport pcm;
     engine_sim::fleet::Producer producer;
